@@ -1,0 +1,73 @@
+{
+  "name": "Digest — Slack delivery",
+  "id": "596wbFBfiXMtaO3g",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "digest", "options": {} },
+      "id": "b6a1a1e2-2f3a-4a1a-9b1a-6a1a1e2b6a1a",
+      "name": "Digest webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "a1a1a1a1-1a1a-1a1a-1a1a-1a1a1a1a1a1a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "webhook-secret-check",
+              "leftValue": "={{$json.headers['x-webhook-secret']}}",
+              "rightValue": "GSvuZNSbNQ3hnG7c7Ym0POwXX3_iblzm7oQKgRmi2s8",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "webhook-secret-if-node",
+      "name": "Check webhook secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [136, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body;\nconst periodLabel = body.period === 'DAILY' ? '일간' : '주간';\nconst domainBreakdown = Object.entries(body.byDomain || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || '없음';\nconst lines = [];\nlines.push(`*${periodLabel} 다이제스트* (${body.from} ~ ${body.to})`);\nlines.push(`총 ${body.total}건 · 완료 ${body.completed} · 실패 ${body.failed}`);\nlines.push(`도메인별: ${domainBreakdown}`);\nconst failed = body.failedTasks || [];\nconst noContent = body.noContentSources || [];\nif (noContent.length) {\n  lines.push('');\n  lines.push('*비활성화 고려 (연속 무의미 수집)*');\n  for (const s of noContent) lines.push(`• ${s.name} — ${s.consecutiveNoContentCycles}회 연속`);\n}\nif (failed.length) {\n  lines.push('');\n  lines.push('*실패한 작업*');\n  for (const t of failed.slice(0, 10)) lines.push(`• ${t.title} — ${t.detail || '사유 미상'}`);\n}\nreturn [{ json: { text: lines.join('\\n') } }];"
+      },
+      "id": "c7b2b2f3-3a4b-4b2b-8c2b-7b2b2f3c7b2b",
+      "name": "Format Slack message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [396, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/REPLACE_WITH_YOUR_WEBHOOK",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { text: $json.text } }}",
+        "options": {}
+      },
+      "id": "d8c3c3a4-4b5c-4c3c-9d3c-8c3c3a4d8c3c",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [656, 0]
+    }
+  ],
+  "connections": {
+    "Digest webhook": { "main": [[{ "node": "Check webhook secret", "type": "main", "index": 0 }]] },
+    "Check webhook secret": { "main": [[{ "node": "Format Slack message", "type": "main", "index": 0 }], []] },
+    "Format Slack message": { "main": [[{ "node": "Post to Slack", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "7ef8c800-b148-43ad-999a-a95e49f3ac68",
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

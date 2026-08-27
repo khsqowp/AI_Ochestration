@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+**/node_modules/
+**/dist/
+**/target/
+*.tsbuildinfo
+.DS_Store
+originals/**
+!originals/.gitkeep
+obsidian/**
+!obsidian/.gitkeep
+backups/**
+!backups/.gitkeep
+backup-obsidian-migration/
+# Coin_Trade 레포로 분리됨 — 여기서는 추적하지 않음
+trading/

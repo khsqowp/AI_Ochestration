@@ -1,0 +1,121 @@
+spring:
+  application:
+    name: orchestration-api
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/orchestration?useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:orchestrator}
+    password: ${SPRING_DATASOURCE_PASSWORD:change-me-before-sharing}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  mvc:
+    problemdetails:
+      enabled: true
+  # FileIntakeController가 50MB까지 허용한다고 검사하지만, 이 설정이 없으면 스프링 기본값(파일당 1MB,
+  # 요청당 10MB)이 먼저 걸려서 그보다 큰 파일은 컨트롤러에 닿기도 전에 멀티파트 파싱 단계에서 막힌다.
+  servlet:
+    multipart:
+      max-file-size: 55MB
+      max-request-size: 55MB
+server:
+  forward-headers-strategy: framework
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+app:
+  auth:
+    enabled: ${AUTH_ENABLED:false}
+    cookie-secure: ${AUTH_COOKIE_SECURE:false}
+    dev-admin-email: ${DEV_ADMIN_EMAIL:owner@local.dev}
+    dev-admin-name: ${DEV_ADMIN_NAME:Owner}
+    admin-id: ${ADMIN_ID:}
+    admin-password: ${ADMIN_PW:}
+    jwt-secret: ${JWT_SECRET:}
+  files:
+    originals-path: ${ORIGINALS_PATH:../originals}
+    obsidian-path: ${OBSIDIAN_PATH:../obsidian}
+    scan-delay-ms: ${FILE_SCAN_DELAY_MS:30000}
+  n8n:
+    dispatch-enabled: ${N8N_DISPATCH_ENABLED:false}
+    file-intake-webhook-url: ${N8N_FILE_INTAKE_WEBHOOK_URL:http://n8n:5678/webhook/file-intake}
+    digest-webhook-url: ${N8N_DIGEST_WEBHOOK_URL:http://n8n:5678/webhook/digest}
+    archive-webhook-url: ${N8N_ARCHIVE_WEBHOOK_URL:http://n8n:5678/webhook/archive-created}
+    webhook-secret: ${N8N_WEBHOOK_SECRET:}
+    trading-halted-webhook-url: ${N8N_TRADING_HALTED_WEBHOOK_URL:http://n8n:5678/webhook/trading-halted}
+  digest:
+    # 다이제스트를 실제로 발송(이메일/Slack 등)하려면 n8n 쪽에서 해당 webhook을 받는 워크플로를 구성하고
+    # app.n8n.dispatch-enabled=true로 켜야 한다. 꺼져 있으면 생성만 되고 전송은 건너뛴다.
+    # 자정에 제출한 야간 수집 배치가 보통 그 전에 끝나므로, 결과가 반영된 다이제스트를 오전 7시에 보낸다.
+    daily-cron: ${DIGEST_DAILY_CRON:0 0 7 * * *}
+    weekly-cron: ${DIGEST_WEEKLY_CRON:0 0 9 * * MON}
+  sources:
+    # 매일 자정에 등록된 수집 사이트 중 주기가 도래한 것을 크롤링하고, Gemini Batch API(정가의 50%)로
+    # 제출한다 — 결과는 pollGeminiBatches가 도착하는 대로 받아 검토·팀장·PM 단계로 넘긴다.
+    daily-cron: ${SOURCE_DAILY_CRON:0 0 0 * * *}
+    # 새 출처 후보를 자동 제안하는 주기(기본 7일). 등록하지 않고 승인 대기열에만 넣는다.
+    discovery-delay-ms: ${SOURCE_DISCOVERY_DELAY_MS:604800000}
+    # 제출된 Gemini 배치 작업의 완료 여부를 확인하는 주기(기본 30분). 배치는 24시간 이내 목표지만
+    # 보통 훨씬 빨리 끝나므로, 정해진 시각을 기다리지 않고 이 주기로 계속 폴링한다.
+    batch-poll-delay-ms: ${SOURCE_BATCH_POLL_DELAY_MS:1800000}
+  archive:
+    # 개인 아카이브 규모에서는 매일 전체 스캔이 낭비라 매주로 둔다. 병합은 삭제가 아니라 _archived/로 이동한다.
+    # 토요일 자정을 주 경계로 잡아서, 주말(토·일) 동안 쌓인 내용이 새 주차 파일로 들어가고 월요일 출근해서
+    # 그 주 파일을 이어서 읽으면 되게 한다(KnowledgeArchiveService의 뉴스 주간 파일 경계와 동일한 기준).
+    maintenance-cron: ${ARCHIVE_MAINTENANCE_CRON:0 0 0 * * SAT}
+    # 매일 새벽 5시 -- 자정에 도는 수집/배치 파일 생성 로직과 겹치지 않게 시간을 띄웠다.
+    empty-dir-cron: ${ARCHIVE_EMPTY_DIR_CRON:0 0 5 * * *}
+  trading:
+    # trading-paper-funding-arb 컨테이너가 공유 볼륨에 쓰는 모의투자 상태 파일 경로.
+    state-path: ${TRADING_STATE_PATH:/workspace/trading-state/funding_arb_state.json}
+    # trading-kr-swing 컨테이너가 공유 볼륨에 쓰는 국내주식 스윙 상태 파일 경로.
+    kr-state-path: ${KR_TRADING_STATE_PATH:/workspace/trading-state-kr/kr_swing_state.json}
+    # trading-us-swing 컨테이너가 공유 볼륨에 쓰는 미국주식 스윙 상태 파일 경로.
+    us-state-path: ${US_TRADING_STATE_PATH:/workspace/trading-state-us/us_swing_state.json}
+    # trading-momentum-rotation 컨테이너(실주문 없는 백테스트/페이퍼 모드)가 쓰는 상태 파일 경로.
+    momentum-rotation-state-path: ${MOMENTUM_ROTATION_TRADING_STATE_PATH:/workspace/trading-state-momentum-rotation/momentum_rotation_state.json}
+  tasks:
+    # 동시에 두 작업까지만 실행하고 나머지는 최대 100개까지 FIFO 대기열에 보관한다.
+    workflow-concurrency: ${TASK_WORKFLOW_CONCURRENCY:2}
+  budget:
+    # 이번 달 누적 예상 비용(USD)이 이 값을 넘으면 사용량 화면에 경고를 표시한다. 실제 청구액이 아닌 추정치 기준이다.
+    usd-per-month: ${BUDGET_USD_PER_MONTH:20.00}
+  llm:
+    gemini-api-key: ${GEMINI_API_KEY:}
+    deepseek-api-key: ${DEEPSEEK_API_KEY:}
+    openai-api-key: ${CHATGPT_API_KEY:}
+    gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
+    deepseek-model: ${DEEPSEEK_MODEL:deepseek-v4-pro}
+    openai-model: ${OPENAI_MODEL:gpt-4o-mini}
+    # 아카이브 RAG 검색(질문→관련 노트 찾기)에 쓰는 임베딩 모델. 채팅 모델과는 별개다.
+    openai-embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    # 실시간(비배치) Gemini 수집 호출은 대기 시간을 충분히 주되, 검토·판단 모델은 짧게 제한한다.
+    gemini-timeout-seconds: ${GEMINI_TIMEOUT_SECONDS:900}
+    decision-timeout-seconds: ${DECISION_TIMEOUT_SECONDS:180}
+    # 팀장의 장문 아카이브 작성은 thinking+긴 출력이 겹쳐 3분을 넘기기 쉬워 별도로 더 길게 둔다.
+    long-form-timeout-seconds: ${LONG_FORM_TIMEOUT_SECONDS:420}
+    # 검토/팀장/PM 단계에서 담당 모델이 실패하면 다른 모델로 넘어가 재시도하는 총 시도 횟수(1이면 폴백 비활성화).
+    # 수집(COLLECT) 단계는 Gemini의 Google Search grounding에 의존하므로 폴백 대상에서 제외한다.
+    max-provider-attempts: ${LLM_MAX_PROVIDER_ATTEMPTS:2}
+    max-task-characters: ${LLM_MAX_TASK_CHARACTERS:12000}
+    # 분량을 강제하지 않되, 충분히 상세한 노트를 쓸 여유는 남겨둔다.
+    archive-max-output-tokens: ${ARCHIVE_MAX_OUTPUT_TOKENS:9000}
+    # 화면의 토큰 비용 추정치입니다. 공개 API 단가를 기본값으로 쓰며, 실제 계약 단가는 .env가 우선합니다.
+    # Gemini는 실시간(비배치) 정가 기준이며 Google Search grounding 비용은 별도입니다. 야간 배치로
+    # 처리된 COLLECT는 실제 Batch API 단가(정가의 50%)에 맞춰 TaskWorkflowRunner에서 절반으로 계산한다.
+    gemini-input-usd-per-million: ${GEMINI_INPUT_USD_PER_MILLION:0.25}
+    gemini-output-usd-per-million: ${GEMINI_OUTPUT_USD_PER_MILLION:1.50}
+    deepseek-input-usd-per-million: ${DEEPSEEK_INPUT_USD_PER_MILLION:0.435}
+    deepseek-output-usd-per-million: ${DEEPSEEK_OUTPUT_USD_PER_MILLION:0.87}
+    openai-input-usd-per-million: ${OPENAI_INPUT_USD_PER_MILLION:0.15}
+    openai-output-usd-per-million: ${OPENAI_OUTPUT_USD_PER_MILLION:0.60}
+    # AWS Bedrock — PM 단계를 DeepSeek 대신 Claude로 돌리는 토글용(pm_provider_setting 테이블로 전환).
+    # 크로스 리전 추론 프로필 ID이며(단일 모델 ID로는 on-demand 호출이 막혀 있다), 리전은 실제로 동작을
+    # 확인한 값이다.
+    bedrock-api-key: ${AWS_BEARER_TOKEN_BEDROCK:}
+    bedrock-model: ${BEDROCK_MODEL:global.anthropic.claude-sonnet-4-5-20250929-v1:0}
+    bedrock-region: ${BEDROCK_REGION:ap-northeast-2}
+    bedrock-input-usd-per-million: ${BEDROCK_INPUT_USD_PER_MILLION:3.00}
+    bedrock-output-usd-per-million: ${BEDROCK_OUTPUT_USD_PER_MILLION:15.00}

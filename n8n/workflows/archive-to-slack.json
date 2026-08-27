@@ -1,0 +1,73 @@
+{
+  "name": "Archive created — Slack delivery",
+  "id": "LvCklzt2iGjJyx6P",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "archive-created", "options": {} },
+      "id": "a1b1c1d1-1a1a-1a1a-1a1a-1a1a1a1a1a11",
+      "name": "Archive webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "b1a1a1a1-1a1a-1a1a-1a1a-1a1a1a1a1a12"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "webhook-secret-check",
+              "leftValue": "={{$json.headers['x-webhook-secret']}}",
+              "rightValue": "GSvuZNSbNQ3hnG7c7Ym0POwXX3_iblzm7oQKgRmi2s8",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "webhook-secret-if-node",
+      "name": "Check webhook secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [136, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body;\nconst domainLabel = { SECURITY: '보안', ECONOMY: '경제', GENERAL: '일반' }[body.domain] || body.domain;\nconst stripMarkdown = (text) => text\n  .replace(/^#{1,6}\\s+/gm, '')\n  .replace(/\\*\\*(.+?)\\*\\*/g, '$1')\n  .replace(/__(.+?)__/g, '$1')\n  .replace(/^>\\s?/gm, '')\n  .replace(/^\\s*[-*_]{3,}\\s*$/gm, '');\nconst lines = [];\nlines.push(`*[${domainLabel}] 새 아카이브 노트* — ${body.title}`);\nlines.push('');\nlines.push(stripMarkdown(body.contentPreview));\nlines.push('');\nlines.push(`전체 내용: 파일 아카이브 → ${body.archivePath}`);\nreturn [{ json: { text: lines.join('\\n') } }];"
+      },
+      "id": "c1d1e1f1-2a2a-2a2a-2a2a-2a2a2a2a2a13",
+      "name": "Format Slack message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [396, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/REPLACE_WITH_YOUR_WEBHOOK",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { text: $json.text } }}",
+        "options": {}
+      },
+      "id": "d1e1f1a1-3a3a-3a3a-3a3a-3a3a3a3a3a14",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [656, 0]
+    }
+  ],
+  "connections": {
+    "Archive webhook": { "main": [[{ "node": "Check webhook secret", "type": "main", "index": 0 }]] },
+    "Check webhook secret": { "main": [[{ "node": "Format Slack message", "type": "main", "index": 0 }], []] },
+    "Format Slack message": { "main": [[{ "node": "Post to Slack", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "5449fb0c-7cee-4fe8-8d35-a88c30335194",
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

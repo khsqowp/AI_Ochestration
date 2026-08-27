@@ -1,0 +1,176 @@
+services:
+  mysql:
+    image: mysql:8.4.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-orchestration}
+      MYSQL_USER: ${MYSQL_USER:-orchestrator}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [private]
+    restart: unless-stopped
+
+  db-backup:
+    image: mysql:8.4.4
+    environment:
+      TZ: Asia/Seoul
+      MYSQL_PWD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
+      DB_USER: ${MYSQL_USER:-orchestrator}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-orchestration}
+      BACKUP_RETENTION_DAYS: "7"
+    entrypoint: ["/bin/bash", "/scripts/db-backup.sh"]
+    volumes:
+      - ./scripts/db-backup.sh:/scripts/db-backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [private]
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: Asia/Seoul
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-orchestration}?useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-orchestrator}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
+      ORIGINALS_PATH: /workspace/originals
+      OBSIDIAN_PATH: /workspace/obsidian
+      TRADING_STATE_PATH: /workspace/trading-state/funding_arb_state.json
+      KR_TRADING_STATE_PATH: /workspace/trading-state-kr/kr_swing_state.json
+      US_TRADING_STATE_PATH: /workspace/trading-state-us/us_swing_state.json
+      MOMENTUM_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-momentum-rotation/momentum_rotation_state.json
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./originals:/workspace/originals
+      - ./obsidian:/workspace/obsidian
+      - trading_paper_state:/workspace/trading-state:ro
+      - trading_kr_swing_state:/workspace/trading-state-kr:ro
+      - trading_us_swing_state:/workspace/trading-state-us:ro
+      - trading_momentum_rotation_state:/workspace/trading-state-momentum-rotation:ro
+    networks: [private, app]
+    restart: unless-stopped
+
+  trading:
+    build: ./trading
+    env_file:
+      - path: .env
+        required: false
+    networks: [app]
+    profiles: ["trading"]
+
+  trading-paper-funding-arb:
+    build: ./trading
+    entrypoint: ["python", "-m", "app.paper_trade_loop"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - trading_paper_state:/app/data
+    networks: [app]
+    profiles: ["paper-trading"]
+    restart: unless-stopped
+
+  trading-kr-swing:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.kr_swing_loop"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - trading_kr_swing_state:/app/data
+    networks: [app]
+    profiles: ["kr-swing"]
+    restart: unless-stopped
+
+  trading-us-swing:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.us_swing_loop"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - trading_us_swing_state:/app/data
+    networks: [app]
+    profiles: ["us-swing"]
+    restart: unless-stopped
+
+  trading-momentum-rotation:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.momentum_rotation_loop"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - trading_momentum_rotation_state:/app/data
+    networks: [app]
+    profiles: ["momentum-rotation"]
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    depends_on: [api]
+    ports:
+      - "5173:80"
+    networks: [app]
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [web]
+    networks: [app]
+    restart: unless-stopped
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.26.8
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      GENERIC_TIMEZONE: Asia/Seoul
+      TZ: Asia/Seoul
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY must be set in .env}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./originals:/workspace/originals:ro
+      - ./obsidian:/workspace/obsidian
+      - ./n8n/workflows:/workflows:ro
+    networks: [app]
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  n8n_data:
+  trading_paper_state:
+  trading_kr_swing_state:
+  trading_us_swing_state:
+  trading_momentum_rotation_state:
+
+networks:
+  private:
+    internal: true
+  app:
