@@ -21,10 +21,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class KnowledgeArchiveService {
   private final FileProperties files;
-  private final SecurityCategoryClassifier categoryClassifier;
-  KnowledgeArchiveService(FileProperties files, SecurityCategoryClassifier categoryClassifier) {
+  KnowledgeArchiveService(FileProperties files) {
     this.files = files;
-    this.categoryClassifier = categoryClassifier;
   }
 
   public String archive(WorkTask task, String report) throws IOException {
@@ -74,45 +72,18 @@ public class KnowledgeArchiveService {
   }
 
   /**
-   * 보안 수집 소스는 사이트별 폴더 대신 11개 고정 카테고리({@link SecurityCategoryClassifier})로 모인다 -- 서로
-   * 다른 여러 소스가 같은 날 같은 카테고리로 분류될 수 있으므로, 각 소스의 기여분은 공유 문서 안에서 자기 제목을
-   * 단 "## " 서브헤딩으로 갖는다. 분류 실패는 아카이브 자체를 막지 않도록 "이외"로 폴백한다.
+   * 보안 수집 소스는 예전에 11개 고정 카테고리({@link SecurityCategoryClassifier})로 하위폴더를 나눠 모았으나,
+   * 대부분 사이트별 주간 다이제스트가 여러 주제를 섞어 다뤄 카테고리 하나로 분류하는 의미가 크지 않고 폴더만
+   * 늘려 2026-08-28에 폐지했다 — 이제 도메인 뉴스 세그먼트 바로 아래(하위폴더 없이) 소스별 파일로 평평하게 쌓는다.
    */
   private String archiveDailyByCategory(Path root, String domain, String sourceTitle, WorkTask task, String report) throws IOException {
-    String category;
-    try {
-      category = categoryClassifier.classify(sourceTitle, report);
-      if (category == null || category.isBlank()) category = "이외";
-    } catch (Exception exception) {
-      category = "이외";
-    }
     LocalDate today = LocalDate.now();
-    Path directory = root.resolve(domain).resolve(SecurityCategoryClassifier.NEWS_SEGMENT).resolve(category);
+    Path directory = root.resolve(domain).resolve(SecurityCategoryClassifier.NEWS_SEGMENT);
     Files.createDirectories(directory);
-    Path note = directory.resolve(today + "-" + category + ".md");
-    String categoryTitle = category + " 수집 정리 (" + today + ")";
-    String section = "## " + sourceTitle + "\n\n" + report.strip() + "\n";
-    if (Files.exists(note)) {
-      String existing = Files.readString(note, StandardCharsets.UTF_8);
-      if (sameMaterial(existing, report)) return root.relativize(note).toString();
-      String refreshed = bumpDateAndHistory(existing, today);
-      String markdown = refreshed.stripTrailing() + "\n\n---\n\n" + section;
-      Files.writeString(note, markdown, StandardCharsets.UTF_8);
-      return root.relativize(note).toString();
-    }
-    String markdown = "---\n"
-        + "title: \"" + categoryTitle.replace("\"", "'") + "\"\n"
-        + "date: " + today + "\n"
-        + "domain: " + domain + "\n"
-        + "doc_type: pm-report\n"
-        + "task_id: " + task.getId() + "\n"
-        + (task.getOrigin() == null ? "" : "origin: " + task.getOrigin().name().toLowerCase(Locale.ROOT) + "\n")
-        + "tags: [orchestration, " + domain + ", " + category + "]\n"
-        + "---\n\n"
-        + "업데이트 이력: " + today + "\n\n"
-        + "# " + categoryTitle + "\n\n" + section;
-    Files.writeString(note, markdown, StandardCharsets.UTF_8);
-    return root.relativize(note).toString();
+    String sourceSlug = sourceTitle.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9가-힣]+", "-").replaceAll("(^-|-$)", "");
+    Path note = directory.resolve(today + "-" + sourceSlug + ".md");
+    String dailyTitle = sourceTitle + " (" + today + ")";
+    return writeOrAppend(root, note, domain, dailyTitle, task, report);
   }
 
   private String writeOrAppend(Path root, Path note, String domain, String title, WorkTask task, String report) throws IOException {

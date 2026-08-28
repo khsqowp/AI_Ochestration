@@ -1,8 +1,6 @@
 package com.orchestration.tasks;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 
 import com.orchestration.files.FileProperties;
 import java.io.IOException;
@@ -10,20 +8,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 /** 채팅으로 접수된 작업의 아카이브 제목이 사용자 원문 질문 대신 팀장 노트의 실제 헤딩을 쓰는지,
  * 반대로 수집 사이트 파이프라인이 이미 다듬어 둔 제목은 그대로 보존되는지 검증한다. */
-@ExtendWith(MockitoExtension.class)
 class KnowledgeArchiveServiceTest {
 
-  @Mock private SecurityCategoryClassifier categoryClassifier;
-
   private KnowledgeArchiveService service(Path obsidian) {
-    return new KnowledgeArchiveService(new FileProperties("/tmp/originals", obsidian.toString(), 30000L), categoryClassifier);
+    return new KnowledgeArchiveService(new FileProperties("/tmp/originals", obsidian.toString(), 30000L));
   }
 
   private WorkTask task(String title) {
@@ -160,41 +152,28 @@ class KnowledgeArchiveServiceTest {
   }
 
   @Test
-  void collectionOrigin_securityDomain_routesIntoClassifiedCategoryFolder(@TempDir Path obsidian) throws Exception {
+  void collectionOrigin_securityDomain_routesFlatIntoNewsSegmentBySource(@TempDir Path obsidian) throws Exception {
     WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
-    when(categoryClassifier.classify(anyString(), anyString())).thenReturn("웹");
 
     String path = service(obsidian).archive(task, "# 랜섬웨어 동향\n\n본문 내용입니다.");
 
-    assertThat(path).isEqualTo("security/뉴스/웹/" + LocalDate.now() + "-웹.md");
+    assertThat(path).isEqualTo("security/뉴스/" + LocalDate.now() + "-보안-krebs-on-security.md");
     String content = Files.readString(obsidian.resolve(path));
-    assertThat(content).contains("## [보안] Krebs on Security").contains("본문 내용입니다.");
+    assertThat(content).contains("본문 내용입니다.");
   }
 
   @Test
-  void collectionOrigin_differentSourcesSameDay_appendIntoTheSameCategoryFileWithOwnSubHeadings(@TempDir Path obsidian) throws Exception {
+  void collectionOrigin_differentSourcesSameDay_eachGetsItsOwnFile_noSharedCategoryFolder(@TempDir Path obsidian) throws Exception {
     WorkTask krebs = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
     WorkTask hackerNews = new WorkTask("[보안] The Hacker News 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
-    when(categoryClassifier.classify(anyString(), anyString())).thenReturn("클라우드");
 
     KnowledgeArchiveService service = service(obsidian);
     String firstPath = service.archive(krebs, "# 클라우드 침해 사례\n\nKrebs 본문.");
     String secondPath = service.archive(hackerNews, "# 별개의 클라우드 이슈\n\nHackerNews 본문.");
 
-    assertThat(firstPath).isEqualTo(secondPath);
-    String content = Files.readString(obsidian.resolve(firstPath));
-    assertThat(content).contains("## [보안] Krebs on Security").contains("Krebs 본문.");
-    assertThat(content).contains("## [보안] The Hacker News").contains("HackerNews 본문.");
-  }
-
-  @Test
-  void collectionOrigin_classifierFailure_fallsBackToCatchAllCategory_ratherThanFailingTheArchive(@TempDir Path obsidian) throws Exception {
-    WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
-    when(categoryClassifier.classify(anyString(), anyString())).thenThrow(new RuntimeException("simulated classifier outage"));
-
-    String path = service(obsidian).archive(task, "# 제목\n\n본문");
-
-    assertThat(path).isEqualTo("security/뉴스/이외/" + LocalDate.now() + "-이외.md");
+    assertThat(firstPath).isNotEqualTo(secondPath);
+    assertThat(firstPath).startsWith("security/뉴스/").doesNotContain("/웹/").doesNotContain("/클라우드/");
+    assertThat(secondPath).startsWith("security/뉴스/").doesNotContain("/웹/").doesNotContain("/클라우드/");
   }
 
   @Test
