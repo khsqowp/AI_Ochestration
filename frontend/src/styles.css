@@ -158,3 +158,14 @@
   .candidate-row, .source-row { flex-wrap:wrap; }
   .process-list article > div { grid-template-columns:repeat(4,1fr); }
 }
+.file-list button.active { background:#eeecfc; color:#4e43a5; }
+.debate-turn-list { display:grid; gap:10px; }
+.debate-turn { padding:12px 14px; border-radius:12px; background:#fff; border:1px solid #efedf1; }
+.debate-turn-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.debate-turn-head small { color:#9a95a3; font-size:11px; font-weight:700; }
+.debate-role-badge { display:inline-flex; align-items:center; padding:3px 9px; border-radius:100px; font-size:11px; font-weight:800; background:#eeecfc; color:#5d50ba; }
+.debate-role-badge.pro { background:#e6f5ed; color:#2f7a52; }
+.debate-role-badge.con { background:#fde6e6; color:#b23b3b; }
+.debate-role-badge.research { background:#fff3d9; color:#9a6c14; }
+.debate-turn-body { font-size:13px; color:#3f3c49; line-height:1.6; }
+.debate-turn-body p:first-child { margin-top:0; }

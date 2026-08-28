@@ -383,11 +383,12 @@ interface DebateSession {
 }
 interface DebateTurn { id: string; turnIndex: number; role: string; speakerModel: string; content: string; createdAt: string }
 const DEBATE_ROLE_LABEL = (role: string) => role === 'PRO' ? '찬성' : role === 'CON' ? '반대' : role === 'RESEARCH' ? '리서치(Gemini)' : role.startsWith('PARTICIPANT_') ? `참가자 ${role.replace('PARTICIPANT_', '')}` : role
+const debateRoleClass = (role: string) => role === 'PRO' ? 'pro' : role === 'CON' ? 'con' : role === 'RESEARCH' ? 'research' : 'participant'
 const debateTurnsPerRound = (session: DebateSession) => session.mode === 'PRO_CON' ? 3 : (session.participants?.length ?? 0) + 1
 const debateTotalTurns = (session: DebateSession) => session.maxTurnsPerSide * debateTurnsPerRound(session)
 
 function DebatePanel({ onClose }: { onClose: () => void }) {
-  const [view, setView] = useState<'list' | 'create' | 'detail'>('list')
+  const [pane, setPane] = useState<'empty' | 'create' | 'detail'>('empty')
   const [sessions, setSessions] = useState<DebateSession[]>([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<DebateSession | null>(null)
@@ -406,7 +407,7 @@ function DebatePanel({ onClose }: { onClose: () => void }) {
   useEffect(() => { loadSessions() }, [])
 
   const openSession = async (session: DebateSession) => {
-    setSelected(session); setView('detail')
+    setSelected(session); setPane('detail'); setError('')
     const response = await fetch(`/api/debate/sessions/${session.id}`, { credentials: 'include' })
     if (response.ok) { const body = await response.json() as { session: DebateSession; turns: DebateTurn[] }; setSelected(body.session); setTurns(body.turns) }
   }
@@ -437,64 +438,70 @@ function DebatePanel({ onClose }: { onClose: () => void }) {
     loadSessions()
   }
 
-  return <aside className="side-modal" role="dialog" aria-modal="true">
+  return <aside className="file-explorer" role="dialog" aria-modal="true">
     <div className="sheet-header">
-      <div><p className="eyebrow">AI DEBATE</p><h2>{view === 'detail' && selected ? '토론 진행' : 'AI 토론'}</h2></div>
+      <div><p className="eyebrow">AI DEBATE</p><h2>AI 토론</h2></div>
       <button className="sheet-close" onClick={onClose}><X size={18}/></button>
     </div>
-    {view !== 'detail' && <div className="rag-filter-row">
-      <button className="graph-open-button" onClick={() => setView('list')} disabled={view === 'list'}>세션 목록</button>
-      <button className="graph-open-button" onClick={() => setView('create')} disabled={view === 'create'}><Plus size={14}/> 새 토론</button>
-    </div>}
-    {view === 'detail' && <button className="graph-open-button rag-history-toggle" onClick={() => { setView('list'); setSelected(null); loadSessions() }}><ChevronLeft size={14}/> 목록으로</button>}
-    {error && <p className="form-error">{error}</p>}
-
-    {view === 'list' && <>
-      {loading && <p className="empty-state"><Loader2 size={13} className="spin"/> 불러오는 중…</p>}
-      {!loading && sessions.length === 0 && <p className="empty-state">아직 토론이 없습니다. 새 토론을 시작해 보세요.</p>}
-      <ul className="rag-history">
-        {sessions.map(session => <li key={session.id}><article style={{ cursor: 'pointer' }} onClick={() => openSession(session)}>
-          <b>{session.topic}</b>
-          <p>{session.mode === 'PRO_CON' ? `찬반토론 · ${DEBATE_MODEL_LABEL[session.proModel as DebateModelKey] ?? session.proModel} vs ${DEBATE_MODEL_LABEL[session.conModel as DebateModelKey] ?? session.conModel}` : `자유토론 · ${(session.participants ?? []).map(p => DEBATE_MODEL_LABEL[p as DebateModelKey] ?? p).join(', ')}`}</p>
-          <small>{session.turnsCompleted}/{debateTotalTurns(session)}턴 · {session.status === 'COMPLETED' ? '완료' : '진행 중'}</small>
-        </article></li>)}
-      </ul>
-    </>}
-
-    {view === 'create' && <form className="rag-filter-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }} onSubmit={createSession}>
-      <div className="rag-filter-row">
-        <select value={mode} onChange={e => setMode(e.target.value as DebateMode)}>
-          <option value="PRO_CON">찬반토론</option>
-          <option value="FREE">자유토론</option>
-        </select>
-        <input type="number" min={1} max={10} value={maxTurnsPerSide} onChange={e => setMaxTurnsPerSide(Math.max(1, Math.min(10, Number(e.target.value) || 1)))} title="측당 최대 턴수" style={{ width: 90 }}/>
-        <small>측당 최대 턴수</small>
+    <div className="explorer-toolbar">
+      <button className="graph-open-button" onClick={() => { setPane('create'); setSelected(null); setError('') }}><Plus size={14}/> 새 토론</button>
+    </div>
+    <div className="explorer-body">
+      <div className="explorer-sidebar">
+        {loading && <p className="empty-state"><Loader2 size={13} className="spin"/> 불러오는 중…</p>}
+        {!loading && sessions.length === 0 && <p className="empty-state">아직 토론이 없습니다. 새 토론을 시작해 보세요.</p>}
+        <div className="file-list">
+          {sessions.map(session => <button key={session.id} className={selected?.id === session.id ? 'active' : ''} onClick={() => openSession(session)}>
+            <span>
+              <b>{session.topic}</b>
+              <small>{session.mode === 'PRO_CON' ? `찬반 · ${DEBATE_MODEL_LABEL[session.proModel as DebateModelKey] ?? session.proModel} vs ${DEBATE_MODEL_LABEL[session.conModel as DebateModelKey] ?? session.conModel}` : `자유 · ${(session.participants ?? []).map(p => DEBATE_MODEL_LABEL[p as DebateModelKey] ?? p).join(', ')}`}</small>
+              <small>{session.turnsCompleted}/{debateTotalTurns(session)}턴 · {session.status === 'COMPLETED' ? '완료' : '진행 중'}</small>
+            </span>
+          </button>)}
+        </div>
       </div>
-      <textarea rows={3} value={topic} onChange={e => setTopic(e.target.value)} placeholder="토론 주제를 입력하세요"/>
-      {mode === 'PRO_CON' ? <div className="rag-filter-row">
-        <select value={proModel} onChange={e => setProModel(e.target.value as DebateModelKey)}>{Object.entries(DEBATE_MODEL_LABEL).map(([key, label]) => <option key={key} value={key}>찬성: {label}</option>)}</select>
-        <select value={conModel} onChange={e => setConModel(e.target.value as DebateModelKey)}>{Object.entries(DEBATE_MODEL_LABEL).map(([key, label]) => <option key={key} value={key}>반대: {label}</option>)}</select>
-      </div> : <div className="rag-filter-row">
-        {(Object.keys(DEBATE_MODEL_LABEL) as DebateModelKey[]).map(key => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <input type="checkbox" checked={participants.includes(key)} onChange={() => toggleParticipant(key)}/> {DEBATE_MODEL_LABEL[key]}
-        </label>)}
-      </div>}
-      <p className="source-intro">Gemini는 토론자로 참여하지 않고, 매 라운드가 끝날 때마다 그 라운드 발언을 웹 검색으로 검증하는 리서치 역할을 맡습니다.</p>
-      <button type="submit" disabled={creating}>{creating ? <Loader2 size={14} className="spin"/> : <MessagesSquare size={14}/>} 토론 시작</button>
-    </form>}
+      <div className="explorer-preview">
+        {pane === 'empty' && <div className="explorer-empty"><MessagesSquare size={30}/><p>왼쪽에서 토론을 선택하거나, 새 토론을 시작하세요.</p></div>}
 
-    {view === 'detail' && selected && <div className="rag-answer">
-      <p className="source-intro"><b>{selected.topic}</b><br/>{selected.turnsCompleted}/{debateTotalTurns(selected)}턴 · {selected.status === 'COMPLETED' ? '완료' : '진행 중'}</p>
-      <div className="rag-history">
-        {turns.map(turn => <article key={turn.id}>
-          <b>{DEBATE_ROLE_LABEL(turn.role)} · {DEBATE_MODEL_LABEL[turn.speakerModel as DebateModelKey] ?? turn.speakerModel}</b>
-          <Suspense fallback={<p>{turn.content}</p>}><MarkdownBody>{turn.content}</MarkdownBody></Suspense>
-        </article>)}
-        {turns.length === 0 && <p className="empty-state">아직 발언이 없습니다. 진행 버튼을 눌러 토론을 시작하세요.</p>}
+        {pane === 'create' && <form className="source-form" onSubmit={createSession}>
+          <label>토론 방식
+            <div className="source-actions">
+              <button type="button" className={mode === 'PRO_CON' ? 'source-add' : 'source-cancel'} onClick={() => setMode('PRO_CON')}>찬반토론</button>
+              <button type="button" className={mode === 'FREE' ? 'source-add' : 'source-cancel'} onClick={() => setMode('FREE')}>자유토론</button>
+            </div>
+          </label>
+          <label>측당 최대 턴수<input type="number" min={1} max={10} value={maxTurnsPerSide} onChange={e => setMaxTurnsPerSide(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}/></label>
+          <label>토론 주제<textarea rows={3} value={topic} onChange={e => setTopic(e.target.value)} placeholder="예: AI가 사람의 일자리를 대체하는 것이 사회에 이로운가?"/></label>
+          {mode === 'PRO_CON' ? <>
+            <label>찬성 모델<select value={proModel} onChange={e => setProModel(e.target.value as DebateModelKey)}>{Object.entries(DEBATE_MODEL_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+            <label>반대 모델<select value={conModel} onChange={e => setConModel(e.target.value as DebateModelKey)}>{Object.entries(DEBATE_MODEL_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          </> : <label>참가자 (2명 이상)
+            <div className="source-actions">
+              {(Object.keys(DEBATE_MODEL_LABEL) as DebateModelKey[]).map(key => <button type="button" key={key} className={participants.includes(key) ? 'source-add' : 'source-cancel'} onClick={() => toggleParticipant(key)}>{DEBATE_MODEL_LABEL[key]}</button>)}
+            </div>
+          </label>}
+          <p className="source-intro small">Gemini는 토론자로 참여하지 않고, 매 라운드가 끝날 때마다 그 라운드 발언을 웹 검색으로 검증하는 리서치 역할을 맡습니다.</p>
+          {error && <p className="form-error">{error}</p>}
+          <button className="source-add" type="submit" disabled={creating}>{creating ? <Loader2 size={14} className="spin"/> : <MessagesSquare size={14}/>} 토론 시작</button>
+        </form>}
+
+        {pane === 'detail' && selected && <>
+          <div className="explorer-preview-header"><b>{selected.topic}</b><small>{selected.turnsCompleted}/{debateTotalTurns(selected)}턴 · {selected.status === 'COMPLETED' ? '완료' : '진행 중'}</small></div>
+          <div className="explorer-preview-body">
+            <div className="debate-turn-list">
+              {turns.map(turn => <article key={turn.id} className="debate-turn">
+                <div className="debate-turn-head"><span className={`debate-role-badge ${debateRoleClass(turn.role)}`}>{DEBATE_ROLE_LABEL(turn.role)}</span><small>{DEBATE_MODEL_LABEL[turn.speakerModel as DebateModelKey] ?? turn.speakerModel}</small></div>
+                <div className="debate-turn-body"><Suspense fallback={<p>{turn.content}</p>}><MarkdownBody>{turn.content}</MarkdownBody></Suspense></div>
+              </article>)}
+              {turns.length === 0 && <p className="empty-state">아직 발언이 없습니다. 진행 버튼을 눌러 토론을 시작하세요.</p>}
+            </div>
+            {error && <p className="form-error">{error}</p>}
+            {selected.status !== 'COMPLETED' && <button className="source-add" onClick={advance} disabled={advancing}>{advancing ? <Loader2 size={14} className="spin"/> : <ChevronRight size={14}/>} 다음 발언 진행</button>}
+            {selected.status === 'COMPLETED' && <p className="empty-state">토론이 종료되었습니다.</p>}
+          </div>
+        </>}
       </div>
-      {selected.status !== 'COMPLETED' && <button onClick={advance} disabled={advancing}>{advancing ? <Loader2 size={14} className="spin"/> : <ChevronRight size={14}/>} 다음 발언 진행</button>}
-      {selected.status === 'COMPLETED' && <p className="empty-state">토론이 종료되었습니다.</p>}
-    </div>}
+    </div>
   </aside>
 }
 
