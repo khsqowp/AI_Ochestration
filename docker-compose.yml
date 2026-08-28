@@ -79,6 +79,9 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      # TRX 스윙 봇으로 자금 이관 진행중 — 보유 포지션은 기존 청산조건대로 자동 매도되지만 재진입은 안 함.
+      FUNDING_ARB_HALT_NEW_ENTRIES: "true"
     volumes:
       - trading_paper_state:/app/data
     networks: [app]
@@ -107,6 +110,18 @@ services:
       - trading_us_swing_state:/app/data
     networks: [app]
     profiles: ["us-swing"]
+    restart: unless-stopped
+
+  trading-trx-swing:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.trx_swing_loop"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - trading_trx_swing_state:/app/data
+    networks: [app]
+    profiles: ["trx-swing"]
     restart: unless-stopped
 
   trading-momentum-rotation:
@@ -169,6 +184,7 @@ volumes:
   trading_kr_swing_state:
   trading_us_swing_state:
   trading_momentum_rotation_state:
+  trading_trx_swing_state:
 
 networks:
   private:
