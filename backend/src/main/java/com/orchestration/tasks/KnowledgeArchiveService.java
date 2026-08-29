@@ -74,16 +74,18 @@ public class KnowledgeArchiveService {
   /**
    * 보안 수집 소스는 예전에 11개 고정 카테고리({@link SecurityCategoryClassifier})로 하위폴더를 나눠 모았으나,
    * 대부분 사이트별 주간 다이제스트가 여러 주제를 섞어 다뤄 카테고리 하나로 분류하는 의미가 크지 않고 폴더만
-   * 늘려 2026-08-28에 폐지했다 — 이제 도메인 뉴스 세그먼트 바로 아래(하위폴더 없이) 소스별 파일로 평평하게 쌓는다.
+   * 늘려 2026-08-28에 폐지했다 — 도메인 뉴스 세그먼트 바로 아래(하위폴더 없이) 그날 하루치 전체 출처를
+   * 파일 하나에 모은다(소스별 파일로 쪼갠 적이 잠깐 있었으나 요청받은 적 없는 변경이라 되돌림). 출처는
+   * 병합된 파일 안에서 굵은 글씨 태그로만 구분한다.
    */
   private String archiveDailyByCategory(Path root, String domain, String sourceTitle, WorkTask task, String report) throws IOException {
     LocalDate today = LocalDate.now();
     Path directory = root.resolve(domain).resolve(SecurityCategoryClassifier.NEWS_SEGMENT);
     Files.createDirectories(directory);
-    String sourceSlug = sourceTitle.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9가-힣]+", "-").replaceAll("(^-|-$)", "");
-    Path note = directory.resolve(today + "-" + sourceSlug + ".md");
-    String dailyTitle = sourceTitle + " (" + today + ")";
-    return writeOrAppend(root, note, domain, dailyTitle, task, report);
+    Path note = directory.resolve(today + ".md");
+    String dailyTitle = "보안 뉴스 (" + today + ")";
+    String taggedReport = "**출처: " + sourceTitle + "**\n\n" + report;
+    return writeOrAppend(root, note, domain, dailyTitle, task, taggedReport);
   }
 
   private String writeOrAppend(Path root, Path note, String domain, String title, WorkTask task, String report) throws IOException {

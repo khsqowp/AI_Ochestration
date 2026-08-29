@@ -152,18 +152,18 @@ class KnowledgeArchiveServiceTest {
   }
 
   @Test
-  void collectionOrigin_securityDomain_routesFlatIntoNewsSegmentBySource(@TempDir Path obsidian) throws Exception {
+  void collectionOrigin_securityDomain_routesFlatIntoOneFilePerDay(@TempDir Path obsidian) throws Exception {
     WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
 
     String path = service(obsidian).archive(task, "# 랜섬웨어 동향\n\n본문 내용입니다.");
 
-    assertThat(path).isEqualTo("security/뉴스/" + LocalDate.now() + "-보안-krebs-on-security.md");
+    assertThat(path).isEqualTo("security/뉴스/" + LocalDate.now() + ".md");
     String content = Files.readString(obsidian.resolve(path));
-    assertThat(content).contains("본문 내용입니다.");
+    assertThat(content).contains("본문 내용입니다.").contains("Krebs on Security");
   }
 
   @Test
-  void collectionOrigin_differentSourcesSameDay_eachGetsItsOwnFile_noSharedCategoryFolder(@TempDir Path obsidian) throws Exception {
+  void collectionOrigin_differentSourcesSameDay_mergeIntoTheSameDailyFile(@TempDir Path obsidian) throws Exception {
     WorkTask krebs = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
     WorkTask hackerNews = new WorkTask("[보안] The Hacker News 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
 
@@ -171,9 +171,10 @@ class KnowledgeArchiveServiceTest {
     String firstPath = service.archive(krebs, "# 클라우드 침해 사례\n\nKrebs 본문.");
     String secondPath = service.archive(hackerNews, "# 별개의 클라우드 이슈\n\nHackerNews 본문.");
 
-    assertThat(firstPath).isNotEqualTo(secondPath);
-    assertThat(firstPath).startsWith("security/뉴스/").doesNotContain("/웹/").doesNotContain("/클라우드/");
-    assertThat(secondPath).startsWith("security/뉴스/").doesNotContain("/웹/").doesNotContain("/클라우드/");
+    assertThat(firstPath).isEqualTo(secondPath).isEqualTo("security/뉴스/" + LocalDate.now() + ".md");
+    String content = Files.readString(obsidian.resolve(firstPath));
+    assertThat(content).contains("Krebs 본문.").contains("HackerNews 본문.")
+        .contains("Krebs on Security").contains("The Hacker News");
   }
 
   @Test
