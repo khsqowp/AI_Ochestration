@@ -13,5 +13,7 @@ obsidian/**
 backups/**
 !backups/.gitkeep
 backup-obsidian-migration/
-# Coin_Trade 레포로 분리됨 — 여기서는 추적하지 않음
-trading/
+# Coin_Trade 레포로 분리됨 — 여기서는 추적하지 않음. 앞에 슬래시를 꼭 붙여야 루트의 trading/만
+# 제외되고, backend/.../com/orchestration/trading/ 같은 하위 패키지까지 같이 무시되지 않는다
+# (실제로 이 슬래시가 없어서 그 백엔드 패키지 전체가 지금까지 git에 한번도 안 잡히고 있었다).
+/trading/

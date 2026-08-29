@@ -76,6 +76,8 @@ app:
     us-state-path: ${US_TRADING_STATE_PATH:/workspace/trading-state-us/us_swing_state.json}
     # trading-momentum-rotation 컨테이너(실주문 없는 백테스트/페이퍼 모드)가 쓰는 상태 파일 경로.
     momentum-rotation-state-path: ${MOMENTUM_ROTATION_TRADING_STATE_PATH:/workspace/trading-state-momentum-rotation/momentum_rotation_state.json}
+    # trading-trx-swing 컨테이너(펀딩비 차익거래 자금을 이어받은 임시 실계좌 전략)가 쓰는 상태 파일 경로.
+    trx-state-path: ${TRX_TRADING_STATE_PATH:/workspace/trading-state-trx/trx_swing_state.json}
   tasks:
     # 동시에 두 작업까지만 실행하고 나머지는 최대 100개까지 FIFO 대기열에 보관한다.
     workflow-concurrency: ${TASK_WORKFLOW_CONCURRENCY:2}
