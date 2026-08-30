@@ -175,8 +175,8 @@
 .line-chart:active { cursor:grabbing; }
 .chart-zero-line { stroke:#e2dfe8; stroke-width:1; stroke-dasharray:3 3; }
 .chart-grid-line { stroke:#f0eef3; stroke-width:1; }
-.chart-axis-label { fill:#a19cad; font-size:9.5px; font-variant-numeric:tabular-nums; }
-.chart-line { stroke-width:2; }
+.chart-axis-label { fill:#a19cad; font-size:3.5px; font-variant-numeric:tabular-nums; }
+.chart-line { stroke-width:1.2; }
 .chart-line.positive { stroke:#1e8e5a; }
 .chart-line.negative { stroke:#c0392b; }
 .chart-hover-line { stroke:#c9c5d6; stroke-width:1; }
