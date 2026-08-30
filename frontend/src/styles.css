@@ -168,17 +168,27 @@
 .debate-role-badge.con { background:#fde6e6; color:#b23b3b; }
 .debate-role-badge.research { background:#fff3d9; color:#9a6c14; }
 .debate-turn-body { font-size:13px; color:#3f3c49; line-height:1.6; }
+.positive { color:#1e8e5a; }
+.negative { color:#c0392b; }
 .chart-wrap { margin:14px 0; }
-.line-chart { width:100%; height:150px; display:block; }
+.chart-scroll { overflow-x:auto; }
+.line-chart { display:block; height:150px; cursor:crosshair; }
 .chart-zero-line { stroke:#e2dfe8; stroke-width:1; stroke-dasharray:3 3; }
 .chart-line { stroke-width:2; }
 .chart-line.positive { stroke:#1e8e5a; }
 .chart-line.negative { stroke:#c0392b; }
+.chart-hover-line { stroke:#c9c5d6; stroke-width:1; }
+.chart-hover-dot.positive { fill:#1e8e5a; }
+.chart-hover-dot.negative { fill:#c0392b; }
 .chart-range { display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:#8a8591; }
+.chart-tooltip { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:6px; padding:6px 10px; border-radius:8px; background:#f2f1f5; font-size:11px; }
+.chart-tooltip b { font-size:12px; }
+.chart-tooltip span { color:#8a8591; }
 .chart-section-title { display:block; margin:22px 0 10px; font-size:13px; }
 .position-history-section { margin-bottom:18px; }
 .position-history-section .source-actions { flex-wrap:wrap; margin-bottom:4px; }
+.trading-dashboard-embedded { flex:1; min-height:0; overflow-y:auto; padding-right:4px; }
 .trading-dashboard-embedded .trading-status-card { margin-top:0; }
 .trading-hub .explorer-sidebar { flex:0 0 220px; }
-.trading-hub .explorer-preview { background:transparent; padding:0 0 0 22px; }
+.trading-hub .explorer-preview { background:transparent; padding:0 0 0 22px; overflow:hidden; }
 .debate-turn-body p:first-child { margin-top:0; }

@@ -1240,25 +1240,42 @@ function filterChartPoints(points: ChartPoint[], period: TradingPeriod): ChartPo
 }
 
 function EquityLineChart({ points, formatValue }: { points: ChartPoint[]; formatValue: (value: number) => string }) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   if (points.length < 2) return <p className="empty-state">아직 표시할 데이터가 부족합니다.</p>
-  const width = 640
   const height = 150
-  const padding = 6
+  const padding = 10
+  const width = Math.max(640, padding * 2 + (points.length - 1) * 8)
   const values = points.map(point => point.value)
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 0)
   const range = max - min || 1
   const xStep = (width - padding * 2) / (points.length - 1)
+  const toX = (index: number) => padding + index * xStep
   const toY = (value: number) => height - padding - ((value - min) / range) * (height - padding * 2)
-  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${(padding + index * xStep).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(' ')
+  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(' ')
   const zeroY = toY(0)
   const last = points[points.length - 1].value
+  const hovered = hoverIndex !== null ? points[hoverIndex] : null
+  const onMove = (event: React.MouseEvent<SVGSVGElement>) => {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const ratio = (event.clientX - rect.left) / rect.width
+    setHoverIndex(Math.min(points.length - 1, Math.max(0, Math.round(ratio * (points.length - 1)))))
+  }
   return <div className="chart-wrap">
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="line-chart">
-      <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} className="chart-zero-line"/>
-      <path d={path} className={`chart-line ${last >= 0 ? 'positive' : 'negative'}`} fill="none"/>
-    </svg>
-    <div className="chart-range"><span>{formatValue(max)}</span><span>{formatValue(min)}</span></div>
+    <div className="chart-scroll">
+      <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} width={width} height={height} className="line-chart" onMouseMove={onMove} onMouseLeave={() => setHoverIndex(null)}>
+        <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} className="chart-zero-line"/>
+        <path d={path} className={`chart-line ${last >= 0 ? 'positive' : 'negative'}`} fill="none"/>
+        {hovered && hoverIndex !== null && <g>
+          <line x1={toX(hoverIndex)} y1={padding} x2={toX(hoverIndex)} y2={height - padding} className="chart-hover-line"/>
+          <circle cx={toX(hoverIndex)} cy={toY(hovered.value)} r={3.5} className={`chart-hover-dot ${hovered.value >= 0 ? 'positive' : 'negative'}`}/>
+        </g>}
+      </svg>
+    </div>
+    {hovered ? <div className="chart-tooltip"><b className={hovered.value >= 0 ? 'positive' : 'negative'}>{formatValue(hovered.value)}</b><span>{new Date(hovered.ts).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
+      : <div className="chart-range"><span>{formatValue(max)}</span><span>{formatValue(min)}</span></div>}
   </div>
 }
 
@@ -1316,7 +1333,7 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
       <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
         <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률</span></div>
-        <div><b>${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익</span></div>
+        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익</span></div>
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>${openNotional.toFixed(2)}</b><span>매수 금액(진입시점 기준)</span></div>
       </div>
@@ -1358,7 +1375,7 @@ function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
     <p className="source-intro">한국투자증권 모의투자(국내주식) 스윙 자동매매 현황입니다. EMA9/21 골든크로스 + SMA200 필터 · 장마감후 일일스캔 + 장중 분단위 손절체크(-2%) 이중주기로 동작합니다.</p>
     <div className="trading-status-card">
       <span className="status-pill">가동 중 · 모의투자</span>
-      <p>예산: 500만원 기준 + 누적 실현손익 {data ? `${data.realizedPnlKrw >= 0 ? '+' : ''}${data.realizedPnlKrw.toLocaleString()}원` : '-'} (벌면 늘고 잃으면 줄어듦)</p>
+      <p>예산: 500만원 기준 + 누적 실현손익 {data ? <b className={data.realizedPnlKrw >= 0 ? 'positive' : 'negative'}>{data.realizedPnlKrw >= 0 ? '+' : ''}{data.realizedPnlKrw.toLocaleString()}원</b> : '-'} (벌면 늘고 잃으면 줄어듦)</p>
       <p>마지막 스캔일: {data?.lastScanDate ?? '아직 없음'}</p>
     </div>
     {data ? <>
@@ -1406,7 +1423,7 @@ function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
     <p className="source-intro">한국투자증권 모의투자(미국주식) 스윙 자동매매 현황입니다. 국장과 동일 전략(EMA9/21 골든크로스 + SMA200 필터), 미국 동부시간 기준 이중주기로 동작합니다. 모의투자는 지정가만 가능해 즉시체결용 마켓터블 리밋(±1%)으로 주문합니다.</p>
     <div className="trading-status-card">
       <span className="status-pill">가동 중 · 모의투자</span>
-      <p>예산: 500만원(환산 약 ${(5_000_000/1400).toFixed(0)}) 기준 + 누적 실현손익 {data ? `${data.realizedPnlUsd >= 0 ? '+' : ''}$${data.realizedPnlUsd.toFixed(2)}` : '-'}</p>
+      <p>예산: 500만원(환산 약 ${(5_000_000/1400).toFixed(0)}) 기준 + 누적 실현손익 {data ? <b className={data.realizedPnlUsd >= 0 ? 'positive' : 'negative'}>{data.realizedPnlUsd >= 0 ? '+' : ''}${data.realizedPnlUsd.toFixed(2)}</b> : '-'}</p>
       <p>마지막 스캔일(ET): {data?.lastScanDate ?? '아직 없음'}</p>
     </div>
     {data ? <>
@@ -1457,7 +1474,7 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
     <p className="source-intro">코인 선물 상대모멘텀 롱숏 로테이션 백테스트(페이퍼) 현황입니다. 실주문 없음 — 가상자본으로 시뮬레이션만 진행합니다. 48종목 중 14일 모멘텀 상위 8개 롱 / 하위 8개 숏, 3일마다 리밸런스(백테스트 검증: 연환산 29.16%, MDD 18.6%).</p>
     <div className="trading-status-card">
       <span className="status-pill">가동 중 · 백테스트(페이퍼)</span>
-      <p>가상자본 기준 누적 손익 {data ? `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}` : '-'} (실현 {data ? data.cumulativeRealizedPnlUsdt.toFixed(2) : '-'} + 미실현 {data ? data.unrealizedPnlUsdt.toFixed(2) : '-'} - 수수료 {data ? data.cumulativeFeeUsdt.toFixed(2) : '-'})</p>
+      <p>가상자본 기준 누적 손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} (실현 {data ? data.cumulativeRealizedPnlUsdt.toFixed(2) : '-'} + 미실현 {data ? data.unrealizedPnlUsdt.toFixed(2) : '-'} - 수수료 {data ? data.cumulativeFeeUsdt.toFixed(2) : '-'})</p>
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}</p>
     </div>
     {data ? <>
@@ -1511,7 +1528,7 @@ function TrxTradingDashboard({ onClose, embedded }: { onClose: () => void; embed
     <p className="source-intro">바이낸스 실계좌 임시 전략입니다. 펀딩비 차익거래 신규진입을 막아 자연청산시킨 자금을 이어받아, EMA9/21 골든크로스 진입 + 고정 -12% 손절 규칙으로만 거래합니다(분할매수·익절 없음, 백테스트 검증: 연환산 39.53%).</p>
     <div className="trading-status-card">
       <span className="status-pill">{data?.position ? '보유 중' : '관망 · 골든크로스 대기중'}</span>
-      <p>누적 실현손익 {data ? `${netPnl >= 0 ? '+' : ''}$${netPnl.toFixed(2)}` : '-'} (실현 {data ? data.cumulativeRealizedPnlUsdt.toFixed(2) : '-'} - 수수료 {data ? data.cumulativeFeeUsdt.toFixed(2) : '-'})</p>
+      <p>누적 실현손익 {data ? <b className={netPnl >= 0 ? 'positive' : 'negative'}>{netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}</b> : '-'} (실현 {data ? data.cumulativeRealizedPnlUsdt.toFixed(2) : '-'} - 수수료 {data ? data.cumulativeFeeUsdt.toFixed(2) : '-'})</p>
       <p>시작일: {data?.inceptionTs ? fmtDate(data.inceptionTs) : '아직 시작 전'}</p>
     </div>
     {data ? <>
