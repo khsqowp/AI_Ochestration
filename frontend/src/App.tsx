@@ -110,14 +110,21 @@ type MaintenanceResult = { notesExamined: number; merged: number; mergedPairs: s
 type TradingPosition = { notionalUsdt: number; entryPrice: number; entrySpotPrice: number; entryPerpPrice: number; amount: number; entryFeeUsdt: number; accruedFundingUsdt: number; unrealizedPricePnlUsdt: number }
 type TradingLogEntry = { ts: string; message: string }
 type TradingEquityPoint = { ts: string; totalPnlUsdt: number }
-type TradingState = { positions: Record<string, TradingPosition>; tradeLog: TradingLogEntry[]; cumulativeFundingUsdt: number; cumulativeFeeUsdt: number; cumulativePricePnlUsdt: number; unrealizedPricePnlUsdt: number; realizedPnlUsdt: number; inceptionTs: string | null; totalCapitalUsdt: number; totalPnlUsdt: number; equityHistory: TradingEquityPoint[]; tradingHalted: boolean }
-type TradingPeriod = 'all' | 'month' | 'week'
-type KrTradingState = { stopPrice: Record<string, number>; entryCost: Record<string, number>; realizedPnlKrw: number; pendingEntries: string[]; pendingExits: string[]; lastScanDate: string | null; tradeLog: TradingLogEntry[] }
-type UsTradingState = { stopPrice: Record<string, number>; entryCost: Record<string, number>; realizedPnlUsd: number; pendingEntries: string[]; pendingExits: string[]; lastScanDate: string | null; tradeLog: TradingLogEntry[] }
+type TradingPositionPoint = { ts: string; price: number; unrealizedPnlUsdt: number; accruedFundingUsdt: number }
+type TradingState = { positions: Record<string, TradingPosition>; tradeLog: TradingLogEntry[]; cumulativeFundingUsdt: number; cumulativeFeeUsdt: number; cumulativePricePnlUsdt: number; unrealizedPricePnlUsdt: number; realizedPnlUsdt: number; inceptionTs: string | null; totalCapitalUsdt: number; totalPnlUsdt: number; equityHistory: TradingEquityPoint[]; tradingHalted: boolean; positionHistory: Record<string, TradingPositionPoint[]> }
+type TradingPeriod = 'all' | 'month' | 'week' | 'day'
+type ChartPoint = { ts: string; value: number }
+type KrEquityPoint = { ts: string; totalPnlKrw: number }
+type KrPositionPoint = { ts: string; price: number; unrealizedPnlKrw: number }
+type KrTradingState = { stopPrice: Record<string, number>; entryCost: Record<string, number>; realizedPnlKrw: number; pendingEntries: string[]; pendingExits: string[]; lastScanDate: string | null; tradeLog: TradingLogEntry[]; equityHistory: KrEquityPoint[]; positionHistory: Record<string, KrPositionPoint[]> }
+type UsEquityPoint = { ts: string; totalPnlUsd: number }
+type UsPositionPoint = { ts: string; price: number; unrealizedPnlUsd: number }
+type UsTradingState = { stopPrice: Record<string, number>; entryCost: Record<string, number>; realizedPnlUsd: number; pendingEntries: string[]; pendingExits: string[]; lastScanDate: string | null; tradeLog: TradingLogEntry[]; equityHistory: UsEquityPoint[]; positionHistory: Record<string, UsPositionPoint[]> }
+type UsdtPositionPoint = { ts: string; price: number; unrealizedPnlUsdt: number }
 type MomentumRotationPosition = { side: 'long' | 'short'; entryPrice: number; notionalUsdt: number; unrealizedPnlUsdt: number }
-type MomentumRotationState = { positions: Record<string, MomentumRotationPosition>; tradeLog: TradingLogEntry[]; equityUsdt: number; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; unrealizedPnlUsdt: number; inceptionTs: string | null; lastRebalanceTs: string | null; equityHistory: TradingEquityPoint[] }
+type MomentumRotationState = { positions: Record<string, MomentumRotationPosition>; tradeLog: TradingLogEntry[]; equityUsdt: number; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; unrealizedPnlUsdt: number; inceptionTs: string | null; lastRebalanceTs: string | null; equityHistory: TradingEquityPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
 type TrxPosition = { entryPrice: number; qty: number; notionalUsdt: number; entryFeeUsdt: number }
-type TrxTradingState = { position: TrxPosition | null; tradeLog: TradingLogEntry[]; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; inceptionTs: string | null; equityHistory: TradingEquityPoint[] }
+type TrxTradingState = { position: TrxPosition | null; tradeLog: TradingLogEntry[]; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; inceptionTs: string | null; equityHistory: TradingEquityPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
 type CalendarCategory = 'EVENT' | 'SEMINAR' | 'INCIDENT'
 type SecurityCalendarEntry = { id: string; eventDate: string; lastUpdatedDate: string; category: CalendarCategory; title: string; summary: string; sourceName: string | null; sourceUrl: string | null }
 type CalendarUpdateEntry = { updateDate: string; summary: string; sourceName: string | null; sourceUrl: string | null }
@@ -1211,8 +1218,9 @@ function ProcessBoard({ tasks, tracks, onClose }: { tasks: Task[]; tracks: Recor
   return <aside className="process-board" role="dialog" aria-modal="true"><div className="sheet-header"><div><p className="eyebrow">ALL PROCESSES</p><h2>전체 진행표</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>{visible.length ? <div className="process-list">{visible.map(task => { const events = tracks[task.id] ?? []; const current = events.at(-1)?.stage; const currentIndex = stages.indexOf(current ?? ''); return <article key={task.id}><header><b>{archiveTaskLabel(task.title)}</b><span className={task.status.toLowerCase()}>{task.status === 'QUEUED' ? '대기열' : '진행 중'}</span></header><p>{events.at(-1)?.message ?? 'PM이 작업을 접수했습니다.'}</p><div>{stages.map((stage, index) => <i className={index < currentIndex ? 'done' : stage === current && task.status === 'RUNNING' ? 'current' : ''} key={stage} title={stage}/>)}</div></article> })}</div> : <p className="empty-state">진행 중이거나 대기 중인 작업이 없습니다.</p>}</aside>
 }
 
-const TRADING_PERIOD_DAYS: Record<TradingPeriod, number | null> = { all: null, month: 30, week: 7 }
-const TRADING_PERIOD_LABEL: Record<TradingPeriod, string> = { all: '전체', month: '월간', week: '주간' }
+const TRADING_PERIOD_DAYS: Record<TradingPeriod, number | null> = { all: null, month: 30, week: 7, day: 1 }
+const TRADING_PERIOD_LABEL: Record<TradingPeriod, string> = { all: '전체', month: '월간', week: '주간', day: '일간' }
+const TRADING_PERIOD_ORDER: TradingPeriod[] = ['day', 'week', 'month', 'all']
 
 function tradingPeriodPnl(data: TradingState, period: TradingPeriod): number {
   const days = TRADING_PERIOD_DAYS[period]
@@ -1222,7 +1230,64 @@ function tradingPeriodPnl(data: TradingState, period: TradingPeriod): number {
   return data.totalPnlUsdt - (baseline ? baseline.totalPnlUsdt : 0)
 }
 
-function TradingDashboard({ onClose }: { onClose: () => void }) {
+/** 여러 봇의 equity_history 필드명이 제각각(totalPnlUsdt/Krw/Usd)이라, 각 봇 쪽에서 {ts, value}로
+ * 정규화한 뒤 이 두 헬퍼(기간 필터링, 라인차트 렌더링)를 공유해서 쓴다. */
+function filterChartPoints(points: ChartPoint[], period: TradingPeriod): ChartPoint[] {
+  const days = TRADING_PERIOD_DAYS[period]
+  if (days === null) return points
+  const cutoff = Date.now() - days * 86400000
+  return points.filter(point => new Date(point.ts).getTime() >= cutoff)
+}
+
+function EquityLineChart({ points, formatValue }: { points: ChartPoint[]; formatValue: (value: number) => string }) {
+  if (points.length < 2) return <p className="empty-state">아직 표시할 데이터가 부족합니다.</p>
+  const width = 640
+  const height = 150
+  const padding = 6
+  const values = points.map(point => point.value)
+  const min = Math.min(...values, 0)
+  const max = Math.max(...values, 0)
+  const range = max - min || 1
+  const xStep = (width - padding * 2) / (points.length - 1)
+  const toY = (value: number) => height - padding - ((value - min) / range) * (height - padding * 2)
+  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${(padding + index * xStep).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(' ')
+  const zeroY = toY(0)
+  const last = points[points.length - 1].value
+  return <div className="chart-wrap">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="line-chart">
+      <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} className="chart-zero-line"/>
+      <path d={path} className={`chart-line ${last >= 0 ? 'positive' : 'negative'}`} fill="none"/>
+    </svg>
+    <div className="chart-range"><span>{formatValue(max)}</span><span>{formatValue(min)}</span></div>
+  </div>
+}
+
+function PeriodTabs({ period, onChange }: { period: TradingPeriod; onChange: (value: TradingPeriod) => void }) {
+  return <div className="period-tabs">{TRADING_PERIOD_ORDER.map(value => <button key={value} className={period === value ? 'active' : ''} onClick={() => onChange(value)}>{TRADING_PERIOD_LABEL[value]}</button>)}</div>
+}
+
+/** 종목별 차트 섹션 — 심볼을 고르면 그 심볼의 시계열(가격 또는 손익)을 라인차트로 보여준다.
+ * symbolSeries는 각 봇의 position_history를 {ts, value}로 미리 정규화해서 넘긴다. */
+function PositionHistorySection({ symbolSeries, formatValue }: { symbolSeries: Record<string, ChartPoint[]>; formatValue: (value: number) => string }) {
+  const symbols = Object.keys(symbolSeries)
+  const [selected, setSelected] = useState<string | null>(symbols[0] ?? null)
+  useEffect(() => { if (selected === null || !symbols.includes(selected)) setSelected(symbols[0] ?? null) }, [symbols.join(',')])
+  if (symbols.length === 0) return <p className="empty-state">아직 종목별 기록이 없습니다.</p>
+  return <div className="position-history-section">
+    <div className="source-actions">{symbols.map(symbol => <button key={symbol} className={selected === symbol ? 'source-add' : 'source-cancel'} onClick={() => setSelected(symbol)}>{symbol}</button>)}</div>
+    {selected && <EquityLineChart points={symbolSeries[selected]} formatValue={formatValue}/>}
+  </div>
+}
+
+function Wrap({ embedded, onClose, eyebrow, title, children }: { embedded?: boolean; onClose: () => void; eyebrow: string; title: string; children: React.ReactNode }) {
+  if (embedded) return <div className="trading-dashboard-embedded">{children}</div>
+  return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
+    <div className="sheet-header"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+    {children}
+  </aside>
+}
+
+function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<TradingState | null>(null)
   const [period, setPeriod] = useState<TradingPeriod>('all')
   useEffect(() => {
@@ -1235,11 +1300,11 @@ function TradingDashboard({ onClose }: { onClose: () => void }) {
   const fmtDate = (value: string) => new Date(value).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
   const positions = data ? Object.entries(data.positions) : []
   const openNotional = positions.reduce((sum, [, p]) => sum + p.notionalUsdt, 0)
-  const unrealizedFunding = positions.reduce((sum, [, p]) => sum + p.accruedFundingUsdt, 0)
   const periodPnl = data ? tradingPeriodPnl(data, period) : 0
   const periodReturnPct = data && data.totalCapitalUsdt > 0 ? (periodPnl / data.totalCapitalUsdt) * 100 : 0
-  return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
-    <div className="sheet-header"><div><p className="eyebrow">TRADER Q</p><h2>트레이딩 대시보드</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
+  const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))])) : {}
+  return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="트레이딩 대시보드">
     <p className="source-intro">바이낸스 실계좌 실거래 현황입니다. 실제 자금이 투입되며, 총 자본은 매 사이클 실제 잔고를 조회해 동적으로 산정됩니다 — 펀딩비·현물/선물 체결가는 실거래소 실측치이며, 두 다리의 가격 괴리(베이시스)·슬리피지에서 나는 손익도 총 손익에 반영됩니다.</p>
     <div className="trading-status-card">
       <span className={`status-pill ${data?.tradingHalted ? 'halted' : ''}`}>{data?.tradingHalted ? '⚠ 손실 한도로 중지됨' : '가동 중 · 실거래'}</span>
@@ -1248,13 +1313,14 @@ function TradingDashboard({ onClose }: { onClose: () => void }) {
     </div>
     {data?.tradingHalted && <p className="trading-halt-banner">누적 손실이 총 자본의 8%를 넘어 전 포지션을 자동 청산하고 신규 진입을 중지했습니다. 재개하려면 서버의 상태 파일을 수동으로 초기화해야 합니다.</p>}
     {data ? <>
-      <div className="period-tabs">{(['all', 'month', 'week'] as const).map(value => <button className={period === value ? 'active' : ''} key={value} onClick={() => setPeriod(value)}>{TRADING_PERIOD_LABEL[value]}</button>)}</div>
+      <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
         <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률</span></div>
         <div><b>${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익</span></div>
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>${openNotional.toFixed(2)}</b><span>매수 금액(진입시점 기준)</span></div>
       </div>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
       <p className="usage-note">매수 금액은 각 포지션이 진입한 시점의 노셔널로 고정됩니다 — 청산 전까지 재조정하지 않으므로(왕복수수료 절감), 총 자본이 늘어도 이미 보유중인 포지션의 금액은 그대로입니다. 신규 진입/재진입 시에만 그 시점의 총 자본 기준으로 다시 계산됩니다.</p>
       <div className="usage-table">
         <b>보유 포지션 ({positions.length})</b>
@@ -1264,17 +1330,20 @@ function TradingDashboard({ onClose }: { onClose: () => void }) {
           return <article key={symbol}><b>{symbol}</b> <span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span><span>진입가 현물 {p.entrySpotPrice || p.entryPrice} / 선물 {p.entryPerpPrice || p.entryPrice} · 수량 {p.amount.toFixed(4)}</span><small>누적 펀딩수취 ${p.accruedFundingUsdt.toFixed(2)} · 미실현 가격손익 ${p.unrealizedPricePnlUsdt.toFixed(2)} · 진입수수료 ${p.entryFeeUsdt.toFixed(2)} · 순손익 ${netPnl.toFixed(2)}</small></article>
         })}
       </div>
+      <b className="chart-section-title">종목별 미실현손익 추이</b>
+      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
         <b>최근 로그</b>
         {data.tradeLog.length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : data.tradeLog.slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
       </div>
       <p className="usage-note">누적 펀딩수취 ${data.cumulativeFundingUsdt.toFixed(2)} · 누적 가격손익(베이시스/슬리피지) ${data.cumulativePricePnlUsdt.toFixed(2)} · 미실현 가격손익 ${data.unrealizedPricePnlUsdt.toFixed(2)} · 누적 수수료 ${data.cumulativeFeeUsdt.toFixed(2)} · 전체 누적 순손익 ${data.totalPnlUsdt.toFixed(2)} · 30초마다 자동 새로고침됩니다.</p>
     </> : <p className="empty-state">상태를 불러오는 중…</p>}
-  </aside>
+  </Wrap>
 }
 
-function KrTradingDashboard({ onClose }: { onClose: () => void }) {
+function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<KrTradingState | null>(null)
+  const [period, setPeriod] = useState<TradingPeriod>('all')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/kr/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1283,8 +1352,9 @@ function KrTradingDashboard({ onClose }: { onClose: () => void }) {
   }, [])
   const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const positions = data ? Object.entries(data.stopPrice) : []
-  return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
-    <div className="sheet-header"><div><p className="eyebrow">TRADER Q</p><h2>국장 스윙 대시보드</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlKrw })), period) : []
+  const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlKrw }))])) : {}
+  return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="국장 스윙 대시보드">
     <p className="source-intro">한국투자증권 모의투자(국내주식) 스윙 자동매매 현황입니다. EMA9/21 골든크로스 + SMA200 필터 · 장마감후 일일스캔 + 장중 분단위 손절체크(-2%) 이중주기로 동작합니다.</p>
     <div className="trading-status-card">
       <span className="status-pill">가동 중 · 모의투자</span>
@@ -1292,11 +1362,13 @@ function KrTradingDashboard({ onClose }: { onClose: () => void }) {
       <p>마지막 스캔일: {data?.lastScanDate ?? '아직 없음'}</p>
     </div>
     {data ? <>
+      <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>{data.pendingEntries.length}</b><span>진입 대기</span></div>
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
+      <EquityLineChart points={chartPoints} formatValue={value => `${value.toLocaleString()}원`}/>
       <div className="usage-table">
         <b>보유 포지션 ({positions.length})</b>
         {positions.length === 0 ? <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p> : positions.map(([symbol, stop]) => <article key={symbol}><b>{symbol}</b><span>손절가 {stop.toLocaleString()}원</span></article>)}
@@ -1306,17 +1378,20 @@ function KrTradingDashboard({ onClose }: { onClose: () => void }) {
         {data.pendingEntries.map(symbol => <article key={`entry-${symbol}`}><b>{symbol}</b><span>진입 대기 (다음 장시작에 매수)</span></article>)}
         {data.pendingExits.map(symbol => <article key={`exit-${symbol}`}><b>{symbol}</b><span>청산 대기 (다음 장시작에 매도)</span></article>)}
       </div>}
+      <b className="chart-section-title">종목별 미실현손익 추이</b>
+      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `${value.toLocaleString()}원`}/>
       <div className="usage-table">
         <b>최근 로그</b>
         {data.tradeLog.length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : data.tradeLog.slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
       </div>
       <p className="usage-note">30초마다 자동 새로고침됩니다.</p>
     </> : <p className="empty-state">상태를 불러오는 중…</p>}
-  </aside>
+  </Wrap>
 }
 
-function UsTradingDashboard({ onClose }: { onClose: () => void }) {
+function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<UsTradingState | null>(null)
+  const [period, setPeriod] = useState<TradingPeriod>('all')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/us/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1325,8 +1400,9 @@ function UsTradingDashboard({ onClose }: { onClose: () => void }) {
   }, [])
   const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const positions = data ? Object.entries(data.stopPrice) : []
-  return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
-    <div className="sheet-header"><div><p className="eyebrow">TRADER Q</p><h2>미장 스윙 대시보드</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsd })), period) : []
+  const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsd }))])) : {}
+  return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="미장 스윙 대시보드">
     <p className="source-intro">한국투자증권 모의투자(미국주식) 스윙 자동매매 현황입니다. 국장과 동일 전략(EMA9/21 골든크로스 + SMA200 필터), 미국 동부시간 기준 이중주기로 동작합니다. 모의투자는 지정가만 가능해 즉시체결용 마켓터블 리밋(±1%)으로 주문합니다.</p>
     <div className="trading-status-card">
       <span className="status-pill">가동 중 · 모의투자</span>
@@ -1334,11 +1410,13 @@ function UsTradingDashboard({ onClose }: { onClose: () => void }) {
       <p>마지막 스캔일(ET): {data?.lastScanDate ?? '아직 없음'}</p>
     </div>
     {data ? <>
+      <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>{data.pendingEntries.length}</b><span>진입 대기</span></div>
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
         <b>보유 포지션 ({positions.length})</b>
         {positions.length === 0 ? <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p> : positions.map(([symbol, stop]) => <article key={symbol}><b>{symbol}</b><span>손절가 ${stop.toFixed(2)}</span></article>)}
@@ -1348,17 +1426,20 @@ function UsTradingDashboard({ onClose }: { onClose: () => void }) {
         {data.pendingEntries.map(symbol => <article key={`entry-${symbol}`}><b>{symbol}</b><span>진입 대기 (다음 장시작에 매수)</span></article>)}
         {data.pendingExits.map(symbol => <article key={`exit-${symbol}`}><b>{symbol}</b><span>청산 대기 (다음 장시작에 매도)</span></article>)}
       </div>}
+      <b className="chart-section-title">종목별 미실현손익 추이</b>
+      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
         <b>최근 로그</b>
         {data.tradeLog.length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : data.tradeLog.slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
       </div>
       <p className="usage-note">30초마다 자동 새로고침됩니다.</p>
     </> : <p className="empty-state">상태를 불러오는 중…</p>}
-  </aside>
+  </Wrap>
 }
 
-function MomentumRotationDashboard({ onClose }: { onClose: () => void }) {
+function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<MomentumRotationState | null>(null)
+  const [period, setPeriod] = useState<TradingPeriod>('all')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/momentum-rotation/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1370,8 +1451,9 @@ function MomentumRotationDashboard({ onClose }: { onClose: () => void }) {
   const longs = positions.filter(([, p]) => p.side === 'long')
   const shorts = positions.filter(([, p]) => p.side === 'short')
   const totalPnl = data ? data.cumulativeRealizedPnlUsdt + data.unrealizedPnlUsdt - data.cumulativeFeeUsdt : 0
-  return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
-    <div className="sheet-header"><div><p className="eyebrow">TRADER Q</p><h2>모멘텀 로테이션 대시보드</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
+  const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))])) : {}
+  return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="모멘텀 로테이션 대시보드">
     <p className="source-intro">코인 선물 상대모멘텀 롱숏 로테이션 백테스트(페이퍼) 현황입니다. 실주문 없음 — 가상자본으로 시뮬레이션만 진행합니다. 48종목 중 14일 모멘텀 상위 8개 롱 / 하위 8개 숏, 3일마다 리밸런스(백테스트 검증: 연환산 29.16%, MDD 18.6%).</p>
     <div className="trading-status-card">
       <span className="status-pill">가동 중 · 백테스트(페이퍼)</span>
@@ -1379,11 +1461,13 @@ function MomentumRotationDashboard({ onClose }: { onClose: () => void }) {
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}</p>
     </div>
     {data ? <>
+      <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
         <div><b>{shorts.length}</b><span>숏 포지션</span></div>
         <div><b>${data.equityUsdt.toFixed(0)}</b><span>현재 자본</span></div>
       </div>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
         <b>롱 ({longs.length})</b>
         {longs.length === 0 ? <p className="empty-state">없음</p> : longs.map(([symbol, p]) => {
@@ -1398,17 +1482,20 @@ function MomentumRotationDashboard({ onClose }: { onClose: () => void }) {
           return <article key={symbol}><b>{symbol}</b><span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}% (${p.unrealizedPnlUsdt.toFixed(2)})</span></article>
         })}
       </div>
+      <b className="chart-section-title">종목별 미실현손익 추이</b>
+      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
         <b>최근 로그</b>
         {data.tradeLog.length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : data.tradeLog.slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
       </div>
       <p className="usage-note">30초마다 자동 새로고침됩니다. 실주문 없는 백테스트 시뮬레이션이며 실계좌와 무관합니다.</p>
     </> : <p className="empty-state">상태를 불러오는 중…</p>}
-  </aside>
+  </Wrap>
 }
 
-function TrxTradingDashboard({ onClose }: { onClose: () => void }) {
+function TrxTradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<TrxTradingState | null>(null)
+  const [period, setPeriod] = useState<TradingPeriod>('all')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/trx/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1418,8 +1505,9 @@ function TrxTradingDashboard({ onClose }: { onClose: () => void }) {
   const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const fmtDate = (value: string) => new Date(value).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
   const netPnl = data ? data.cumulativeRealizedPnlUsdt - data.cumulativeFeeUsdt : 0
-  return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
-    <div className="sheet-header"><div><p className="eyebrow">TRADER Q</p><h2>TRX 스윙 대시보드</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
+  const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))])) : {}
+  return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="TRX 스윙 대시보드">
     <p className="source-intro">바이낸스 실계좌 임시 전략입니다. 펀딩비 차익거래 신규진입을 막아 자연청산시킨 자금을 이어받아, EMA9/21 골든크로스 진입 + 고정 -12% 손절 규칙으로만 거래합니다(분할매수·익절 없음, 백테스트 검증: 연환산 39.53%).</p>
     <div className="trading-status-card">
       <span className="status-pill">{data?.position ? '보유 중' : '관망 · 골든크로스 대기중'}</span>
@@ -1427,16 +1515,65 @@ function TrxTradingDashboard({ onClose }: { onClose: () => void }) {
       <p>시작일: {data?.inceptionTs ? fmtDate(data.inceptionTs) : '아직 시작 전'}</p>
     </div>
     {data ? <>
+      <PeriodTabs period={period} onChange={setPeriod}/>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
         <b>보유 포지션</b>
         {data.position ? <article><b>TRX</b><span>진입가 ${data.position.entryPrice} · 수량 {data.position.qty.toFixed(2)}</span><small>노셔널 ${data.position.notionalUsdt.toFixed(2)} · 진입수수료 ${data.position.entryFeeUsdt.toFixed(2)} · 손절가 ${(data.position.entryPrice * 0.88).toFixed(5)}</small></article> : <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p>}
       </div>
+      <b className="chart-section-title">종목별 미실현손익 추이</b>
+      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
         <b>최근 로그</b>
         {data.tradeLog.length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : data.tradeLog.slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
       </div>
       <p className="usage-note">30초마다 자동 새로고침됩니다.</p>
     </> : <p className="empty-state">상태를 불러오는 중…</p>}
+  </Wrap>
+}
+
+type RealTradingTab = 'trading' | 'trx-trading'
+type PaperTradingTab = 'kr-trading' | 'us-trading' | 'momentum-rotation-trading'
+
+function RealTradingHub({ onClose, initialTab }: { onClose: () => void; initialTab: RealTradingTab }) {
+  const [tab, setTab] = useState<RealTradingTab>(initialTab)
+  useEffect(() => setTab(initialTab), [initialTab])
+  return <aside className="file-explorer trading-hub" role="dialog" aria-modal="true">
+    <div className="sheet-header"><div><p className="eyebrow">TRADER Q</p><h2>실물투자</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+    <div className="explorer-body">
+      <nav className="explorer-sidebar">
+        <div className="file-list">
+          <button className={tab === 'trading' ? 'active' : ''} onClick={() => setTab('trading')}><TrendingUp size={16}/><span><b>펀딩비 차익거래</b><small>바이낸스 실계좌</small></span></button>
+          <button className={tab === 'trx-trading' ? 'active' : ''} onClick={() => setTab('trx-trading')}><TrendingUp size={16}/><span><b>TRX 스윙</b><small>바이낸스 실계좌</small></span></button>
+        </div>
+      </nav>
+      <div className="explorer-preview">
+        {tab === 'trading' && <TradingDashboard embedded onClose={onClose}/>}
+        {tab === 'trx-trading' && <TrxTradingDashboard embedded onClose={onClose}/>}
+      </div>
+    </div>
+  </aside>
+}
+
+function PaperTradingHub({ onClose, initialTab }: { onClose: () => void; initialTab: PaperTradingTab }) {
+  const [tab, setTab] = useState<PaperTradingTab>(initialTab)
+  useEffect(() => setTab(initialTab), [initialTab])
+  return <aside className="file-explorer trading-hub" role="dialog" aria-modal="true">
+    <div className="sheet-header"><div><p className="eyebrow">TRADER Q</p><h2>모의투자</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+    <div className="explorer-body">
+      <nav className="explorer-sidebar">
+        <div className="file-list">
+          <button className={tab === 'kr-trading' ? 'active' : ''} onClick={() => setTab('kr-trading')}><Landmark size={16}/><span><b>국장 스윙</b><small>한투 모의투자</small></span></button>
+          <button className={tab === 'us-trading' ? 'active' : ''} onClick={() => setTab('us-trading')}><Globe2 size={16}/><span><b>미장 스윙</b><small>한투 모의투자</small></span></button>
+          <button className={tab === 'momentum-rotation-trading' ? 'active' : ''} onClick={() => setTab('momentum-rotation-trading')}><TrendingUp size={16}/><span><b>모멘텀 로테이션</b><small>백테스트(페이퍼)</small></span></button>
+        </div>
+      </nav>
+      <div className="explorer-preview">
+        {tab === 'kr-trading' && <KrTradingDashboard embedded onClose={onClose}/>}
+        {tab === 'us-trading' && <UsTradingDashboard embedded onClose={onClose}/>}
+        {tab === 'momentum-rotation-trading' && <MomentumRotationDashboard embedded onClose={onClose}/>}
+      </div>
+    </div>
   </aside>
 }
 
@@ -1663,5 +1800,5 @@ export function App() {
   const latest = taskEvents.at(-1); const stageAgent: Record<string, string> = { COLLECT: activeTask?.domain === 'ECONOMY' ? 'economy-scout' : activeTask?.domain === 'GENERAL' ? 'general-scout' : 'security-scout', REVIEW_A: 'review-a', REVIEW_B: 'review-b', TEAM_LEAD: activeTask?.domain === 'ECONOMY' ? 'economy-lead' : activeTask?.domain === 'GENERAL' ? 'general-lead' : 'security-lead', PM: 'pm', ARCHIVE: 'archivist' }; const workingId = activeTask?.status === 'RUNNING' && latest ? stageAgent[latest.stage] : undefined
   if (!sessionChecked) return <div className="app-loading"/>
   if (!entered) return <LoginGate session={session} loginError={loginError} loggingIn={loggingIn} onEnter={() => setEntered(true)} onLogin={login} />
-  return <main className={`workspace ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}><NotificationStack notices={notices} onDismiss={dismissNotice}/><TodoFloating items={todoItems} onAdd={addTodo} onToggle={toggleTodo}/>{sidebarCollapsed && <button className="sidebar-expand-toggle" onClick={() => setSidebarCollapsed(false)} title="사이드바 펼치기"><PanelLeft/></button>}<aside className="sidebar" aria-label="주 메뉴"><button className="icon-button" onClick={() => setSidebarCollapsed(value => !value)} title="사이드바 접기"><PanelLeft/></button><div className="sidebar-rule"/><button className="icon-button active" onClick={() => setPanel(null)} title="오피스"><LayoutDashboard/></button><button className="icon-button" title="수집 사이트" onClick={() => openPanel('sources')}><Globe2/></button><button className="icon-button" title="아카이브" onClick={() => { loadTasks(); openPanel('archive') }}><Archive/></button><button className="icon-button" title="에이전트" onClick={() => openPanel('agents')}><Users/></button><div className="sidebar-spacer"/>{isAdmin && <button className="icon-button" title="설정" onClick={() => openPanel('settings')}><Settings/></button>}<button className="icon-button" title="도움말" onClick={() => openPanel('help')}><CircleHelp/></button></aside><section className={`office ${officeView === 'dashboard' ? 'office-dashboard-mode' : ''}`}><header className="office-header"><div><p className="eyebrow">LIVE OFFICE</p><h2>Orchestration Lab</h2></div>{isAdmin ? <button className={`header-status ${budgetExceeded ? 'budget-exceeded' : ''}`} onClick={() => openPanel('usage')} title={budgetExceeded ? '이번 달 예산 초과 — 클릭해서 확인' : '모델 사용량과 비용 보기'}><span className="online-dot"/>개발 모드 · {session?.user?.displayName ?? '연결 중'}<small>{budgetExceeded ? '⚠ 예산 초과' : '사용량 · 비용'}</small></button> : <span className="header-status"><span className="online-dot"/>{session?.user?.displayName ?? '연결 중'}<small>사용자 계정</small></span>}{updateAvailable && <button className="update-banner" onClick={() => window.location.reload()}>새 버전 있음 · 새로고침</button>}<button className="icon-button" onClick={logout} title="로그아웃"><LogOut size={17}/></button></header>{isAdmin && <button className="dashboard-toggle" onClick={() => setOfficeView(view => view === 'office' ? 'dashboard' : 'office')}>{officeView === 'office' ? <LayoutDashboard size={15}/> : <Bot size={15}/>}{officeView === 'office' ? '대시보드로 보기' : '오피스로 보기'}</button>}{officeView === 'office' && <>{isAdmin && <button className="process-overview-button" onClick={() => openPanel('processes')}>전체 진행표 · {recentTasks.filter(task => task.status === 'RUNNING' || task.status === 'QUEUED').length}</button>}<div className="floor-grid"/><ParallelWorkflow tasks={recentTasks} tracks={taskTracks}/><button className="room calendar-room" onClick={() => openPanel('calendar')}><span>보안 캘린더</span></button><div className="room meeting-room"><span>PM 회의실</span><div className="meeting-table"/></div><div className="room security-room"><span>보안팀</span></div><div className="room market-room"><span>경제팀</span></div><div className="room archive-room"><span>지식 아카이브</span></div>{isAdmin ? <button className="room trading-room" onClick={() => openPanel('trading')}><span>트레이딩룸</span></button> : <div className="room trading-room"><span>트레이딩룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('kr-trading')}><span>국장룸</span></button> : <div className="room trading-room"><span>국장룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('us-trading')}><span>미장룸</span></button> : <div className="room trading-room"><span>미장룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('momentum-rotation-trading')}><span>모멘텀룸</span></button> : <div className="room trading-room"><span>모멘텀룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('trx-trading')}><span>TRX룸</span></button> : <div className="room trading-room"><span>TRX룸</span></div>}{latest && activeTask?.status === 'RUNNING' && <div className={`workflow-signal stage-${latest.stage.toLowerCase()}`}><span>{latest.stage}</span><b>{latest.message}</b></div>}{agents.map(agent => { const working = agent.id === workingId; const position = working && activeTask ? deliveryTarget(agent.id, activeTask.domain) : homePosition(agent); return <button key={agent.id} className={`agent ${working ? 'is-working' : ''}`} style={{ left: `${position.x}%`, top: `${position.y}%`, '--agent-color': agent.color } as CSSProperties} onClick={() => openAgent(agent)}><span className="agent-avatar"><PixelAgent id={agent.id} color={agent.color} size={26}/></span><span className="agent-label"><b>{agent.name}</b><small>{working ? '작업 중' : agent.status}</small></span>{working && <span className="agent-bubble" onClick={event => { event.stopPropagation(); openPanel('timeline') }} title="진행표 보기">{latest?.message}<small>진행표 보기</small></span>}</button> })}</>}{officeView === 'dashboard' && <OfficeDashboard recentTasks={recentTasks} taskTracks={taskTracks} archivedCount={archivedCount} pendingCandidates={pendingCandidates} budgetExceeded={budgetExceeded} chatInput={chatInput} setChatInput={setChatInput} taskDomain={taskDomain} setTaskDomain={setTaskDomain} chatError={chatError} onSubmitTask={submitTask} onCancelTask={cancelTask} onOpenPanel={openPanel} onOpenFile={openFileInExplorer} todos={{ items: todoItems, onAdd: addTodo, onToggle: toggleTodo }}/>}<div className="office-dock">{isAdmin && <><button onClick={() => openPanel('debate')}><MessagesSquare size={18}/> 토론</button><i/></>}{isAdmin && <><input ref={fileInputRef} type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xlsx,.pptx,.hwp,image/png,image/jpeg,image/gif,image/webp,image/bmp" onChange={e => { upload(e.target.files); e.target.value = '' }}/><button onClick={() => fileInputRef.current?.click()} disabled={uploading}><FileUp size={18}/>{uploading ? '업로드 중…' : '파일 추가'}</button><i/></>}<button onClick={() => openPanel('sources')}><Globe2 size={18}/> 수집 사이트{pendingCandidates > 0 && <span className="dock-badge">{pendingCandidates}</span>}</button><i/><button onClick={() => { loadTasks(); loadArchivedCount(); openPanel('archive') }}><Archive size={18}/> 파일 아카이브 {archivedCount}건</button><i/>{isAdmin && <><button onClick={() => openPanel('ask')}><Search size={18}/> 아카이브 질문</button><i/></>}<button onClick={() => openPanel('agents')}><Users size={18}/> 에이전트 {agents.length}명</button><i/>{isAdmin && <><button onClick={() => openPanel('trading')}><TrendingUp size={18}/> 트레이딩</button><i/></>}{isAdmin && <><button onClick={() => openPanel('kr-trading')}><Landmark size={18}/> 국장</button><i/></>}{isAdmin && <><button onClick={() => openPanel('us-trading')}><Globe2 size={18}/> 미장</button><i/></>}{isAdmin && <><button onClick={() => openPanel('momentum-rotation-trading')}><TrendingUp size={18}/> 모멘텀</button><i/></>}{isAdmin && <><button onClick={() => openPanel('trx-trading')}><TrendingUp size={18}/> TRX</button><i/></>}<button onClick={() => openPanel('calendar')}><CalendarDays size={18}/> 보안 캘린더</button><i/><button onClick={() => openPanel('cheatsheet')}><Terminal size={18}/> 치트시트</button>{isAdmin && <><i/><button onClick={() => openPanel('users')}><UserPlus size={18}/> 사용자 추가</button></>}</div>{isAdmin && officeView === 'office' && <><button className="message-toggle" onClick={() => setChatOpen(!chatOpen)}><MessageCircle size={20}/> PM 메시지</button>{chatOpen && <section className="chat-panel"><div className="chat-title"><div><span className="online-dot"/> PM 대화</div><button onClick={() => setChatOpen(false)}><X size={16}/></button></div><div ref={chatBodyRef} className="chat-body" onScroll={event => { const node = event.currentTarget; stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 24 }}><p className="chat-bubble">수집 사이트를 등록하거나 작업을 지시해 주세요. PM이 팀과 검토 단계를 계획하겠습니다.</p>{activeTask && <><p className={`task-state ${activeTask.status.toLowerCase()}`}>{activeTask.status === 'COMPLETED' ? '보고 완료' : activeTask.status === 'FAILED' ? '작업 중단' : activeTask.status === 'CANCELLED' ? '사용자가 중지함' : '작업 진행 중'} · {activeTask.domain}</p>{taskEvents.map(item => <p className="event-bubble" key={item.id}><b>{item.stage}</b> {item.message}</p>)}{activeTask.finalReport && <p className="report-bubble">{activeTask.finalReport}</p>}{activeTask.archivePath && <p className="archive-bubble">보관: obsidian/{activeTask.archivePath}</p>}{activeTask.failureReason && <p className="form-error">{activeTask.failureReason}</p>}</>}</div><form className="chat-input" ref={floatingPmFormRef} onSubmit={submitTask}><select value={taskDomain} onChange={e => setTaskDomain(e.target.value as typeof taskDomain)}><option value="SECURITY">보안</option><option value="ECONOMY">경제</option><option value="GENERAL">일반</option></select><textarea ref={floatingPmTextareaRef} rows={1} value={chatInput} onChange={e => { setChatInput(e.target.value); autoGrowTextarea(floatingPmTextareaRef.current, 130) }} onKeyDown={onFloatingChatKeyDown} placeholder="PM에게 작업을 지시하세요 (Shift+Enter로 줄바꿈)"/><button type="submit"><Send size={17}/></button></form>{chatError && <p className="chat-error">{chatError}</p>}</section>}</>}</section>{selected && <aside className="agent-sheet"><button className="sheet-close" onClick={() => setSelected(null)}><X size={18}/></button><span className="agent-avatar large" style={{ '--agent-color': selected.color } as CSSProperties}><PixelAgent id={selected.id} color={selected.color} size={38}/></span><p className="eyebrow">{selected.role}</p><h2>{selected.name}</h2><span className="status-pill">{selected.id === workingId ? '현재 작업 중' : selected.status}</span><p className="sheet-message">“{selected.id === workingId ? latest?.message : selected.message}”</p><div className="sheet-section"><b>지식베이스</b><p>업무와 관련된 근거 패킷과 노트를 우선 참고합니다.</p></div>{isAdmin && <button className="secondary-button" onClick={() => { setSelected(null); setChatOpen(true) }}>PM 대화 열기 <ChevronRight size={16}/></button>}</aside>}{panel === 'sources' && <SourceRegistry onClose={() => setPanel(null)} readOnly={!isAdmin} onTaskStarted={task => { setActiveTask(task); setTaskEvents([]); setPanel(null); setChatOpen(true); stickToBottom.current = true; loadTasks(); fetch(`/api/tasks/${task.id}/events`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(setTaskEvents) }}/>} {isAdmin && panel === 'usage' && <UsageModal onClose={() => setPanel(null)}/>} {isAdmin && panel === 'digest' && <DigestModal onClose={() => setPanel(null)}/>} {isAdmin && panel === 'ask' && <AskArchiveModal onClose={() => setPanel(null)}/>} {panel === 'archive' && <ArchivePanel tasks={recentTasks} onClose={() => setPanel(null)} onOpenExplorer={() => openPanel('files')} onRetried={loadTasks}/>} {panel === 'timeline' && <TimelineModal task={activeTask} events={taskEvents} onClose={() => setPanel(null)}/>} {panel === 'files' && <FileExplorer onClose={() => setPanel(null)} onOpenGraph={() => openPanel('graph')} initialPath={pendingFilePath ?? undefined} onInitialPathHandled={() => setPendingFilePath(null)} onTaskStarted={task => { setActiveTask(task); setTaskEvents([]); setPanel(null); setChatOpen(true); stickToBottom.current = true; loadTasks(); fetch(`/api/tasks/${task.id}/events`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(setTaskEvents) }}/>} {panel === 'graph' && <GraphView onClose={() => openPanel('files')} onOpenFile={() => openPanel('files')}/>} {isAdmin && panel === 'processes' && <ProcessBoard tasks={recentTasks} tracks={taskTracks} onClose={() => setPanel(null)}/>} {isAdmin && panel === 'trading' && <TradingDashboard onClose={() => setPanel(null)}/>} {isAdmin && panel === 'kr-trading' && <KrTradingDashboard onClose={() => setPanel(null)}/>} {isAdmin && panel === 'us-trading' && <UsTradingDashboard onClose={() => setPanel(null)}/>} {isAdmin && panel === 'momentum-rotation-trading' && <MomentumRotationDashboard onClose={() => setPanel(null)}/>} {isAdmin && panel === 'trx-trading' && <TrxTradingDashboard onClose={() => setPanel(null)}/>} {panel === 'calendar' && <SecurityCalendarModal onClose={() => setPanel(null)}/>} {panel === 'cheatsheet' && <CheatSheetModal onClose={() => setPanel(null)}/>} {panel === 'debate' && <DebatePanel onClose={() => setPanel(null)}/>} {isAdmin && panel === 'users' && <UserManagementModal onClose={() => setPanel(null)}/>} {panel === 'agents' && <aside className="side-modal"><div className="sheet-header"><div><p className="eyebrow">AGENT ROSTER</p><h2>에이전트 현황</h2></div><button className="sheet-close" onClick={() => setPanel(null)}><X size={18}/></button></div><div className="agent-roster">{agents.map(agent => <button key={agent.id} onClick={() => { setSelected(agent); setPanel(null) }}><span style={{ background: `color-mix(in srgb, ${agent.color} 22%, white)` }}><PixelAgent id={agent.id} color={agent.color} size={20}/></span><div><b>{agent.name}</b><small>{agent.id === workingId ? `작업 중 · ${latest?.stage}` : agent.role}</small></div></button>)}</div></aside>} {isAdmin && panel === 'settings' && <SettingsPanel onClose={() => setPanel(null)} onOpenDigest={() => openPanel('digest')}/>} {panel === 'help' && <aside className="side-modal"><div className="sheet-header"><div><p className="eyebrow">QUICK HELP</p><h2>사용 방법</h2></div><button className="sheet-close" onClick={() => setPanel(null)}><X size={18}/></button></div><p className="source-intro">PM 대화에서 지시를 보내면 수집 → 상호 검토 → 팀장 → PM → 아카이브 순서로 진행됩니다. 에이전트를 누르면 역할을, Owner 상태를 누르면 사용량을 볼 수 있습니다.</p><p className="source-intro">아래에 주제를 입력하면 이 오케스트레이션에 맞는 노트 생성 프롬프트가 완성됩니다 — 복사해서 PM 대화창에 붙여넣으세요.</p><NotePromptBuilder/></aside>}</main>
+  return <main className={`workspace ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}><NotificationStack notices={notices} onDismiss={dismissNotice}/><TodoFloating items={todoItems} onAdd={addTodo} onToggle={toggleTodo}/>{sidebarCollapsed && <button className="sidebar-expand-toggle" onClick={() => setSidebarCollapsed(false)} title="사이드바 펼치기"><PanelLeft/></button>}<aside className="sidebar" aria-label="주 메뉴"><button className="icon-button" onClick={() => setSidebarCollapsed(value => !value)} title="사이드바 접기"><PanelLeft/></button><div className="sidebar-rule"/><button className="icon-button active" onClick={() => setPanel(null)} title="오피스"><LayoutDashboard/></button><button className="icon-button" title="수집 사이트" onClick={() => openPanel('sources')}><Globe2/></button><button className="icon-button" title="아카이브" onClick={() => { loadTasks(); openPanel('archive') }}><Archive/></button><button className="icon-button" title="에이전트" onClick={() => openPanel('agents')}><Users/></button><div className="sidebar-spacer"/>{isAdmin && <button className="icon-button" title="설정" onClick={() => openPanel('settings')}><Settings/></button>}<button className="icon-button" title="도움말" onClick={() => openPanel('help')}><CircleHelp/></button></aside><section className={`office ${officeView === 'dashboard' ? 'office-dashboard-mode' : ''}`}><header className="office-header"><div><p className="eyebrow">LIVE OFFICE</p><h2>Orchestration Lab</h2></div>{isAdmin ? <button className={`header-status ${budgetExceeded ? 'budget-exceeded' : ''}`} onClick={() => openPanel('usage')} title={budgetExceeded ? '이번 달 예산 초과 — 클릭해서 확인' : '모델 사용량과 비용 보기'}><span className="online-dot"/>개발 모드 · {session?.user?.displayName ?? '연결 중'}<small>{budgetExceeded ? '⚠ 예산 초과' : '사용량 · 비용'}</small></button> : <span className="header-status"><span className="online-dot"/>{session?.user?.displayName ?? '연결 중'}<small>사용자 계정</small></span>}{updateAvailable && <button className="update-banner" onClick={() => window.location.reload()}>새 버전 있음 · 새로고침</button>}<button className="icon-button" onClick={logout} title="로그아웃"><LogOut size={17}/></button></header>{isAdmin && <button className="dashboard-toggle" onClick={() => setOfficeView(view => view === 'office' ? 'dashboard' : 'office')}>{officeView === 'office' ? <LayoutDashboard size={15}/> : <Bot size={15}/>}{officeView === 'office' ? '대시보드로 보기' : '오피스로 보기'}</button>}{officeView === 'office' && <>{isAdmin && <button className="process-overview-button" onClick={() => openPanel('processes')}>전체 진행표 · {recentTasks.filter(task => task.status === 'RUNNING' || task.status === 'QUEUED').length}</button>}<div className="floor-grid"/><ParallelWorkflow tasks={recentTasks} tracks={taskTracks}/><button className="room calendar-room" onClick={() => openPanel('calendar')}><span>보안 캘린더</span></button><div className="room meeting-room"><span>PM 회의실</span><div className="meeting-table"/></div><div className="room security-room"><span>보안팀</span></div><div className="room market-room"><span>경제팀</span></div><div className="room archive-room"><span>지식 아카이브</span></div>{isAdmin ? <button className="room trading-room" onClick={() => openPanel('trading')}><span>트레이딩룸</span></button> : <div className="room trading-room"><span>트레이딩룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('kr-trading')}><span>국장룸</span></button> : <div className="room trading-room"><span>국장룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('us-trading')}><span>미장룸</span></button> : <div className="room trading-room"><span>미장룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('momentum-rotation-trading')}><span>모멘텀룸</span></button> : <div className="room trading-room"><span>모멘텀룸</span></div>}{isAdmin ? <button className="room trading-room" onClick={() => openPanel('trx-trading')}><span>TRX룸</span></button> : <div className="room trading-room"><span>TRX룸</span></div>}{latest && activeTask?.status === 'RUNNING' && <div className={`workflow-signal stage-${latest.stage.toLowerCase()}`}><span>{latest.stage}</span><b>{latest.message}</b></div>}{agents.map(agent => { const working = agent.id === workingId; const position = working && activeTask ? deliveryTarget(agent.id, activeTask.domain) : homePosition(agent); return <button key={agent.id} className={`agent ${working ? 'is-working' : ''}`} style={{ left: `${position.x}%`, top: `${position.y}%`, '--agent-color': agent.color } as CSSProperties} onClick={() => openAgent(agent)}><span className="agent-avatar"><PixelAgent id={agent.id} color={agent.color} size={26}/></span><span className="agent-label"><b>{agent.name}</b><small>{working ? '작업 중' : agent.status}</small></span>{working && <span className="agent-bubble" onClick={event => { event.stopPropagation(); openPanel('timeline') }} title="진행표 보기">{latest?.message}<small>진행표 보기</small></span>}</button> })}</>}{officeView === 'dashboard' && <OfficeDashboard recentTasks={recentTasks} taskTracks={taskTracks} archivedCount={archivedCount} pendingCandidates={pendingCandidates} budgetExceeded={budgetExceeded} chatInput={chatInput} setChatInput={setChatInput} taskDomain={taskDomain} setTaskDomain={setTaskDomain} chatError={chatError} onSubmitTask={submitTask} onCancelTask={cancelTask} onOpenPanel={openPanel} onOpenFile={openFileInExplorer} todos={{ items: todoItems, onAdd: addTodo, onToggle: toggleTodo }}/>}<div className="office-dock">{isAdmin && <><button onClick={() => openPanel('debate')}><MessagesSquare size={18}/> 토론</button><i/></>}{isAdmin && <><input ref={fileInputRef} type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xlsx,.pptx,.hwp,image/png,image/jpeg,image/gif,image/webp,image/bmp" onChange={e => { upload(e.target.files); e.target.value = '' }}/><button onClick={() => fileInputRef.current?.click()} disabled={uploading}><FileUp size={18}/>{uploading ? '업로드 중…' : '파일 추가'}</button><i/></>}<button onClick={() => openPanel('sources')}><Globe2 size={18}/> 수집 사이트{pendingCandidates > 0 && <span className="dock-badge">{pendingCandidates}</span>}</button><i/><button onClick={() => { loadTasks(); loadArchivedCount(); openPanel('archive') }}><Archive size={18}/> 파일 아카이브 {archivedCount}건</button><i/>{isAdmin && <><button onClick={() => openPanel('ask')}><Search size={18}/> 아카이브 질문</button><i/></>}<button onClick={() => openPanel('agents')}><Users size={18}/> 에이전트 {agents.length}명</button><i/>{isAdmin && <><button onClick={() => openPanel('trading')}><TrendingUp size={18}/> 실물투자</button><i/></>}{isAdmin && <><button onClick={() => openPanel('kr-trading')}><TrendingUp size={18}/> 모의투자</button><i/></>}<button onClick={() => openPanel('calendar')}><CalendarDays size={18}/> 보안 캘린더</button><i/><button onClick={() => openPanel('cheatsheet')}><Terminal size={18}/> 치트시트</button>{isAdmin && <><i/><button onClick={() => openPanel('users')}><UserPlus size={18}/> 사용자 추가</button></>}</div>{isAdmin && officeView === 'office' && <><button className="message-toggle" onClick={() => setChatOpen(!chatOpen)}><MessageCircle size={20}/> PM 메시지</button>{chatOpen && <section className="chat-panel"><div className="chat-title"><div><span className="online-dot"/> PM 대화</div><button onClick={() => setChatOpen(false)}><X size={16}/></button></div><div ref={chatBodyRef} className="chat-body" onScroll={event => { const node = event.currentTarget; stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 24 }}><p className="chat-bubble">수집 사이트를 등록하거나 작업을 지시해 주세요. PM이 팀과 검토 단계를 계획하겠습니다.</p>{activeTask && <><p className={`task-state ${activeTask.status.toLowerCase()}`}>{activeTask.status === 'COMPLETED' ? '보고 완료' : activeTask.status === 'FAILED' ? '작업 중단' : activeTask.status === 'CANCELLED' ? '사용자가 중지함' : '작업 진행 중'} · {activeTask.domain}</p>{taskEvents.map(item => <p className="event-bubble" key={item.id}><b>{item.stage}</b> {item.message}</p>)}{activeTask.finalReport && <p className="report-bubble">{activeTask.finalReport}</p>}{activeTask.archivePath && <p className="archive-bubble">보관: obsidian/{activeTask.archivePath}</p>}{activeTask.failureReason && <p className="form-error">{activeTask.failureReason}</p>}</>}</div><form className="chat-input" ref={floatingPmFormRef} onSubmit={submitTask}><select value={taskDomain} onChange={e => setTaskDomain(e.target.value as typeof taskDomain)}><option value="SECURITY">보안</option><option value="ECONOMY">경제</option><option value="GENERAL">일반</option></select><textarea ref={floatingPmTextareaRef} rows={1} value={chatInput} onChange={e => { setChatInput(e.target.value); autoGrowTextarea(floatingPmTextareaRef.current, 130) }} onKeyDown={onFloatingChatKeyDown} placeholder="PM에게 작업을 지시하세요 (Shift+Enter로 줄바꿈)"/><button type="submit"><Send size={17}/></button></form>{chatError && <p className="chat-error">{chatError}</p>}</section>}</>}</section>{selected && <aside className="agent-sheet"><button className="sheet-close" onClick={() => setSelected(null)}><X size={18}/></button><span className="agent-avatar large" style={{ '--agent-color': selected.color } as CSSProperties}><PixelAgent id={selected.id} color={selected.color} size={38}/></span><p className="eyebrow">{selected.role}</p><h2>{selected.name}</h2><span className="status-pill">{selected.id === workingId ? '현재 작업 중' : selected.status}</span><p className="sheet-message">“{selected.id === workingId ? latest?.message : selected.message}”</p><div className="sheet-section"><b>지식베이스</b><p>업무와 관련된 근거 패킷과 노트를 우선 참고합니다.</p></div>{isAdmin && <button className="secondary-button" onClick={() => { setSelected(null); setChatOpen(true) }}>PM 대화 열기 <ChevronRight size={16}/></button>}</aside>}{panel === 'sources' && <SourceRegistry onClose={() => setPanel(null)} readOnly={!isAdmin} onTaskStarted={task => { setActiveTask(task); setTaskEvents([]); setPanel(null); setChatOpen(true); stickToBottom.current = true; loadTasks(); fetch(`/api/tasks/${task.id}/events`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(setTaskEvents) }}/>} {isAdmin && panel === 'usage' && <UsageModal onClose={() => setPanel(null)}/>} {isAdmin && panel === 'digest' && <DigestModal onClose={() => setPanel(null)}/>} {isAdmin && panel === 'ask' && <AskArchiveModal onClose={() => setPanel(null)}/>} {panel === 'archive' && <ArchivePanel tasks={recentTasks} onClose={() => setPanel(null)} onOpenExplorer={() => openPanel('files')} onRetried={loadTasks}/>} {panel === 'timeline' && <TimelineModal task={activeTask} events={taskEvents} onClose={() => setPanel(null)}/>} {panel === 'files' && <FileExplorer onClose={() => setPanel(null)} onOpenGraph={() => openPanel('graph')} initialPath={pendingFilePath ?? undefined} onInitialPathHandled={() => setPendingFilePath(null)} onTaskStarted={task => { setActiveTask(task); setTaskEvents([]); setPanel(null); setChatOpen(true); stickToBottom.current = true; loadTasks(); fetch(`/api/tasks/${task.id}/events`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(setTaskEvents) }}/>} {panel === 'graph' && <GraphView onClose={() => openPanel('files')} onOpenFile={() => openPanel('files')}/>} {isAdmin && panel === 'processes' && <ProcessBoard tasks={recentTasks} tracks={taskTracks} onClose={() => setPanel(null)}/>} {isAdmin && (panel === 'trading' || panel === 'trx-trading') && <RealTradingHub onClose={() => setPanel(null)} initialTab={panel}/>} {isAdmin && (panel === 'kr-trading' || panel === 'us-trading' || panel === 'momentum-rotation-trading') && <PaperTradingHub onClose={() => setPanel(null)} initialTab={panel}/>}{panel === 'calendar' && <SecurityCalendarModal onClose={() => setPanel(null)}/>} {panel === 'cheatsheet' && <CheatSheetModal onClose={() => setPanel(null)}/>} {panel === 'debate' && <DebatePanel onClose={() => setPanel(null)}/>} {isAdmin && panel === 'users' && <UserManagementModal onClose={() => setPanel(null)}/>} {panel === 'agents' && <aside className="side-modal"><div className="sheet-header"><div><p className="eyebrow">AGENT ROSTER</p><h2>에이전트 현황</h2></div><button className="sheet-close" onClick={() => setPanel(null)}><X size={18}/></button></div><div className="agent-roster">{agents.map(agent => <button key={agent.id} onClick={() => { setSelected(agent); setPanel(null) }}><span style={{ background: `color-mix(in srgb, ${agent.color} 22%, white)` }}><PixelAgent id={agent.id} color={agent.color} size={20}/></span><div><b>{agent.name}</b><small>{agent.id === workingId ? `작업 중 · ${latest?.stage}` : agent.role}</small></div></button>)}</div></aside>} {isAdmin && panel === 'settings' && <SettingsPanel onClose={() => setPanel(null)} onOpenDigest={() => openPanel('digest')}/>} {panel === 'help' && <aside className="side-modal"><div className="sheet-header"><div><p className="eyebrow">QUICK HELP</p><h2>사용 방법</h2></div><button className="sheet-close" onClick={() => setPanel(null)}><X size={18}/></button></div><p className="source-intro">PM 대화에서 지시를 보내면 수집 → 상호 검토 → 팀장 → PM → 아카이브 순서로 진행됩니다. 에이전트를 누르면 역할을, Owner 상태를 누르면 사용량을 볼 수 있습니다.</p><p className="source-intro">아래에 주제를 입력하면 이 오케스트레이션에 맞는 노트 생성 프롬프트가 완성됩니다 — 복사해서 PM 대화창에 붙여넣으세요.</p><NotePromptBuilder/></aside>}</main>
 }

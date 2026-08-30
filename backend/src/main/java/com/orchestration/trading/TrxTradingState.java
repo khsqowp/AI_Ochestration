@@ -2,6 +2,7 @@ package com.orchestration.trading;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import java.util.List;
+import java.util.Map;
 
 /**
  * trading-trx-swing 컨테이너(trading/app/trx_swing_state.py)가 공유 볼륨에 쓰는
@@ -15,7 +16,8 @@ public record TrxTradingState(
     @JsonAlias("cumulative_realized_pnl_usdt") double cumulativeRealizedPnlUsdt,
     @JsonAlias("cumulative_fee_usdt") double cumulativeFeeUsdt,
     @JsonAlias("inception_ts") String inceptionTs,
-    @JsonAlias("equity_history") List<EquityPoint> equityHistory) {
+    @JsonAlias("equity_history") List<EquityPoint> equityHistory,
+    @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory) {
 
   public record Position(
       @JsonAlias("entry_price") double entryPrice,
@@ -27,7 +29,9 @@ public record TrxTradingState(
 
   public record EquityPoint(String ts, @JsonAlias("total_pnl_usdt") double totalPnlUsdt) {}
 
+  public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt) {}
+
   public static TrxTradingState empty() {
-    return new TrxTradingState(null, List.of(), 0, 0, null, List.of());
+    return new TrxTradingState(null, List.of(), 0, 0, null, List.of(), Map.of());
   }
 }

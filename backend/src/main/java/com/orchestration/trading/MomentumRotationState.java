@@ -18,7 +18,8 @@ public record MomentumRotationState(
     @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt,
     @JsonAlias("inception_ts") String inceptionTs,
     @JsonAlias("last_rebalance_ts") String lastRebalanceTs,
-    @JsonAlias("equity_history") List<EquityPoint> equityHistory) {
+    @JsonAlias("equity_history") List<EquityPoint> equityHistory,
+    @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory) {
 
   public record Position(
       String side,
@@ -30,7 +31,9 @@ public record MomentumRotationState(
 
   public record EquityPoint(String ts, @JsonAlias("total_pnl_usdt") double totalPnlUsdt) {}
 
+  public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt) {}
+
   public static MomentumRotationState empty() {
-    return new MomentumRotationState(Map.of(), List.of(), 0, 0, 0, 0, null, null, List.of());
+    return new MomentumRotationState(Map.of(), List.of(), 0, 0, 0, 0, null, null, List.of(), Map.of());
   }
 }

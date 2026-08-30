@@ -168,4 +168,17 @@
 .debate-role-badge.con { background:#fde6e6; color:#b23b3b; }
 .debate-role-badge.research { background:#fff3d9; color:#9a6c14; }
 .debate-turn-body { font-size:13px; color:#3f3c49; line-height:1.6; }
+.chart-wrap { margin:14px 0; }
+.line-chart { width:100%; height:150px; display:block; }
+.chart-zero-line { stroke:#e2dfe8; stroke-width:1; stroke-dasharray:3 3; }
+.chart-line { stroke-width:2; }
+.chart-line.positive { stroke:#1e8e5a; }
+.chart-line.negative { stroke:#c0392b; }
+.chart-range { display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:#8a8591; }
+.chart-section-title { display:block; margin:22px 0 10px; font-size:13px; }
+.position-history-section { margin-bottom:18px; }
+.position-history-section .source-actions { flex-wrap:wrap; margin-bottom:4px; }
+.trading-dashboard-embedded .trading-status-card { margin-top:0; }
+.trading-hub .explorer-sidebar { flex:0 0 220px; }
+.trading-hub .explorer-preview { background:transparent; padding:0 0 0 22px; }
 .debate-turn-body p:first-child { margin-top:0; }

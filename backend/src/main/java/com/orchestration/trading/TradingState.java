@@ -23,7 +23,8 @@ public record TradingState(
     @JsonAlias("total_capital_usdt") double totalCapitalUsdt,
     @JsonAlias("total_pnl_usdt") double totalPnlUsdt,
     @JsonAlias("equity_history") List<EquityPoint> equityHistory,
-    @JsonAlias("trading_halted") boolean tradingHalted) {
+    @JsonAlias("trading_halted") boolean tradingHalted,
+    @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory) {
 
   public record Position(
       @JsonAlias("notional_usdt") double notionalUsdt,
@@ -39,7 +40,9 @@ public record TradingState(
 
   public record EquityPoint(String ts, @JsonAlias("total_pnl_usdt") double totalPnlUsdt) {}
 
+  public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt, @JsonAlias("accrued_funding_usdt") double accruedFundingUsdt) {}
+
   public static TradingState empty() {
-    return new TradingState(Map.of(), List.of(), 0, 0, 0, 0, 0, null, 0, 0, List.of(), false);
+    return new TradingState(Map.of(), List.of(), 0, 0, 0, 0, 0, null, 0, 0, List.of(), false, Map.of());
   }
 }

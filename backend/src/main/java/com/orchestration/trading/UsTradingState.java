@@ -12,11 +12,15 @@ public record UsTradingState(
     @JsonAlias("pending_entries") List<String> pendingEntries,
     @JsonAlias("pending_exits") List<String> pendingExits,
     @JsonAlias("last_scan_date") String lastScanDate,
-    @JsonAlias("trade_log") List<LogEntry> tradeLog) {
+    @JsonAlias("trade_log") List<LogEntry> tradeLog,
+    @JsonAlias("equity_history") List<EquityPoint> equityHistory,
+    @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory) {
 
   public record LogEntry(String ts, String message) {}
+  public record EquityPoint(String ts, @JsonAlias("total_pnl_usd") double totalPnlUsd) {}
+  public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl_usd") double unrealizedPnlUsd) {}
 
   public static UsTradingState empty() {
-    return new UsTradingState(Map.of(), Map.of(), 0, List.of(), List.of(), null, List.of());
+    return new UsTradingState(Map.of(), Map.of(), 0, List.of(), List.of(), null, List.of(), List.of(), Map.of());
   }
 }
