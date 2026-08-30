@@ -1262,8 +1262,23 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
     const el = svgRef.current
     if (!el || points.length < 2) return
     const handler = (event: WheelEvent) => {
+      // Plain vertical wheel must stay page/modal scroll — only a deliberate zoom gesture (ctrl/⌘,
+      // which is what trackpad pinch-to-zoom sends) or a horizontal wheel (shift+wheel / trackpad swipe)
+      // should be captured here. Capturing every wheel tick used to hijack scrolling the instant the
+      // cursor crossed the chart, making up/down scroll feel like it randomly stopped working mid-page.
+      const isZoomGesture = event.ctrlKey || event.metaKey
+      const isPanGesture = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      if (!isZoomGesture && !isPanGesture) return
       event.preventDefault()
       const rect = el.getBoundingClientRect()
+      if (isPanGesture) {
+        setDomain(([s, e]) => {
+          const span = Math.max(e - s, 1)
+          const deltaIndex = (event.deltaX / rect.width) * span
+          return clampChartDomain(s + deltaIndex, e + deltaIndex, points.length)
+        })
+        return
+      }
       setDomain(([s, e]) => {
         const span = Math.max(e - s, 1)
         const ratio = (event.clientX - rect.left) / rect.width
@@ -1337,6 +1352,7 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
         <span>{new Date(hoveredPoint.ts).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
       </div>
       : <div className="chart-range"><span>{formatValue(max)}</span><span>{formatValue(min)}</span></div>}
+    <p className="chart-hint">Ctrl(⌘)+휠로 확대·축소 · 드래그로 좌우 이동</p>
   </div>
 }
 
@@ -1357,6 +1373,25 @@ function PositionHistorySection({ symbolSeries, formatValue }: { symbolSeries: R
   </div>
 }
 
+/** 바이낸스/트레이딩뷰식 포지션 표. 첫 열(종목)은 왼쪽 정렬, 나머지 숫자 열은 오른쪽 정렬 —
+ * 실제 <table>이라 모달 너비를 그대로 채우고 헤더가 항상 보인다. 좁은 화면에서는 래퍼만
+ * 가로 스크롤되고(overflow-x), 세로 휠은 그대로 페이지 스크롤로 전달된다. */
+function PositionTable({ title, head, rows, empty }: { title: string; head: string[]; rows: { key: string; cells: React.ReactNode[] }[]; empty: string }) {
+  return <div className="position-table-section">
+    <b>{title} ({rows.length})</b>
+    <div className="position-table-wrap">
+      <table className="position-table">
+        <thead><tr>{head.map(label => <th key={label}>{label}</th>)}</tr></thead>
+        <tbody>
+          {rows.length === 0
+            ? <tr><td colSpan={head.length} className="empty-state">{empty}</td></tr>
+            : rows.map(row => <tr key={row.key}>{row.cells.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>
+}
+
 function Wrap({ embedded, onClose, eyebrow, title, children }: { embedded?: boolean; onClose: () => void; eyebrow: string; title: string; children: React.ReactNode }) {
   if (embedded) return <div className="trading-dashboard-embedded">{children}</div>
   return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
@@ -1367,7 +1402,7 @@ function Wrap({ embedded, onClose, eyebrow, title, children }: { embedded?: bool
 
 function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<TradingState | null>(null)
-  const [period, setPeriod] = useState<TradingPeriod>('all')
+  const [period, setPeriod] = useState<TradingPeriod>('week')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1400,14 +1435,21 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <p className="usage-note">매수 금액은 각 포지션이 진입한 시점의 노셔널로 고정됩니다 — 청산 전까지 재조정하지 않으므로(왕복수수료 절감), 총 자본이 늘어도 이미 보유중인 포지션의 금액은 그대로입니다. 신규 진입/재진입 시에만 그 시점의 총 자본 기준으로 다시 계산됩니다.</p>
-      <div className="usage-table">
-        <b>보유 포지션 ({positions.length})</b>
-        {positions.length === 0 ? <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p> : positions.map(([symbol, p]) => {
+      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '진입가(현물/선물)', '수량', '누적 펀딩수취', '미실현 가격손익', '진입수수료', '순손익', '수익률']}
+        rows={positions.map(([symbol, p]) => {
           const netPnl = p.accruedFundingUsdt + p.unrealizedPricePnlUsdt - p.entryFeeUsdt
           const returnPct = p.notionalUsdt > 0 ? (netPnl / p.notionalUsdt) * 100 : 0
-          return <article key={symbol}><b>{symbol}</b> <span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span><span>진입가 현물 {p.entrySpotPrice || p.entryPrice} / 선물 {p.entryPerpPrice || p.entryPrice} · 수량 {p.amount.toFixed(4)}</span><small>누적 펀딩수취 ${p.accruedFundingUsdt.toFixed(2)} · 미실현 가격손익 ${p.unrealizedPricePnlUsdt.toFixed(2)} · 진입수수료 ${p.entryFeeUsdt.toFixed(2)} · 순손익 ${netPnl.toFixed(2)}</small></article>
-        })}
-      </div>
+          return { key: symbol, cells: [
+            <b>{symbol}</b>,
+            `${p.entrySpotPrice || p.entryPrice} / ${p.entryPerpPrice || p.entryPrice}`,
+            p.amount.toFixed(4),
+            `$${p.accruedFundingUsdt.toFixed(2)}`,
+            `$${p.unrealizedPricePnlUsdt.toFixed(2)}`,
+            `$${p.entryFeeUsdt.toFixed(2)}`,
+            <span className={netPnl >= 0 ? 'positive' : 'negative'}>{netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}</span>,
+            <span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span>,
+          ] }
+        })}/>
       <b className="chart-section-title">종목별 미실현손익 추이</b>
       <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
@@ -1421,7 +1463,7 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
 
 function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<KrTradingState | null>(null)
-  const [period, setPeriod] = useState<TradingPeriod>('all')
+  const [period, setPeriod] = useState<TradingPeriod>('week')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/kr/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1447,15 +1489,13 @@ function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `${value.toLocaleString()}원`} resetKey={period}/>
-      <div className="usage-table">
-        <b>보유 포지션 ({positions.length})</b>
-        {positions.length === 0 ? <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p> : positions.map(([symbol, stop]) => <article key={symbol}><b>{symbol}</b><span>손절가 {stop.toLocaleString()}원</span></article>)}
-      </div>
-      {(data.pendingEntries.length > 0 || data.pendingExits.length > 0) && <div className="usage-table">
-        <b>매매 대기열</b>
-        {data.pendingEntries.map(symbol => <article key={`entry-${symbol}`}><b>{symbol}</b><span>진입 대기 (다음 장시작에 매수)</span></article>)}
-        {data.pendingExits.map(symbol => <article key={`exit-${symbol}`}><b>{symbol}</b><span>청산 대기 (다음 장시작에 매도)</span></article>)}
-      </div>}
+      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '손절가']}
+        rows={positions.map(([symbol, stop]) => ({ key: symbol, cells: [<b>{symbol}</b>, `${stop.toLocaleString()}원`] }))}/>
+      {(data.pendingEntries.length > 0 || data.pendingExits.length > 0) && <PositionTable title="매매 대기열" empty="대기 중인 매매가 없습니다." head={['종목', '상태']}
+        rows={[
+          ...data.pendingEntries.map(symbol => ({ key: `entry-${symbol}`, cells: [<b>{symbol}</b>, '진입 대기 (다음 장시작에 매수)'] })),
+          ...data.pendingExits.map(symbol => ({ key: `exit-${symbol}`, cells: [<b>{symbol}</b>, '청산 대기 (다음 장시작에 매도)'] })),
+        ]}/>}
       <b className="chart-section-title">종목별 미실현손익 추이</b>
       <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `${value.toLocaleString()}원`}/>
       <div className="usage-table">
@@ -1469,7 +1509,7 @@ function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
 
 function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<UsTradingState | null>(null)
-  const [period, setPeriod] = useState<TradingPeriod>('all')
+  const [period, setPeriod] = useState<TradingPeriod>('week')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/us/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1495,15 +1535,13 @@ function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
-      <div className="usage-table">
-        <b>보유 포지션 ({positions.length})</b>
-        {positions.length === 0 ? <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p> : positions.map(([symbol, stop]) => <article key={symbol}><b>{symbol}</b><span>손절가 ${stop.toFixed(2)}</span></article>)}
-      </div>
-      {(data.pendingEntries.length > 0 || data.pendingExits.length > 0) && <div className="usage-table">
-        <b>매매 대기열</b>
-        {data.pendingEntries.map(symbol => <article key={`entry-${symbol}`}><b>{symbol}</b><span>진입 대기 (다음 장시작에 매수)</span></article>)}
-        {data.pendingExits.map(symbol => <article key={`exit-${symbol}`}><b>{symbol}</b><span>청산 대기 (다음 장시작에 매도)</span></article>)}
-      </div>}
+      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '손절가']}
+        rows={positions.map(([symbol, stop]) => ({ key: symbol, cells: [<b>{symbol}</b>, `$${stop.toFixed(2)}`] }))}/>
+      {(data.pendingEntries.length > 0 || data.pendingExits.length > 0) && <PositionTable title="매매 대기열" empty="대기 중인 매매가 없습니다." head={['종목', '상태']}
+        rows={[
+          ...data.pendingEntries.map(symbol => ({ key: `entry-${symbol}`, cells: [<b>{symbol}</b>, '진입 대기 (다음 장시작에 매수)'] })),
+          ...data.pendingExits.map(symbol => ({ key: `exit-${symbol}`, cells: [<b>{symbol}</b>, '청산 대기 (다음 장시작에 매도)'] })),
+        ]}/>}
       <b className="chart-section-title">종목별 미실현손익 추이</b>
       <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
@@ -1517,7 +1555,7 @@ function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
 
 function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<MomentumRotationState | null>(null)
-  const [period, setPeriod] = useState<TradingPeriod>('all')
+  const [period, setPeriod] = useState<TradingPeriod>('week')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/momentum-rotation/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1546,20 +1584,16 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
         <div><b>${data.equityUsdt.toFixed(0)}</b><span>현재 자본</span></div>
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
-      <div className="usage-table">
-        <b>롱 ({longs.length})</b>
-        {longs.length === 0 ? <p className="empty-state">없음</p> : longs.map(([symbol, p]) => {
+      <PositionTable title="롱" empty="없음" head={['종목', '수익률', '미실현손익']}
+        rows={longs.map(([symbol, p]) => {
           const returnPct = p.notionalUsdt ? (p.unrealizedPnlUsdt / p.notionalUsdt) * 100 : 0
-          return <article key={symbol}><b>{symbol}</b><span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}% (${p.unrealizedPnlUsdt.toFixed(2)})</span></article>
-        })}
-      </div>
-      <div className="usage-table">
-        <b>숏 ({shorts.length})</b>
-        {shorts.length === 0 ? <p className="empty-state">없음</p> : shorts.map(([symbol, p]) => {
+          return { key: symbol, cells: [<b>{symbol}</b>, <span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span>, <span className={p.unrealizedPnlUsdt >= 0 ? 'positive' : 'negative'}>{p.unrealizedPnlUsdt >= 0 ? '+' : ''}${p.unrealizedPnlUsdt.toFixed(2)}</span>] }
+        })}/>
+      <PositionTable title="숏" empty="없음" head={['종목', '수익률', '미실현손익']}
+        rows={shorts.map(([symbol, p]) => {
           const returnPct = p.notionalUsdt ? (p.unrealizedPnlUsdt / p.notionalUsdt) * 100 : 0
-          return <article key={symbol}><b>{symbol}</b><span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}% (${p.unrealizedPnlUsdt.toFixed(2)})</span></article>
-        })}
-      </div>
+          return { key: symbol, cells: [<b>{symbol}</b>, <span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span>, <span className={p.unrealizedPnlUsdt >= 0 ? 'positive' : 'negative'}>{p.unrealizedPnlUsdt >= 0 ? '+' : ''}${p.unrealizedPnlUsdt.toFixed(2)}</span>] }
+        })}/>
       <b className="chart-section-title">종목별 미실현손익 추이</b>
       <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
@@ -1573,7 +1607,7 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
 
 function TrxTradingDashboard({ onClose, embedded }: { onClose: () => void; embedded?: boolean }) {
   const [data, setData] = useState<TrxTradingState | null>(null)
-  const [period, setPeriod] = useState<TradingPeriod>('all')
+  const [period, setPeriod] = useState<TradingPeriod>('week')
   useEffect(() => {
     const load = () => { if (!document.hidden) fetch('/api/trading/trx/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
@@ -1595,10 +1629,15 @@ function TrxTradingDashboard({ onClose, embedded }: { onClose: () => void; embed
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
-      <div className="usage-table">
-        <b>보유 포지션</b>
-        {data.position ? <article><b>TRX</b><span>진입가 ${data.position.entryPrice} · 수량 {data.position.qty.toFixed(2)}</span><small>노셔널 ${data.position.notionalUsdt.toFixed(2)} · 진입수수료 ${data.position.entryFeeUsdt.toFixed(2)} · 손절가 ${(data.position.entryPrice * 0.88).toFixed(5)}</small></article> : <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p>}
-      </div>
+      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '진입가', '수량', '노셔널', '진입수수료', '손절가']}
+        rows={data.position ? [{ key: 'trx', cells: [
+          <b>TRX</b>,
+          `$${data.position.entryPrice}`,
+          data.position.qty.toFixed(2),
+          `$${data.position.notionalUsdt.toFixed(2)}`,
+          `$${data.position.entryFeeUsdt.toFixed(2)}`,
+          `$${(data.position.entryPrice * 0.88).toFixed(5)}`,
+        ] }] : []}/>
       <b className="chart-section-title">종목별 미실현손익 추이</b>
       <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">

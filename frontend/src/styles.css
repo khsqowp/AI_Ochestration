@@ -185,11 +185,25 @@
 .chart-tooltip b { font-size:12px; }
 .chart-tooltip span { color:#c9c5d6; font-size:10px; }
 .chart-reset-zoom { position:absolute; top:-3px; right:0; padding:3px 9px; font-size:10px; font-weight:750; border-radius:100px; background:#eeecfc; color:#5d50ba; z-index:3; }
+.chart-hint { margin:6px 0 0; font-size:10px; color:#a19cad; text-align:right; }
 .chart-section-title { display:block; margin:22px 0 10px; font-size:13px; }
 .position-history-section { margin-bottom:18px; }
 .position-history-section .source-actions { flex-wrap:wrap; margin-bottom:4px; }
 .trading-dashboard-embedded { flex:1; min-height:0; overflow-y:auto; padding-right:4px; }
 .trading-dashboard-embedded .trading-status-card { margin-top:0; }
+.position-table-section { margin:24px 0; }
+.position-table-section > b { display:block; margin-bottom:10px; font-size:14px; font-weight:800; color:#3c3844; }
+.position-table-wrap { width:100%; overflow-x:auto; border:1px solid #e6e4ec; border-radius:12px; box-shadow:0 1px 3px #3a35400a; }
+.position-table { width:100%; min-width:560px; border-collapse:collapse; font-size:14px; font-variant-numeric:tabular-nums; }
+.position-table thead th { position:sticky; top:0; background:#f4f2f8; color:#726d7a; font-weight:800; font-size:11px; letter-spacing:.04em; text-transform:uppercase; text-align:right; padding:13px 16px; border-bottom:1px solid #e6e4ec; white-space:nowrap; }
+.position-table thead th:first-child { text-align:left; }
+.position-table tbody td { padding:15px 16px; text-align:right; color:#5f5970; border-bottom:1px solid #f3f1f5; white-space:nowrap; font-weight:600; }
+.position-table tbody td:first-child { text-align:left; color:#28242e; font-weight:800; font-size:14.5px; }
+.position-table tbody tr:nth-child(even) { background:#fbfafd; }
+.position-table tbody tr:last-child td { border-bottom:none; }
+.position-table tbody tr:hover td { background:#f0eefc; }
+.position-table tbody td.empty-state { text-align:center; color:#9995a1; padding:26px 16px; font-weight:500; }
+.position-table .positive, .position-table .negative { font-weight:800; font-size:14.5px; }
 .trading-hub .explorer-sidebar { flex:0 0 220px; }
 .trading-hub .explorer-preview { background:transparent; padding:0 0 0 22px; overflow:hidden; }
 .debate-turn-body p:first-child { margin-top:0; }
