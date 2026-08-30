@@ -171,7 +171,7 @@
 .positive { color:#1e8e5a !important; }
 .negative { color:#c0392b !important; }
 .chart-wrap { margin:14px 0; position:relative; }
-.line-chart { display:block; width:100%; height:auto; aspect-ratio:640/178; cursor:grab; touch-action:none; user-select:none; }
+.line-chart { display:block; width:100%; height:auto; aspect-ratio:640/89; cursor:grab; touch-action:none; user-select:none; }
 .line-chart:active { cursor:grabbing; }
 .chart-zero-line { stroke:#e2dfe8; stroke-width:1; stroke-dasharray:3 3; }
 .chart-grid-line { stroke:#f0eef3; stroke-width:1; }

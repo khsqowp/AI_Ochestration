@@ -1298,13 +1298,13 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
   if (points.length < 2) return <p className="empty-state">아직 표시할 데이터가 부족합니다.</p>
 
   const width = 640
-  const height = 178
+  const height = 89
   // Price axis lives on the right (TradingView convention), date axis along the bottom —
   // asymmetric padding leaves room for both without eating into the plot area on the left.
   const padLeft = 8
   const padRight = 56
-  const padTop = 12
-  const padBottom = 24
+  const padTop = 8
+  const padBottom = 18
   const plotLeft = padLeft
   const plotRight = width - padRight
   const plotTop = padTop
