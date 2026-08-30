@@ -912,6 +912,7 @@ function OfficeDashboard({ recentTasks, taskTracks, archivedCount, pendingCandid
   const [krTrading, setKrTrading] = useState<KrTradingState | null>(null)
   const [usTrading, setUsTrading] = useState<UsTradingState | null>(null)
   const [trxTrading, setTrxTrading] = useState<TrxTradingState | null>(null)
+  const [momentumTrading, setMomentumTrading] = useState<MomentumRotationState | null>(null)
   const [calendarCount, setCalendarCount] = useState<number | null>(null)
   const [archiveFiles, setArchiveFiles] = useState<ArchiveFile[]>([])
   const [calendarTimeline, setCalendarTimeline] = useState<SecurityCalendarTimelineEntry[]>([])
@@ -923,6 +924,7 @@ function OfficeDashboard({ recentTasks, taskTracks, archivedCount, pendingCandid
       fetch('/api/trading/kr/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setKrTrading).catch(() => undefined)
       fetch('/api/trading/us/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setUsTrading).catch(() => undefined)
       fetch('/api/trading/trx/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setTrxTrading).catch(() => undefined)
+      fetch('/api/trading/momentum-rotation/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setMomentumTrading).catch(() => undefined)
       const now = new Date(); const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
       fetch(`/api/security-calendar?month=${monthKey}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then((items: unknown[]) => setCalendarCount(items.length)).catch(() => undefined)
       fetch('/api/archive/files', { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(setArchiveFiles).catch(() => undefined)
@@ -955,6 +957,7 @@ function OfficeDashboard({ recentTasks, taskTracks, archivedCount, pendingCandid
         <button className={`dashboard-tile ${trading?.tradingHalted ? 'alert' : ''}`} onClick={() => onOpenPanel('trading')}><span className="dashboard-tile-icon"><TrendingUp size={19}/></span><b className={trading ? (trading.totalPnlUsdt >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{trading ? `$${trading.totalPnlUsdt.toFixed(2)}` : '-'}</b><span>{trading?.tradingHalted ? '⚠ 트레이딩 중단됨' : '트레이딩 손익'}</span></button>
         <button className="dashboard-tile" onClick={() => onOpenPanel('kr-trading')}><span className="dashboard-tile-icon"><Landmark size={19}/></span><b>{krTrading ? Object.keys(krTrading.stopPrice).length : '-'}</b><span>국장 보유 종목</span></button>
         <button className="dashboard-tile" onClick={() => onOpenPanel('us-trading')}><span className="dashboard-tile-icon"><Globe2 size={19}/></span><b>{usTrading ? Object.keys(usTrading.stopPrice).length : '-'}</b><span>미장 보유 종목</span></button>
+        <button className="dashboard-tile" onClick={() => onOpenPanel('momentum-rotation-trading')}><span className="dashboard-tile-icon"><TrendingUp size={19}/></span><b className={momentumTrading ? ((momentumTrading.cumulativeRealizedPnlUsdt + momentumTrading.unrealizedPnlUsdt - momentumTrading.cumulativeFeeUsdt) >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{momentumTrading ? `$${(momentumTrading.cumulativeRealizedPnlUsdt + momentumTrading.unrealizedPnlUsdt - momentumTrading.cumulativeFeeUsdt).toFixed(2)}` : '-'}</b><span>모멘텀 로테이션 손익(페이퍼)</span></button>
         <button className="dashboard-tile" onClick={() => onOpenPanel('trx-trading')}><span className="dashboard-tile-icon"><TrendingUp size={19}/></span><b className={trxTrading ? ((trxTrading.cumulativeRealizedPnlUsdt - trxTrading.cumulativeFeeUsdt) >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{trxTrading ? `$${(trxTrading.cumulativeRealizedPnlUsdt - trxTrading.cumulativeFeeUsdt).toFixed(2)}` : '-'}</b><span>{trxTrading?.position ? 'TRX 보유 중' : 'TRX 손익'}</span></button>
         <button className="dashboard-tile" onClick={() => onOpenPanel('calendar')}><span className="dashboard-tile-icon"><CalendarDays size={19}/></span><b>{calendarCount ?? '-'}</b><span>이번 달 보안 일정</span></button>
       </div>
