@@ -1239,42 +1239,103 @@ function filterChartPoints(points: ChartPoint[], period: TradingPeriod): ChartPo
   return points.filter(point => new Date(point.ts).getTime() >= cutoff)
 }
 
-function EquityLineChart({ points, formatValue }: { points: ChartPoint[]; formatValue: (value: number) => string }) {
+function clampChartDomain(start: number, end: number, length: number): [number, number] {
+  const size = Math.max(end - start, 0)
+  let s = Math.max(0, Math.min(start, length - 1 - size))
+  let e = s + size
+  if (e > length - 1) { e = length - 1; s = Math.max(0, e - size) }
+  return [Math.round(s), Math.round(e)]
+}
+
+/** TradingView 식 확대/이동 차트. 휠로 커서 위치 기준 확대·축소, 드래그로 좌우 이동, 호버 시 값 툴팁 표시.
+ * resetKey가 바뀔 때만(기간 탭 전환, 종목 전환) 확대 상태를 초기화 — 매 폴링마다 points 배열 참조가
+ * 바뀌어도 사용자가 잡아둔 확대/이동 상태는 유지된다. */
+function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint[]; formatValue: (value: number) => string; resetKey?: string | number }) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const dragRef = useRef<{ x: number; domain: [number, number] } | null>(null)
+  const [domain, setDomain] = useState<[number, number]>([0, Math.max(points.length - 1, 1)])
+  const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(null)
+
+  useEffect(() => { setDomain([0, Math.max(points.length - 1, 1)]) }, [resetKey])
+
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el || points.length < 2) return
+    const handler = (event: WheelEvent) => {
+      event.preventDefault()
+      const rect = el.getBoundingClientRect()
+      setDomain(([s, e]) => {
+        const span = Math.max(e - s, 1)
+        const ratio = (event.clientX - rect.left) / rect.width
+        const cursorIndex = s + ratio * span
+        const factor = event.deltaY > 0 ? 1.15 : 1 / 1.15
+        const minSpan = Math.min(4, points.length - 1)
+        const newSpan = Math.max(minSpan, Math.min(points.length - 1, span * factor))
+        const ratioAtCursor = (cursorIndex - s) / span
+        const newStart = cursorIndex - ratioAtCursor * newSpan
+        return clampChartDomain(newStart, newStart + newSpan, points.length)
+      })
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [points.length])
+
   if (points.length < 2) return <p className="empty-state">아직 표시할 데이터가 부족합니다.</p>
+
+  const width = 640
   const height = 150
   const padding = 10
-  const width = Math.max(640, padding * 2 + (points.length - 1) * 8)
-  const values = points.map(point => point.value)
+  const [startIndex, endIndex] = clampChartDomain(domain[0], domain[1], points.length)
+  const span = Math.max(endIndex - startIndex, 1)
+  const visible = points.slice(startIndex, endIndex + 1)
+  const values = visible.map(point => point.value)
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 0)
   const range = max - min || 1
-  const xStep = (width - padding * 2) / (points.length - 1)
-  const toX = (index: number) => padding + index * xStep
+  const toX = (index: number) => padding + ((index - startIndex) / span) * (width - padding * 2)
   const toY = (value: number) => height - padding - ((value - min) / range) * (height - padding * 2)
-  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(' ')
+  const path = visible.map((point, i) => `${i === 0 ? 'M' : 'L'} ${toX(startIndex + i).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(' ')
   const zeroY = toY(0)
-  const last = points[points.length - 1].value
-  const hovered = hoverIndex !== null ? points[hoverIndex] : null
-  const onMove = (event: React.MouseEvent<SVGSVGElement>) => {
+  const last = visible[visible.length - 1].value
+  const zoomed = span < points.length - 1
+
+  const onMouseDown = (event: React.MouseEvent<SVGSVGElement>) => {
+    dragRef.current = { x: event.clientX, domain: [startIndex, endIndex] }
+  }
+  const onMouseMove = (event: React.MouseEvent<SVGSVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect()
     if (!rect) return
+    if (dragRef.current) {
+      const dragSpan = Math.max(dragRef.current.domain[1] - dragRef.current.domain[0], 1)
+      const deltaIndex = ((dragRef.current.x - event.clientX) / rect.width) * dragSpan
+      setDomain(clampChartDomain(dragRef.current.domain[0] + deltaIndex, dragRef.current.domain[1] + deltaIndex, points.length))
+      return
+    }
     const ratio = (event.clientX - rect.left) / rect.width
-    setHoverIndex(Math.min(points.length - 1, Math.max(0, Math.round(ratio * (points.length - 1)))))
+    const index = Math.min(endIndex, Math.max(startIndex, Math.round(startIndex + ratio * span)))
+    const point = points[index]
+    if (point) setHover({ index, x: toX(index), y: toY(point.value) })
   }
+  const endDrag = () => { dragRef.current = null }
+  const onMouseLeave = () => { dragRef.current = null; setHover(null) }
+  const resetZoom = () => setDomain([0, points.length - 1])
+  const hoveredPoint = hover ? points[hover.index] : null
+
   return <div className="chart-wrap">
-    <div className="chart-scroll">
-      <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} width={width} height={height} className="line-chart" onMouseMove={onMove} onMouseLeave={() => setHoverIndex(null)}>
-        <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} className="chart-zero-line"/>
-        <path d={path} className={`chart-line ${last >= 0 ? 'positive' : 'negative'}`} fill="none"/>
-        {hovered && hoverIndex !== null && <g>
-          <line x1={toX(hoverIndex)} y1={padding} x2={toX(hoverIndex)} y2={height - padding} className="chart-hover-line"/>
-          <circle cx={toX(hoverIndex)} cy={toY(hovered.value)} r={3.5} className={`chart-hover-dot ${hovered.value >= 0 ? 'positive' : 'negative'}`}/>
-        </g>}
-      </svg>
-    </div>
-    {hovered ? <div className="chart-tooltip"><b className={hovered.value >= 0 ? 'positive' : 'negative'}>{formatValue(hovered.value)}</b><span>{new Date(hovered.ts).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
+    {zoomed && <button type="button" className="chart-reset-zoom" onClick={resetZoom}>축소</button>}
+    <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} width="100%" height={height} className="line-chart"
+      onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={endDrag} onMouseLeave={onMouseLeave}>
+      <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} className="chart-zero-line"/>
+      <path d={path} className={`chart-line ${last >= 0 ? 'positive' : 'negative'}`} fill="none"/>
+      {hover && hoveredPoint && <g>
+        <line x1={hover.x} y1={padding} x2={hover.x} y2={height - padding} className="chart-hover-line"/>
+        <circle cx={hover.x} cy={hover.y} r={3.5} className={`chart-hover-dot ${hoveredPoint.value >= 0 ? 'positive' : 'negative'}`}/>
+      </g>}
+    </svg>
+    {hover && hoveredPoint ? <div className="chart-tooltip" style={{ left: `${Math.min(92, Math.max(8, (hover.x / width) * 100))}%` }}>
+        <b className={hoveredPoint.value >= 0 ? 'positive' : 'negative'}>{formatValue(hoveredPoint.value)}</b>
+        <span>{new Date(hoveredPoint.ts).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
       : <div className="chart-range"><span>{formatValue(max)}</span><span>{formatValue(min)}</span></div>}
   </div>
 }
@@ -1292,7 +1353,7 @@ function PositionHistorySection({ symbolSeries, formatValue }: { symbolSeries: R
   if (symbols.length === 0) return <p className="empty-state">아직 종목별 기록이 없습니다.</p>
   return <div className="position-history-section">
     <div className="source-actions">{symbols.map(symbol => <button key={symbol} className={selected === symbol ? 'source-add' : 'source-cancel'} onClick={() => setSelected(symbol)}>{symbol}</button>)}</div>
-    {selected && <EquityLineChart points={symbolSeries[selected]} formatValue={formatValue}/>}
+    {selected && <EquityLineChart points={symbolSeries[selected]} formatValue={formatValue} resetKey={selected}/>}
   </div>
 }
 
@@ -1337,7 +1398,7 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>${openNotional.toFixed(2)}</b><span>매수 금액(진입시점 기준)</span></div>
       </div>
-      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <p className="usage-note">매수 금액은 각 포지션이 진입한 시점의 노셔널로 고정됩니다 — 청산 전까지 재조정하지 않으므로(왕복수수료 절감), 총 자본이 늘어도 이미 보유중인 포지션의 금액은 그대로입니다. 신규 진입/재진입 시에만 그 시점의 총 자본 기준으로 다시 계산됩니다.</p>
       <div className="usage-table">
         <b>보유 포지션 ({positions.length})</b>
@@ -1385,7 +1446,7 @@ function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
         <div><b>{data.pendingEntries.length}</b><span>진입 대기</span></div>
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
-      <EquityLineChart points={chartPoints} formatValue={value => `${value.toLocaleString()}원`}/>
+      <EquityLineChart points={chartPoints} formatValue={value => `${value.toLocaleString()}원`} resetKey={period}/>
       <div className="usage-table">
         <b>보유 포지션 ({positions.length})</b>
         {positions.length === 0 ? <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p> : positions.map(([symbol, stop]) => <article key={symbol}><b>{symbol}</b><span>손절가 {stop.toLocaleString()}원</span></article>)}
@@ -1433,7 +1494,7 @@ function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
         <div><b>{data.pendingEntries.length}</b><span>진입 대기</span></div>
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
-      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <div className="usage-table">
         <b>보유 포지션 ({positions.length})</b>
         {positions.length === 0 ? <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p> : positions.map(([symbol, stop]) => <article key={symbol}><b>{symbol}</b><span>손절가 ${stop.toFixed(2)}</span></article>)}
@@ -1484,7 +1545,7 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
         <div><b>{shorts.length}</b><span>숏 포지션</span></div>
         <div><b>${data.equityUsdt.toFixed(0)}</b><span>현재 자본</span></div>
       </div>
-      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <div className="usage-table">
         <b>롱 ({longs.length})</b>
         {longs.length === 0 ? <p className="empty-state">없음</p> : longs.map(([symbol, p]) => {
@@ -1533,7 +1594,7 @@ function TrxTradingDashboard({ onClose, embedded }: { onClose: () => void; embed
     </div>
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
-      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`}/>
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <div className="usage-table">
         <b>보유 포지션</b>
         {data.position ? <article><b>TRX</b><span>진입가 ${data.position.entryPrice} · 수량 {data.position.qty.toFixed(2)}</span><small>노셔널 ${data.position.notionalUsdt.toFixed(2)} · 진입수수료 ${data.position.entryFeeUsdt.toFixed(2)} · 손절가 ${(data.position.entryPrice * 0.88).toFixed(5)}</small></article> : <p className="empty-state">현재 보유 중인 포지션이 없습니다.</p>}

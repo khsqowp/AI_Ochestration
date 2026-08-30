@@ -168,11 +168,11 @@
 .debate-role-badge.con { background:#fde6e6; color:#b23b3b; }
 .debate-role-badge.research { background:#fff3d9; color:#9a6c14; }
 .debate-turn-body { font-size:13px; color:#3f3c49; line-height:1.6; }
-.positive { color:#1e8e5a; }
-.negative { color:#c0392b; }
-.chart-wrap { margin:14px 0; }
-.chart-scroll { overflow-x:auto; }
-.line-chart { display:block; height:150px; cursor:crosshair; }
+.positive { color:#1e8e5a !important; }
+.negative { color:#c0392b !important; }
+.chart-wrap { margin:14px 0; position:relative; }
+.line-chart { display:block; width:100%; height:150px; cursor:grab; touch-action:none; user-select:none; }
+.line-chart:active { cursor:grabbing; }
 .chart-zero-line { stroke:#e2dfe8; stroke-width:1; stroke-dasharray:3 3; }
 .chart-line { stroke-width:2; }
 .chart-line.positive { stroke:#1e8e5a; }
@@ -181,9 +181,10 @@
 .chart-hover-dot.positive { fill:#1e8e5a; }
 .chart-hover-dot.negative { fill:#c0392b; }
 .chart-range { display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:#8a8591; }
-.chart-tooltip { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:6px; padding:6px 10px; border-radius:8px; background:#f2f1f5; font-size:11px; }
+.chart-tooltip { position:absolute; top:6px; transform:translateX(-50%); display:grid; gap:1px; padding:5px 9px; border-radius:8px; background:#2c2933; color:#fff; font-size:11px; white-space:nowrap; pointer-events:none; box-shadow:0 4px 12px #2925314d; z-index:2; }
 .chart-tooltip b { font-size:12px; }
-.chart-tooltip span { color:#8a8591; }
+.chart-tooltip span { color:#c9c5d6; font-size:10px; }
+.chart-reset-zoom { position:absolute; top:-3px; right:0; padding:3px 9px; font-size:10px; font-weight:750; border-radius:100px; background:#eeecfc; color:#5d50ba; z-index:3; }
 .chart-section-title { display:block; margin:22px 0 10px; font-size:13px; }
 .position-history-section { margin-bottom:18px; }
 .position-history-section .source-actions { flex-wrap:wrap; margin-bottom:4px; }
