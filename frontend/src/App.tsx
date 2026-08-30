@@ -1298,8 +1298,17 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
   if (points.length < 2) return <p className="empty-state">아직 표시할 데이터가 부족합니다.</p>
 
   const width = 640
-  const height = 150
-  const padding = 10
+  const height = 178
+  // Price axis lives on the right (TradingView convention), date axis along the bottom —
+  // asymmetric padding leaves room for both without eating into the plot area on the left.
+  const padLeft = 8
+  const padRight = 56
+  const padTop = 12
+  const padBottom = 24
+  const plotLeft = padLeft
+  const plotRight = width - padRight
+  const plotTop = padTop
+  const plotBottom = height - padBottom
   const [startIndex, endIndex] = clampChartDomain(domain[0], domain[1], points.length)
   const span = Math.max(endIndex - startIndex, 1)
   const visible = points.slice(startIndex, endIndex + 1)
@@ -1307,12 +1316,19 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 0)
   const range = max - min || 1
-  const toX = (index: number) => padding + ((index - startIndex) / span) * (width - padding * 2)
-  const toY = (value: number) => height - padding - ((value - min) / range) * (height - padding * 2)
+  const toX = (index: number) => plotLeft + ((index - startIndex) / span) * (plotRight - plotLeft)
+  const toY = (value: number) => plotBottom - ((value - min) / range) * (plotBottom - plotTop)
   const path = visible.map((point, i) => `${i === 0 ? 'M' : 'L'} ${toX(startIndex + i).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(' ')
   const zeroY = toY(0)
   const last = visible[visible.length - 1].value
   const zoomed = span < points.length - 1
+  const yTicks = [0, 1, 2, 3].map(i => min + (range * i) / 3)
+  const formatAxisDate = (ts: string) => { const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()}` }
+  const xTicks = [0, 1 / 3, 2 / 3, 1].map(f => ({
+    x: plotLeft + f * (plotRight - plotLeft),
+    anchor: (f === 0 ? 'start' : f === 1 ? 'end' : 'middle') as 'start' | 'end' | 'middle',
+    label: formatAxisDate(points[Math.round(startIndex + f * span)].ts),
+  }))
 
   const onMouseDown = (event: React.MouseEvent<SVGSVGElement>) => {
     dragRef.current = { x: event.clientX, domain: [startIndex, endIndex] }
@@ -1340,18 +1356,22 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
     {zoomed && <button type="button" className="chart-reset-zoom" onClick={resetZoom}>축소</button>}
     <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} width="100%" height={height} className="line-chart"
       onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={endDrag} onMouseLeave={onMouseLeave}>
-      <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} className="chart-zero-line"/>
+      {yTicks.map((value, i) => <g key={i}>
+        <line x1={plotLeft} y1={toY(value)} x2={plotRight} y2={toY(value)} className="chart-grid-line"/>
+        <text x={plotRight + 6} y={toY(value)} dy="3.5" className="chart-axis-label">{formatValue(value)}</text>
+      </g>)}
+      {min < 0 && max > 0 && <line x1={plotLeft} y1={zeroY} x2={plotRight} y2={zeroY} className="chart-zero-line"/>}
       <path d={path} className={`chart-line ${last >= 0 ? 'positive' : 'negative'}`} fill="none"/>
+      {xTicks.map((tick, i) => <text key={i} x={tick.x} y={height - 6} textAnchor={tick.anchor} className="chart-axis-label">{tick.label}</text>)}
       {hover && hoveredPoint && <g>
-        <line x1={hover.x} y1={padding} x2={hover.x} y2={height - padding} className="chart-hover-line"/>
+        <line x1={hover.x} y1={plotTop} x2={hover.x} y2={plotBottom} className="chart-hover-line"/>
         <circle cx={hover.x} cy={hover.y} r={3.5} className={`chart-hover-dot ${hoveredPoint.value >= 0 ? 'positive' : 'negative'}`}/>
       </g>}
     </svg>
-    {hover && hoveredPoint ? <div className="chart-tooltip" style={{ left: `${Math.min(92, Math.max(8, (hover.x / width) * 100))}%` }}>
-        <b className={hoveredPoint.value >= 0 ? 'positive' : 'negative'}>{formatValue(hoveredPoint.value)}</b>
-        <span>{new Date(hoveredPoint.ts).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-      </div>
-      : <div className="chart-range"><span>{formatValue(max)}</span><span>{formatValue(min)}</span></div>}
+    {hover && hoveredPoint && <div className="chart-tooltip" style={{ left: `${Math.min(92, Math.max(8, (hover.x / width) * 100))}%` }}>
+      <b className={hoveredPoint.value >= 0 ? 'positive' : 'negative'}>{formatValue(hoveredPoint.value)}</b>
+      <span>{new Date(hoveredPoint.ts).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+    </div>}
     <p className="chart-hint">Ctrl(⌘)+휠로 확대·축소 · 드래그로 좌우 이동</p>
   </div>
 }
@@ -1415,6 +1435,8 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
   const openNotional = positions.reduce((sum, [, p]) => sum + p.notionalUsdt, 0)
   const periodPnl = data ? tradingPeriodPnl(data, period) : 0
   const periodReturnPct = data && data.totalCapitalUsdt > 0 ? (periodPnl / data.totalCapitalUsdt) * 100 : 0
+  const startingCapital = data ? data.totalCapitalUsdt - data.totalPnlUsdt : 0
+  const overallReturnPct = startingCapital > 0 && data ? (data.totalPnlUsdt / startingCapital) * 100 : 0
   const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
   const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))])) : {}
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="트레이딩 대시보드">
@@ -1428,6 +1450,9 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
+        <div><b>${startingCapital.toFixed(2)}</b><span>시작 자본</span></div>
+        <div><b>${data.totalCapitalUsdt.toFixed(2)}</b><span>현재 자본</span></div>
+        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
         <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률</span></div>
         <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익</span></div>
         <div><b>{positions.length}</b><span>보유 종목</span></div>
@@ -1484,6 +1509,9 @@ function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
+        <div><b>5,000,000원</b><span>시작 자본</span></div>
+        <div><b>{(5_000_000 + data.realizedPnlKrw).toLocaleString()}원</b><span>현재 자본(실현 기준)</span></div>
+        <div><b className={data.realizedPnlKrw >= 0 ? 'positive' : 'negative'}>{data.realizedPnlKrw >= 0 ? '+' : ''}{((data.realizedPnlKrw / 5_000_000) * 100).toFixed(2)}%</b><span>실현 수익률</span></div>
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>{data.pendingEntries.length}</b><span>진입 대기</span></div>
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
@@ -1530,6 +1558,9 @@ function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
+        <div><b>${(5_000_000 / 1400).toFixed(0)}</b><span>시작 자본</span></div>
+        <div><b>${(5_000_000 / 1400 + data.realizedPnlUsd).toFixed(2)}</b><span>현재 자본(실현 기준)</span></div>
+        <div><b className={data.realizedPnlUsd >= 0 ? 'positive' : 'negative'}>{data.realizedPnlUsd >= 0 ? '+' : ''}{((data.realizedPnlUsd / (5_000_000 / 1400)) * 100).toFixed(2)}%</b><span>실현 수익률</span></div>
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>{data.pendingEntries.length}</b><span>진입 대기</span></div>
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
@@ -1567,6 +1598,8 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
   const longs = positions.filter(([, p]) => p.side === 'long')
   const shorts = positions.filter(([, p]) => p.side === 'short')
   const totalPnl = data ? data.cumulativeRealizedPnlUsdt + data.unrealizedPnlUsdt - data.cumulativeFeeUsdt : 0
+  const startingCapital = data ? data.equityUsdt - totalPnl : 0
+  const overallReturnPct = startingCapital > 0 ? (totalPnl / startingCapital) * 100 : 0
   const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
   const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))])) : {}
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="모멘텀 로테이션 대시보드">
@@ -1579,9 +1612,11 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
+        <div><b>${startingCapital.toFixed(0)}</b><span>시작 자본</span></div>
+        <div><b>${data.equityUsdt.toFixed(0)}</b><span>현재 자본</span></div>
+        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
         <div><b>{shorts.length}</b><span>숏 포지션</span></div>
-        <div><b>${data.equityUsdt.toFixed(0)}</b><span>현재 자본</span></div>
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <PositionTable title="롱" empty="없음" head={['종목', '수익률', '미실현손익']}
@@ -1628,6 +1663,12 @@ function TrxTradingDashboard({ onClose, embedded }: { onClose: () => void; embed
     </div>
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
+      <div className="trading-metrics">
+        <div><b className={netPnl >= 0 ? 'positive' : 'negative'}>{netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}</b><span>누적 순손익</span></div>
+        <div><b>${data.cumulativeFeeUsdt.toFixed(2)}</b><span>누적 수수료</span></div>
+        <div><b>{data.position ? `$${data.position.notionalUsdt.toFixed(2)}` : '-'}</b><span>보유 포지션 규모</span></div>
+      </div>
+      <p className="usage-note">시작/현재 자본은 아직 이 봇 상태 파일에 기록되지 않아 표시할 수 없습니다 — 펀딩비 차익거래에서 자연청산된 자금을 이어받아 시작했고 이후 별도 입출금 없이 누적 순손익만큼만 증감된 상태입니다.</p>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '진입가', '수량', '노셔널', '진입수수료', '손절가']}
         rows={data.position ? [{ key: 'trx', cells: [
