@@ -11,6 +11,7 @@ import java.util.Map;
 public record KrTradingState(
     @JsonAlias("stop_price") Map<String, Double> stopPrice,
     @JsonAlias("entry_cost") Map<String, Double> entryCost,
+    @JsonAlias("symbol_names") Map<String, String> symbolNames,
     @JsonAlias("realized_pnl_krw") double realizedPnlKrw,
     @JsonAlias("pending_entries") List<String> pendingEntries,
     @JsonAlias("pending_exits") List<String> pendingExits,
@@ -24,6 +25,7 @@ public record KrTradingState(
   public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl_krw") double unrealizedPnlKrw) {}
 
   public static KrTradingState empty() {
-    return new KrTradingState(Map.of(), Map.of(), 0, List.of(), List.of(), null, List.of(), List.of(), Map.of());
+    return new KrTradingState(
+        Map.of(), Map.of(), Map.of(), 0, List.of(), List.of(), null, List.of(), List.of(), Map.of());
   }
 }

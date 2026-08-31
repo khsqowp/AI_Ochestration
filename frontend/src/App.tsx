@@ -116,7 +116,7 @@ type TradingPeriod = 'all' | 'month' | 'week' | 'day'
 type ChartPoint = { ts: string; value: number }
 type KrEquityPoint = { ts: string; totalPnlKrw: number }
 type KrPositionPoint = { ts: string; price: number; unrealizedPnlKrw: number }
-type KrTradingState = { stopPrice: Record<string, number>; entryCost: Record<string, number>; realizedPnlKrw: number; pendingEntries: string[]; pendingExits: string[]; lastScanDate: string | null; tradeLog: TradingLogEntry[]; equityHistory: KrEquityPoint[]; positionHistory: Record<string, KrPositionPoint[]> }
+type KrTradingState = { stopPrice: Record<string, number>; entryCost: Record<string, number>; symbolNames: Record<string, string> | null; realizedPnlKrw: number; pendingEntries: string[]; pendingExits: string[]; lastScanDate: string | null; tradeLog: TradingLogEntry[]; equityHistory: KrEquityPoint[]; positionHistory: Record<string, KrPositionPoint[]> }
 type UsEquityPoint = { ts: string; totalPnlUsd: number }
 type UsPositionPoint = { ts: string; price: number; unrealizedPnlUsd: number }
 type UsTradingState = { stopPrice: Record<string, number>; entryCost: Record<string, number>; realizedPnlUsd: number; pendingEntries: string[]; pendingExits: string[]; lastScanDate: string | null; tradeLog: TradingLogEntry[]; equityHistory: UsEquityPoint[]; positionHistory: Record<string, UsPositionPoint[]> }
@@ -1382,13 +1382,13 @@ function PeriodTabs({ period, onChange }: { period: TradingPeriod; onChange: (va
 
 /** 종목별 차트 섹션 — 심볼을 고르면 그 심볼의 시계열(가격 또는 손익)을 라인차트로 보여준다.
  * symbolSeries는 각 봇의 position_history를 {ts, value}로 미리 정규화해서 넘긴다. */
-function PositionHistorySection({ symbolSeries, formatValue }: { symbolSeries: Record<string, ChartPoint[]>; formatValue: (value: number) => string }) {
+function PositionHistorySection({ symbolSeries, formatValue, nameFor }: { symbolSeries: Record<string, ChartPoint[]>; formatValue: (value: number) => string; nameFor?: (symbol: string) => string }) {
   const symbols = Object.keys(symbolSeries)
   const [selected, setSelected] = useState<string | null>(symbols[0] ?? null)
   useEffect(() => { if (selected === null || !symbols.includes(selected)) setSelected(symbols[0] ?? null) }, [symbols.join(',')])
   if (symbols.length === 0) return <p className="empty-state">아직 종목별 기록이 없습니다.</p>
   return <div className="position-history-section">
-    <div className="source-actions">{symbols.map(symbol => <button key={symbol} className={selected === symbol ? 'source-add' : 'source-cancel'} onClick={() => setSelected(symbol)}>{symbol}</button>)}</div>
+    <div className="source-actions">{symbols.map(symbol => <button key={symbol} className={selected === symbol ? 'source-add' : 'source-cancel'} onClick={() => setSelected(symbol)}>{nameFor ? nameFor(symbol) : symbol}</button>)}</div>
     {selected && <EquityLineChart points={symbolSeries[selected]} formatValue={formatValue} resetKey={selected}/>}
   </div>
 }
@@ -1496,7 +1496,11 @@ function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
     return () => window.clearInterval(timer)
   }, [])
   const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  const positions = data ? Object.entries(data.stopPrice) : []
+  // entryCost가 실제 체결(진입원가 확정)의 진실 소스다 — stopPrice는 스캔 시점에 미리 세팅되고
+  // 매수 실패 시에도(과거 버전 버그) 남을 수 있어서, 이걸 "보유 포지션" 판단 기준으로 쓰면
+  // 체결 안 된 종목이 보유중인 것처럼 표시될 수 있다.
+  const positions = data ? Object.keys(data.entryCost) : []
+  const krName = (symbol: string) => { const name = data?.symbolNames?.[symbol]; return name ? `${name} (${symbol})` : symbol }
   const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlKrw })), period) : []
   const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlKrw }))])) : {}
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="국장 스윙 대시보드">
@@ -1517,15 +1521,19 @@ function KrTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `${value.toLocaleString()}원`} resetKey={period}/>
-      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '손절가']}
-        rows={positions.map(([symbol, stop]) => ({ key: symbol, cells: [<b>{symbol}</b>, `${stop.toLocaleString()}원`] }))}/>
+      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '매수원가', '손절가']}
+        rows={positions.map(symbol => ({ key: symbol, cells: [
+          <b>{krName(symbol)}</b>,
+          `${data.entryCost[symbol].toLocaleString()}원`,
+          data.stopPrice[symbol] != null ? `${data.stopPrice[symbol].toLocaleString()}원` : '-',
+        ] }))}/>
       {(data.pendingEntries.length > 0 || data.pendingExits.length > 0) && <PositionTable title="매매 대기열" empty="대기 중인 매매가 없습니다." head={['종목', '상태']}
         rows={[
-          ...data.pendingEntries.map(symbol => ({ key: `entry-${symbol}`, cells: [<b>{symbol}</b>, '진입 대기 (다음 장시작에 매수)'] })),
-          ...data.pendingExits.map(symbol => ({ key: `exit-${symbol}`, cells: [<b>{symbol}</b>, '청산 대기 (다음 장시작에 매도)'] })),
+          ...data.pendingEntries.map(symbol => ({ key: `entry-${symbol}`, cells: [<b>{krName(symbol)}</b>, '진입 대기 (다음 장시작에 매수)'] })),
+          ...data.pendingExits.map(symbol => ({ key: `exit-${symbol}`, cells: [<b>{krName(symbol)}</b>, '청산 대기 (다음 장시작에 매도)'] })),
         ]}/>}
       <b className="chart-section-title">종목별 미실현손익 추이</b>
-      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `${value.toLocaleString()}원`}/>
+      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `${value.toLocaleString()}원`} nameFor={krName}/>
       <div className="usage-table">
         <b>최근 로그</b>
         {data.tradeLog.length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : data.tradeLog.slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
@@ -1545,7 +1553,9 @@ function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
     return () => window.clearInterval(timer)
   }, [])
   const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  const positions = data ? Object.entries(data.stopPrice) : []
+  // entryCost가 실제 체결 여부의 진실 소스다 — stopPrice만 보면 매수 신호 감지 시점에 미리
+  // 세팅된(아직 체결 안 됐거나 매수 실패한) 종목까지 "보유중"으로 표시될 수 있다.
+  const positions = data ? Object.keys(data.entryCost) : []
   const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsd })), period) : []
   const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsd }))])) : {}
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="미장 스윙 대시보드">
@@ -1566,8 +1576,12 @@ function UsTradingDashboard({ onClose, embedded }: { onClose: () => void; embedd
         <div><b>{data.pendingExits.length}</b><span>청산 대기</span></div>
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
-      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '손절가']}
-        rows={positions.map(([symbol, stop]) => ({ key: symbol, cells: [<b>{symbol}</b>, `$${stop.toFixed(2)}`] }))}/>
+      <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '매수원가', '손절가']}
+        rows={positions.map(symbol => ({ key: symbol, cells: [
+          <b>{symbol}</b>,
+          `$${data.entryCost[symbol].toFixed(2)}`,
+          data.stopPrice[symbol] != null ? `$${data.stopPrice[symbol].toFixed(2)}` : '-',
+        ] }))}/>
       {(data.pendingEntries.length > 0 || data.pendingExits.length > 0) && <PositionTable title="매매 대기열" empty="대기 중인 매매가 없습니다." head={['종목', '상태']}
         rows={[
           ...data.pendingEntries.map(symbol => ({ key: `entry-${symbol}`, cells: [<b>{symbol}</b>, '진입 대기 (다음 장시작에 매수)'] })),
