@@ -1,6 +1,10 @@
 .env
 .env.*
 !.env.example
+# Claude Code 런타임 파일(스케줄 락 등) — 로컬 상태라 추적하지 않는다
+.claude/
+# md 동기화 로컬 오버라이드(OBSIDIAN_SYNC_DEST 등) — 사용자마다 경로가 달라서 커밋 안 함
+scripts/md-sync.local
 **/node_modules/
 **/dist/
 **/target/
