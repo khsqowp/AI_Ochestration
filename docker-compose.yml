@@ -96,8 +96,11 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      TICK_STATE_PATH: /app/tick-state/tick_state.json
     volumes:
       - trading_kr_swing_state:/app/data
+      - trading_tick_state:/app/tick-state:ro
     networks: [app]
     profiles: ["kr-swing"]
     restart: unless-stopped
@@ -108,8 +111,11 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      TICK_STATE_PATH: /app/tick-state/tick_state.json
     volumes:
       - trading_us_swing_state:/app/data
+      - trading_tick_state:/app/tick-state:ro
     networks: [app]
     profiles: ["us-swing"]
     restart: unless-stopped
@@ -132,8 +138,11 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      CRYPTO_TICK_STATE_PATH: /app/crypto-tick-state/crypto_tick_state.json
     volumes:
       - trading_momentum_rotation_state:/app/data
+      - trading_crypto_tick_state:/app/crypto-tick-state:ro
     networks: [app]
     profiles: ["momentum-rotation"]
     restart: unless-stopped
