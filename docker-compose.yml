@@ -152,7 +152,7 @@ services:
     entrypoint: ["python", "-u", "-m", "app.crypto_tick_stream"]
     volumes:
       - trading_crypto_tick_state:/app/data
-      - /Volumes/HDD2TB/Trade/tick-archive:/app/archive
+      - ./trading-tick-archive:/app/archive
     networks: [app]
     profiles: ["crypto-tick-stream"]
     restart: unless-stopped
@@ -170,7 +170,7 @@ services:
       - trading_tick_state:/app/data
       - trading_kr_swing_state:/app/kr-state:ro
       - trading_us_swing_state:/app/us-state:ro
-      - /Volumes/HDD2TB/Trade/tick-archive:/app/archive
+      - ./trading-tick-archive:/app/archive
     networks: [app]
     profiles: ["tick-stream"]
     restart: unless-stopped
