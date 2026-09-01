@@ -138,6 +138,23 @@ services:
     profiles: ["momentum-rotation"]
     restart: unless-stopped
 
+  trading-tick-stream:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.tick_stream"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      KR_SWING_STATE_PATH: /app/kr-state/kr_swing_state.json
+      US_SWING_STATE_PATH: /app/us-state/us_swing_state.json
+    volumes:
+      - trading_tick_state:/app/data
+      - trading_kr_swing_state:/app/kr-state:ro
+      - trading_us_swing_state:/app/us-state:ro
+    networks: [app]
+    profiles: ["tick-stream"]
+    restart: unless-stopped
+
   web:
     build: ./frontend
     depends_on: [api]
@@ -187,6 +204,7 @@ volumes:
   trading_us_swing_state:
   trading_momentum_rotation_state:
   trading_trx_swing_state:
+  trading_tick_state:
 
 networks:
   private:
