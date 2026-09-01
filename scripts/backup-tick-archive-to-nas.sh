@@ -11,6 +11,7 @@ MOUNT_POINT="/Volumes/${SMB_SHARE}"
 DEST_DIR="${MOUNT_POINT}/Trade/tick-archive"
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/trading-tick-archive"
 LOG_FILE="${BACKUP_LOG_FILE:-$HOME/Library/Logs/tick-archive-backup.log}"
+RETENTION_DAYS="${TICK_ARCHIVE_RETENTION_DAYS:-7}"
 
 log() {
   echo "[$(date -Iseconds)] $*" | tee -a "$LOG_FILE"
@@ -40,9 +41,15 @@ fi
 
 mkdir -p "$DEST_DIR"
 log "백업 시작: $SRC_DIR -> $DEST_DIR"
-if rsync -a --stats "$SRC_DIR"/ "$DEST_DIR"/ >>"$LOG_FILE" 2>&1; then
-  log "백업 완료"
-else
-  log "백업 실패(rsync 오류) — 위 로그 확인"
+if ! rsync -a --stats "$SRC_DIR"/ "$DEST_DIR"/ >>"$LOG_FILE" 2>&1; then
+  log "백업 실패(rsync 오류) — 위 로그 확인, 로컬 정리는 건너뜀"
   exit 1
 fi
+log "백업 완료"
+
+# 백업이 이번 사이클에 실제로 성공했을 때만 정리한다 — NAS 마운트가 며칠 끊겨있었다면
+# 그동안 밀린 데이터는 다음 성공한 백업이 rsync로 전부 따라잡을때까지 로컬에 계속 남는다
+# (7일 지나도 백업 미확인 상태면 안 지운다).
+DELETED_COUNT=$(find "$SRC_DIR" -type f -name "*.jsonl" -mtime "+${RETENTION_DAYS}" -print -delete | wc -l | tr -d ' ')
+find "$SRC_DIR" -mindepth 1 -type d -empty -delete
+log "로컬 정리: ${RETENTION_DAYS}일 지난 파일 ${DELETED_COUNT}개 삭제"
