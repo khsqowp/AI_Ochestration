@@ -13,6 +13,7 @@ SRC_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 FSWATCH="${FSWATCH_BIN:-/opt/homebrew/bin/fswatch}"
 
 WATCH_PATHS=(
+  "$SRC_ROOT/obsidian"
   "$SRC_ROOT/docs"
   "$SRC_ROOT/trading/docs"
   "$SRC_ROOT/README.md"
