@@ -138,6 +138,15 @@ services:
     profiles: ["momentum-rotation"]
     restart: unless-stopped
 
+  trading-crypto-tick-stream:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.crypto_tick_stream"]
+    volumes:
+      - trading_crypto_tick_state:/app/data
+    networks: [app]
+    profiles: ["crypto-tick-stream"]
+    restart: unless-stopped
+
   trading-tick-stream:
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.tick_stream"]
@@ -205,6 +214,7 @@ volumes:
   trading_momentum_rotation_state:
   trading_trx_swing_state:
   trading_tick_state:
+  trading_crypto_tick_state:
 
 networks:
   private:
