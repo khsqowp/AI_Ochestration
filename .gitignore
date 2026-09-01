@@ -17,3 +17,5 @@ backup-obsidian-migration/
 # 제외되고, backend/.../com/orchestration/trading/ 같은 하위 패키지까지 같이 무시되지 않는다
 # (실제로 이 슬래시가 없어서 그 백엔드 패키지 전체가 지금까지 git에 한번도 안 잡히고 있었다).
 /trading/
+# 틱 아카이브 원본 — 계속 커지는 데이터라 git으로 안 다룬다(NAS로 백업, scripts/backup-tick-archive.sh 참고)
+/trading-tick-archive/
