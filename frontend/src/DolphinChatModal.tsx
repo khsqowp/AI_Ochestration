@@ -1,5 +1,18 @@
 import { Bot, Download, Plus, Send, Trash2, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+
+// react-markdown + remark-gfm + rehype-sanitize — 코드스플릿. App.tsx 의 MarkdownBody 와 같은 청크를 공유하므로
+// 번들 추가 비용 없음. LLM 출력은 raw HTML 을 신뢰하지 않으므로 rehype-raw 는 빼고 sanitize 만 건다.
+const Markdown = lazy(() =>
+  Promise.all([import('react-markdown'), import('remark-gfm'), import('rehype-sanitize')]).then(
+    ([rm, gfm, sanitize]) => ({
+      default: ({ children }: { children: string }) => {
+        const ReactMarkdown = rm.default
+        return <ReactMarkdown remarkPlugins={[gfm.default]} rehypePlugins={[sanitize.default]}>{children}</ReactMarkdown>
+      },
+    }),
+  ),
+)
 
 type DolphinSession = { id: string; title: string; mode: string; model: string; created_at: string }
 type DolphinMsg = { role: 'user' | 'assistant'; content: string }
@@ -257,7 +270,15 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
           )}
           {messages.map((msg, i) => (
             <div key={i} className={`dolphin-msg dolphin-msg-${msg.role}`}>
-              <pre className="dolphin-msg-content">{msg.content || (streaming && i === messages.length - 1 ? '▍' : '')}</pre>
+              {msg.role === 'assistant'
+                ? (msg.content
+                    ? <div className="dolphin-msg-content dolphin-md">
+                        <Suspense fallback={<pre className="dolphin-md-raw">{msg.content}</pre>}>
+                          <Markdown>{msg.content}</Markdown>
+                        </Suspense>
+                      </div>
+                    : <pre className="dolphin-msg-content">{streaming && i === messages.length - 1 ? '▍' : ''}</pre>)
+                : <pre className="dolphin-msg-content">{msg.content}</pre>}
             </div>
           ))}
         </div>
