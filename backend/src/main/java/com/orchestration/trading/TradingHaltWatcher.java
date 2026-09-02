@@ -20,14 +20,19 @@ import org.springframework.stereotype.Service;
 public class TradingHaltWatcher {
   private static final Logger log = LoggerFactory.getLogger(TradingHaltWatcher.class);
   private final Path statePath;
+  private final Path momentumStatePath;
   private final ObjectMapper objectMapper;
   private final N8nDispatcher dispatcher;
   private boolean lastKnownHalted = false;
+  private boolean lastKnownMomentumHalted = false;
 
   TradingHaltWatcher(
       @Value("${app.trading.state-path:/workspace/trading-state/funding_arb_state.json}") String statePath,
+      @Value("${app.trading.momentum-rotation-state-path:/workspace/trading-state-momentum-rotation/momentum_rotation_state.json}")
+          String momentumStatePath,
       ObjectMapper objectMapper, N8nDispatcher dispatcher) {
     this.statePath = Path.of(statePath);
+    this.momentumStatePath = Path.of(momentumStatePath);
     this.objectMapper = objectMapper;
     this.dispatcher = dispatcher;
   }
@@ -46,5 +51,24 @@ public class TradingHaltWatcher {
       dispatcher.dispatchTradingHalted(state.totalPnlUsdt(), state.totalCapitalUsdt());
     }
     lastKnownHalted = state.tradingHalted();
+
+    checkMomentumHalted();
+  }
+
+  /** 모멘텀 로테이션(실거래) 킬 스위치가 발동하면(halted false→true) 한 번만 알린다. */
+  private void checkMomentumHalted() {
+    if (!Files.exists(momentumStatePath)) return;
+    MomentumRotationState state;
+    try {
+      state = objectMapper.readValue(Files.readString(momentumStatePath), MomentumRotationState.class);
+    } catch (Exception exception) {
+      log.warn("momentum_halt_check_failed", exception);
+      return;
+    }
+    if (state.halted() && !lastKnownMomentumHalted) {
+      double pnl = state.equityUsdt() - state.inceptionEquityUsdt();
+      dispatcher.dispatchTradingHalted(pnl, state.equityUsdt());
+    }
+    lastKnownMomentumHalted = state.halted();
   }
 }

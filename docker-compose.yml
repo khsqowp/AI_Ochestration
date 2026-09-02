@@ -51,6 +51,8 @@ services:
       US_TRADING_STATE_PATH: /workspace/trading-state-us/us_swing_state.json
       MOMENTUM_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-momentum-rotation/momentum_rotation_state.json
       TRX_TRADING_STATE_PATH: /workspace/trading-state-trx/trx_swing_state.json
+      KR_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-kr-rotation/stock_rotation_state.json
+      US_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-us-rotation/stock_rotation_state.json
     depends_on:
       mysql:
         condition: service_healthy
@@ -64,6 +66,8 @@ services:
       - trading_us_swing_state:/workspace/trading-state-us:ro
       - trading_momentum_rotation_state:/workspace/trading-state-momentum-rotation:ro
       - trading_trx_swing_state:/workspace/trading-state-trx:ro
+      - trading_kr_rotation_state:/workspace/trading-state-kr-rotation:ro
+      - trading_us_rotation_state:/workspace/trading-state-us-rotation:ro
     networks: [private, app]
     restart: unless-stopped
 
