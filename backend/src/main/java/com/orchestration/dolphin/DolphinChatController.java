@@ -75,19 +75,22 @@ public class DolphinChatController {
         try (InputStream in = resp.body()) {
           byte[] buf = new byte[CHUNK];
           int n;
+          boolean clientGone = false;
           while ((n = in.read(buf)) != -1) {
-            out.write(buf, 0, n);
-            out.flush();
+            if (clientGone) continue; // 클라이언트가 끊겨도 dolphin 응답을 끝까지 읽어야
+            try {                     // dolphin 이 대화기록(assistant 메시지) 저장까지 완주한다.
+              out.write(buf, 0, n);
+              out.flush();
+            } catch (IOException e) {
+              clientGone = true;
+            }
           }
         }
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       } catch (IOException e) {
-        // 클라이언트 연결 종료면 정상. 그 외(업스트림 연결 실패 등)는 남긴다.
-        if (!"Broken pipe".equalsIgnoreCase(String.valueOf(e.getMessage()))) {
-          log.warn("dolphin /api/chat proxy IO error", e);
-          try { writeError(out, "proxy IO: " + e.getMessage()); } catch (IOException ignored) { }
-        }
+        log.warn("dolphin /api/chat upstream IO error", e);
+        try { writeError(out, "proxy IO: " + e.getMessage()); } catch (IOException ignored) { }
       } catch (RuntimeException e) {
         log.warn("dolphin /api/chat proxy failed", e);
         try { writeError(out, "proxy: " + e.getClass().getSimpleName() + " " + e.getMessage()); } catch (IOException ignored) { }
