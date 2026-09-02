@@ -16,7 +16,10 @@ public record StockRotationState(
     @JsonAlias("realized_pnl") double realizedPnl,
     @JsonAlias("unrealized_pnl") double unrealizedPnl,
     double equity,
+    double budget,
+    @JsonAlias("entry_value") double entryValue,
     @JsonAlias("deployed_value") double deployedValue,
+    @JsonAlias("return_pct") double returnPct,
     @JsonAlias("held_symbols") List<String> heldSymbols,
     @JsonAlias("target_basket") List<String> targetBasket,
     @JsonAlias("pending_sells") List<String> pendingSells,
@@ -34,6 +37,7 @@ public record StockRotationState(
       @JsonAlias("queried_ts") String queriedTs,
       Map<String, Position> positions,
       @JsonAlias("positions_eval") double positionsEval,
+      @JsonAlias("positions_entry") double positionsEntry,
       @JsonAlias("positions_unrealized_pnl") double positionsUnrealizedPnl,
       @JsonAlias("account_cash_krw") double accountCashKrw,
       @JsonAlias("account_total_krw") double accountTotalKrw) {}
@@ -55,7 +59,7 @@ public record StockRotationState(
 
   public static StockRotationState empty() {
     return new StockRotationState(
-        Map.of(), 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), null, null, false,
+        Map.of(), 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), null, null, false,
         null, List.of(), List.of(), Map.of());
   }
 }

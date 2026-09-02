@@ -116,13 +116,13 @@ type TradingPeriod = 'all' | 'month' | 'week' | 'day'
 type ChartPoint = { ts: string; value: number }
 type UsdtPositionPoint = { ts: string; price: number; unrealizedPnlUsdt: number }
 type MomentumRotationPosition = { side: 'long' | 'short'; entryPrice: number; notionalUsdt: number; unrealizedPnlUsdt: number }
-type MomentumBroker = { queriedTs: string | null; exchange: string; equityUsdt: number; unrealizedPnlUsdt: number; drawdown: number; hwmUsdt: number; leverage: number; halted: boolean; positions: Record<string, MomentumRotationPosition> }
+type MomentumBroker = { queriedTs: string | null; exchange: string; equityUsdt: number; inceptionEquityUsdt: number; grossNotionalUsdt: number; returnPct: number; unrealizedPnlUsdt: number; drawdown: number; hwmUsdt: number; leverage: number; halted: boolean; positions: Record<string, MomentumRotationPosition> }
 type MomentumRotationState = { positions: Record<string, MomentumRotationPosition>; tradeLog: TradingLogEntry[]; mode: string; equityUsdt: number; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; unrealizedPnlUsdt: number; drawdown: number; hwmUsdt: number; inceptionEquityUsdt: number; halted: boolean; broker: MomentumBroker | null; inceptionTs: string | null; lastRebalanceTs: string | null; equityHistory: TradingEquityPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
 type RotationBrokerPosition = { qty: number; price: number; evalAmt: number; purchaseAmt: number; pnl: number; pnlPct: number }
-type RotationBroker = { queriedTs: string | null; positions: Record<string, RotationBrokerPosition>; positionsEval: number; positionsUnrealizedPnl: number; accountCashKrw: number; accountTotalKrw: number }
+type RotationBroker = { queriedTs: string | null; positions: Record<string, RotationBrokerPosition>; positionsEval: number; positionsEntry: number; positionsUnrealizedPnl: number; accountCashKrw: number; accountTotalKrw: number }
 type RotationEquityPoint = { ts: string; totalPnl: number; equity: number; deployed: number }
 type RotationPositionPoint = { ts: string; price: number; unrealizedPnl: number }
-type StockRotationState = { symbolNames: Record<string, string> | null; realizedPnl: number; unrealizedPnl: number; equity: number; deployedValue: number; heldSymbols: string[]; targetBasket: string[]; pendingSells: string[]; pendingBuys: string[]; lastPlanDate: string | null; lastRebalanceDate: string | null; regimeCash: boolean; broker: RotationBroker | null; tradeLog: TradingLogEntry[]; equityHistory: RotationEquityPoint[]; positionHistory: Record<string, RotationPositionPoint[]> }
+type StockRotationState = { symbolNames: Record<string, string> | null; realizedPnl: number; unrealizedPnl: number; equity: number; budget: number; entryValue: number; deployedValue: number; returnPct: number; heldSymbols: string[]; targetBasket: string[]; pendingSells: string[]; pendingBuys: string[]; lastPlanDate: string | null; lastRebalanceDate: string | null; regimeCash: boolean; broker: RotationBroker | null; tradeLog: TradingLogEntry[]; equityHistory: RotationEquityPoint[]; positionHistory: Record<string, RotationPositionPoint[]> }
 type TrxPosition = { entryPrice: number; qty: number; notionalUsdt: number; entryFeeUsdt: number }
 type TrxTradingState = { position: TrxPosition | null; tradeLog: TradingLogEntry[]; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; inceptionTs: string | null; equityHistory: TradingEquityPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
 type CalendarCategory = 'EVENT' | 'SEMINAR' | 'INCIDENT'
@@ -915,10 +915,8 @@ function OfficeDashboard({ recentTasks, taskTracks, archivedCount, pendingCandid
   todos: TodoListProps
 }) {
   const [usage, setUsage] = useState<UsageSummary | null>(null)
-  const [trading, setTrading] = useState<TradingState | null>(null)
   const [krTrading, setKrTrading] = useState<StockRotationState | null>(null)
   const [usTrading, setUsTrading] = useState<StockRotationState | null>(null)
-  const [trxTrading, setTrxTrading] = useState<TrxTradingState | null>(null)
   const [momentumTrading, setMomentumTrading] = useState<MomentumRotationState | null>(null)
   const [calendarCount, setCalendarCount] = useState<number | null>(null)
   const [archiveFiles, setArchiveFiles] = useState<ArchiveFile[]>([])
@@ -927,10 +925,8 @@ function OfficeDashboard({ recentTasks, taskTracks, archivedCount, pendingCandid
     const load = () => {
       if (document.hidden) return
       fetch('/api/usage/summary?days=30', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setUsage).catch(() => undefined)
-      fetch('/api/trading/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setTrading).catch(() => undefined)
       fetch('/api/trading/rotation/kr/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setKrTrading).catch(() => undefined)
       fetch('/api/trading/rotation/us/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setUsTrading).catch(() => undefined)
-      fetch('/api/trading/trx/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setTrxTrading).catch(() => undefined)
       fetch('/api/trading/momentum-rotation/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setMomentumTrading).catch(() => undefined)
       const now = new Date(); const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
       fetch(`/api/security-calendar?month=${monthKey}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then((items: unknown[]) => setCalendarCount(items.length)).catch(() => undefined)
@@ -961,11 +957,9 @@ function OfficeDashboard({ recentTasks, taskTracks, archivedCount, pendingCandid
         <button className="dashboard-tile" onClick={() => onOpenPanel('archive')}><span className="dashboard-tile-icon"><Archive size={19}/></span><b>{archivedCount}</b><span>파일 아카이브</span></button>
         <button className="dashboard-tile" onClick={() => onOpenPanel('sources')}><span className="dashboard-tile-icon"><Globe2 size={19}/></span><b>{pendingCandidates}</b><span>수집 후보 대기</span></button>
         <button className={`dashboard-tile ${budgetExceeded ? 'alert' : ''}`} onClick={() => onOpenPanel('usage')}><span className="dashboard-tile-icon"><ScrollText size={19}/></span><b>${usage ? usage.monthToDateCostUsd.toFixed(2) : '-'}</b><span>{budgetExceeded ? '⚠ 이번 달 예산 초과' : '이번 달 사용 비용'}</span></button>
-        <button className="dashboard-tile tone-live" onClick={() => onOpenPanel('momentum-rotation-trading')}><span className="dashboard-tile-icon"><TrendingUp size={19}/></span><b className={momentumTrading ? (((momentumTrading.broker?.equityUsdt ?? momentumTrading.equityUsdt ?? 0) - (momentumTrading.inceptionEquityUsdt || (momentumTrading.broker?.equityUsdt ?? momentumTrading.equityUsdt ?? 0))) >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{momentumTrading ? `$${(momentumTrading.broker?.equityUsdt ?? momentumTrading.equityUsdt ?? 0).toFixed(2)}` : '-'}</b><span>{momentumTrading?.halted ? '⚠ 모멘텀 정지됨' : '모멘텀 로테이션(실거래·2x)'}</span></button>
-        <button className="dashboard-tile tone-live" onClick={() => onOpenPanel('kr-trading')}><span className="dashboard-tile-icon"><Landmark size={19}/></span><b>{krTrading ? (krTrading.heldSymbols?.length ?? 0) : '-'}</b><span>국장 로테이션 보유(모의)</span></button>
-        <button className="dashboard-tile tone-live" onClick={() => onOpenPanel('us-trading')}><span className="dashboard-tile-icon"><Globe2 size={19}/></span><b>{usTrading ? (usTrading.heldSymbols?.length ?? 0) : '-'}</b><span>미장 로테이션 보유(모의)</span></button>
-        <button className="dashboard-tile tone-live" onClick={() => onOpenPanel('trx-trading')}><span className="dashboard-tile-icon"><TrendingUp size={19}/></span><b className={trxTrading ? (((trxTrading.cumulativeRealizedPnlUsdt ?? 0) - (trxTrading.cumulativeFeeUsdt ?? 0)) >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{trxTrading ? `$${((trxTrading.cumulativeRealizedPnlUsdt ?? 0) - (trxTrading.cumulativeFeeUsdt ?? 0)).toFixed(2)}` : '-'}</b><span>{trxTrading?.position ? 'TRX 보유 중(실거래)' : 'TRX 스윙(실거래)'}</span></button>
-        <button className="dashboard-tile tone-paused" onClick={() => onOpenPanel('trading')}><span className="dashboard-tile-icon"><TrendingUp size={19}/></span><b className={trading ? ((trading.totalPnlUsdt ?? 0) >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{trading ? `$${(trading.totalPnlUsdt ?? 0).toFixed(2)}` : '-'}</b><span>{trading?.tradingHalted ? '⚠ 펀딩차익 중단됨' : '펀딩차익(자금 이관 중)'}</span></button>
+        {(() => { const r = momentumTrading?.broker?.returnPct ?? 0; return <button className={`dashboard-tile ${momentumTrading?.halted ? 'tone-deprecated' : 'tone-live'}`} onClick={() => onOpenPanel('momentum-rotation-trading')}><span className="dashboard-tile-icon"><TrendingUp size={19}/></span><b className={momentumTrading ? (r >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{momentumTrading ? `${r >= 0 ? '+' : ''}${r.toFixed(2)}%` : '-'}</b><span>{momentumTrading?.halted ? '⚠ 코인 정지됨' : '코인 (실거래·2x)'}</span></button> })()}
+        {(() => { const r = krTrading?.returnPct ?? 0; return <button className="dashboard-tile tone-live" onClick={() => onOpenPanel('kr-trading')}><span className="dashboard-tile-icon"><Landmark size={19}/></span><b className={krTrading ? (r >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{krTrading ? `${r >= 0 ? '+' : ''}${r.toFixed(2)}%` : '-'}</b><span>국장 (모의)</span></button> })()}
+        {(() => { const r = usTrading?.returnPct ?? 0; return <button className="dashboard-tile tone-live" onClick={() => onOpenPanel('us-trading')}><span className="dashboard-tile-icon"><Globe2 size={19}/></span><b className={usTrading ? (r >= 0 ? 'dashboard-positive' : 'dashboard-negative') : ''}>{usTrading ? `${r >= 0 ? '+' : ''}${r.toFixed(2)}%` : '-'}</b><span>미장 (모의)</span></button> })()}
         <button className="dashboard-tile" onClick={() => onOpenPanel('calendar')}><span className="dashboard-tile-icon"><CalendarDays size={19}/></span><b>{calendarCount ?? '-'}</b><span>이번 달 보안 일정</span></button>
       </div>
       {activeTasksList.length > 0 && <div className="dashboard-progress">
@@ -1540,8 +1534,11 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
   const realized = data?.realizedPnl ?? 0
   const unrealized = data?.broker?.positionsUnrealizedPnl ?? data?.unrealizedPnl ?? 0
   const totalPnl = realized + unrealized
-  const equity = data?.equity ?? cfg.budget
-  const returnPct = cfg.budget > 0 ? (totalPnl / cfg.budget) * 100 : 0
+  const budget = data?.budget || cfg.budget
+  const equity = data?.equity ?? budget
+  const entryValue = data?.broker?.positionsEntry ?? data?.entryValue ?? 0
+  const currentValue = data?.broker?.positionsEval ?? data?.deployedValue ?? 0
+  const returnPct = data?.returnPct ?? (budget > 0 ? (totalPnl / budget) * 100 : 0)
   const chartPoints: ChartPoint[] = data ? filterChartPoints((data.equityHistory ?? []).map(p => ({ ts: p.ts, value: p.totalPnl })), period) : []
   const symbolSeries: Record<string, ChartPoint[]> = Object.fromEntries(Object.entries(data?.positionHistory ?? {}).map(([s, pts]) => [s, (pts ?? []).map(p => ({ ts: p.ts, value: p.unrealizedPnl }))]))
   const queued = [...pendingSells, ...pendingBuys]
@@ -1556,7 +1553,9 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
-        <div><b>{cfg.money(cfg.budget)}</b><span>배정 예산</span></div>
+        <div><b>{cfg.money(budget)}</b><span>배정 예산</span></div>
+        <div><b>{cfg.money(entryValue)}</b><span>진입금액(매입원가)</span></div>
+        <div><b>{cfg.money(currentValue)}</b><span>현재금액(평가금액)</span></div>
         <div><b>{cfg.money(equity)}</b><span>현재 잔고(API)</span></div>
         <div><b className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</b><span>수익률</span></div>
         <div><b>{brokerPositions.length}</b><span>보유 종목</span></div>
@@ -1621,6 +1620,7 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
   const drawdown = data?.broker?.drawdown ?? data?.drawdown ?? 0
   const hwm = data?.broker?.hwmUsdt ?? data?.hwmUsdt ?? 0
   const leverage = data?.broker?.leverage ?? 0
+  const grossNotional = data?.broker?.grossNotionalUsdt ?? 0
   const chartPoints: ChartPoint[] = data ? filterChartPoints((data.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
   const symbolSeries: Record<string, ChartPoint[]> = Object.fromEntries(Object.entries(data?.positionHistory ?? {}).map(([symbol, points]) => [symbol, (points ?? []).map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))]))
   const statusTone: BotTone = data?.halted ? 'deprecated' : 'live'
@@ -1638,8 +1638,9 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod}/>
       <div className="trading-metrics">
-        <div><b>${startingCapital.toFixed(0)}</b><span>시작 자본</span></div>
-        <div><b>${equity.toFixed(2)}</b><span>현재 잔고(API)</span></div>
+        <div><b>${startingCapital.toFixed(2)}</b><span>진입금액(시작 자본)</span></div>
+        <div><b>${equity.toFixed(2)}</b><span>현재금액(API 잔고)</span></div>
+        <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
         <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
         <div><b className={drawdown > 0.15 ? 'negative' : ''}>{(drawdown * 100).toFixed(1)}%</b><span>현재 낙폭</span></div>
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
