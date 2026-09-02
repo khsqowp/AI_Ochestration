@@ -145,6 +145,9 @@ services:
       MOMENTUM_ROTATION_LIVE: "true"
       MOMENTUM_ROTATION_EXCHANGE: mainnet
       MOMENTUM_ROTATION_LEVERAGE: "2"
+      # 리밸런스 3->2일: 14일 상대모멘텀 신호가 빨리 감쇠, 2일이 현실 비용(편도 0.10%) 반영
+      # Calmar/Sharpe/CAGR 최적 (백테스트 2022-2026). 1일은 회전율 155x로 비용에 잠식됨.
+      MOMENTUM_ROTATION_REBALANCE_DAYS: "2"
       MOMENTUM_ROTATION_MAX_DEPLOY_USDT: "70"
       MOMENTUM_ROTATION_DELEVER_DD: "0.20"
       MOMENTUM_ROTATION_KILL_DD: "0.35"
