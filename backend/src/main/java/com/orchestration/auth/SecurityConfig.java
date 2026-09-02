@@ -1,5 +1,6 @@
 package com.orchestration.auth;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -41,6 +42,11 @@ class SecurityConfig {
 
     http.addFilterBefore(new JwtAuthenticationFilter(authService), UsernamePasswordAuthenticationFilter.class);
     http.authorizeHttpRequests(auth -> auth
+        // SSE 스트리밍 응답(예: /api/dolphin/chat)은 StreamingResponseBody 로 async 재디스패치되는데,
+        // OncePerRequestFilter 는 기본적으로 async dispatch 에서 안 돌아 SecurityContext 가 비고,
+        // Spring Security 6 의 AuthorizationFilter 는 async dispatch 도 검사해 Access Denied 가 난다.
+        // 최초 REQUEST dispatch 에서 이미 인가된 요청이므로 async 재디스패치는 통과시킨다.
+        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
         // pre-login and static/bootstrap endpoints
         .requestMatchers("/api/auth/**", "/", "/index.html", "/assets/**", "/build-info.json", "/actuator/health").permitAll()
 
