@@ -36,7 +36,10 @@ public class DolphinChatController {
   public DolphinChatController(DolphinProperties props, RestClient.Builder builder) {
     this.baseUrl = props.chatUrl();
     this.rest = builder.baseUrl(props.chatUrl()).build();
+    // uvicorn(dolphin)은 HTTP/2 미지원. JDK HttpClient 기본값(HTTP_2)이면 cleartext h2c 업그레이드를
+    // 시도하다 본문이 유실돼 dolphin 이 422(body missing)를 낸다 — HTTP/1.1 로 고정한다.
     this.http = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
         .connectTimeout(Duration.ofSeconds(5))
         .build();
   }
@@ -47,6 +50,9 @@ public class DolphinChatController {
   public ResponseEntity<StreamingResponseBody> chat(
       @RequestBody byte[] body,
       HttpServletRequest incoming) {
+
+    log.info("dolphin /chat proxy: body={} bytes, content-type={}, content-length={}",
+        body == null ? -1 : body.length, incoming.getContentType(), incoming.getContentLengthLong());
 
     var req = HttpRequest.newBuilder()
         .uri(URI.create(baseUrl + "/api/chat"))
