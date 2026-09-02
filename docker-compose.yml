@@ -140,6 +140,14 @@ services:
         required: false
     environment:
       CRYPTO_TICK_STATE_PATH: /app/crypto-tick-state/crypto_tick_state.json
+      # 실거래 — 자본 145 USDT 중 70 배치, 2배, 달러중립 14/3/8.
+      # 디레버: 고점대비 -20% 에서 배율 2->1. 킬: -35% 에서 전량청산+정지(RESET_HALT=true 로 재개).
+      MOMENTUM_ROTATION_LIVE: "true"
+      MOMENTUM_ROTATION_EXCHANGE: mainnet
+      MOMENTUM_ROTATION_LEVERAGE: "2"
+      MOMENTUM_ROTATION_MAX_DEPLOY_USDT: "70"
+      MOMENTUM_ROTATION_DELEVER_DD: "0.20"
+      MOMENTUM_ROTATION_KILL_DD: "0.35"
     volumes:
       - trading_momentum_rotation_state:/app/data
       - trading_crypto_tick_state:/app/crypto-tick-state:ro
