@@ -23,3 +23,4 @@ backup-obsidian-migration/
 /trading/
 # 틱 아카이브 원본 — 계속 커지는 데이터라 git으로 안 다룬다(NAS로 백업, scripts/backup-tick-archive.sh 참고)
 /trading-tick-archive/
+/.kis-cache/

@@ -120,6 +120,50 @@ services:
     profiles: ["us-swing"]
     restart: unless-stopped
 
+  # 국장/미장 top-N 모멘텀 로테이션 페이퍼봇 (KIS 모의) — EMA 크로스 스윙 대체 테스트.
+  # 같은 모의계좌를 쓰므로 kr-swing/us-swing 과 동시 기동 금지.
+  trading-kr-rotation:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.stock_rotation_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ROTATION_MARKET: KR
+      ROTATION_LOOKBACK: "20"
+      ROTATION_REBAL_DAYS: "10"
+      ROTATION_TOP_K: "8"
+      ROTATION_REGIME: ew_sma200
+      ROTATION_BUDGET: "4000000"
+      ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
+    volumes:
+      - trading_kr_rotation_state:/app/data
+      - ./.kis-cache:/app/cache
+    networks: [app]
+    profiles: ["kr-rotation"]
+    restart: unless-stopped
+
+  trading-us-rotation:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.stock_rotation_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ROTATION_MARKET: US
+      ROTATION_LOOKBACK: "120"
+      ROTATION_REBAL_DAYS: "20"
+      ROTATION_TOP_K: "8"
+      ROTATION_REGIME: ew_sma200
+      ROTATION_BUDGET: "2800"
+      ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
+    volumes:
+      - trading_us_rotation_state:/app/data
+      - ./.kis-cache:/app/cache
+    networks: [app]
+    profiles: ["us-rotation"]
+    restart: unless-stopped
+
   trading-trx-swing:
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.trx_swing_loop"]
@@ -234,6 +278,8 @@ volumes:
   trading_kr_swing_state:
   trading_us_swing_state:
   trading_momentum_rotation_state:
+  trading_kr_rotation_state:
+  trading_us_rotation_state:
   trading_trx_swing_state:
   trading_tick_state:
   trading_crypto_tick_state:
