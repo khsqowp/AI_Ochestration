@@ -172,12 +172,13 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
           try {
             const chunk = JSON.parse(data)
             const token = chunk.content ?? chunk.choices?.[0]?.delta?.content ?? chunk.token ?? ''
-            if (token) {
+            const piece = chunk.error ? `⚠️ ${chunk.error}` : token
+            if (piece) {
               setMessages(prev => {
                 const updated = [...prev]
                 const last = updated[updated.length - 1]
                 if (last?.role === 'assistant') {
-                  updated[updated.length - 1] = { ...last, content: last.content + token }
+                  updated[updated.length - 1] = { ...last, content: last.content + piece }
                 }
                 return updated
               })

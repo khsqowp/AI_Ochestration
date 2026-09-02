@@ -1,6 +1,9 @@
 package com.orchestration.dolphin;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.nio.charset.StandardCharsets;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -23,6 +26,7 @@ import java.util.Enumeration;
 @EnableConfigurationProperties(DolphinProperties.class)
 public class DolphinChatController {
 
+  private static final Logger log = LoggerFactory.getLogger(DolphinChatController.class);
   private static final int CHUNK = 8192;
 
   private final String baseUrl;
@@ -54,6 +58,14 @@ public class DolphinChatController {
     StreamingResponseBody stream = out -> {
       try {
         var resp = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
+        if (resp.statusCode() != 200) {
+          byte[] errBody;
+          try (InputStream in = resp.body()) { errBody = in.readAllBytes(); }
+          String detail = new String(errBody, StandardCharsets.UTF_8).replace("\"", "'").replace("\n", " ");
+          log.warn("dolphin /api/chat returned {} : {}", resp.statusCode(), detail);
+          writeError(out, "dolphin " + resp.statusCode() + ": " + detail);
+          return;
+        }
         try (InputStream in = resp.body()) {
           byte[] buf = new byte[CHUNK];
           int n;
@@ -65,7 +77,14 @@ public class DolphinChatController {
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       } catch (IOException e) {
-        // client disconnect — normal
+        // 클라이언트 연결 종료면 정상. 그 외(업스트림 연결 실패 등)는 남긴다.
+        if (!"Broken pipe".equalsIgnoreCase(String.valueOf(e.getMessage()))) {
+          log.warn("dolphin /api/chat proxy IO error", e);
+          try { writeError(out, "proxy IO: " + e.getMessage()); } catch (IOException ignored) { }
+        }
+      } catch (RuntimeException e) {
+        log.warn("dolphin /api/chat proxy failed", e);
+        try { writeError(out, "proxy: " + e.getClass().getSimpleName() + " " + e.getMessage()); } catch (IOException ignored) { }
       }
     };
 
@@ -74,6 +93,12 @@ public class DolphinChatController {
         .header("Cache-Control", "no-cache")
         .contentType(MediaType.TEXT_EVENT_STREAM)
         .body(stream);
+  }
+
+  private static void writeError(java.io.OutputStream out, String message) throws IOException {
+    out.write(("data: {\"error\": \"" + message.replace("\"", "'") + "\"}\n\ndata: [DONE]\n\n")
+        .getBytes(StandardCharsets.UTF_8));
+    out.flush();
   }
 
   // ── Generic JSON proxy ───────────────────────────────────────────────────
