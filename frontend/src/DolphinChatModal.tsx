@@ -33,6 +33,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [models, setModels] = useState<string[]>([])
+  const [defaultModel, setDefaultModel] = useState<string>('')
   const [model, setModel] = useState<string>('')
   const bodyRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -42,7 +43,10 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
     loadSessions()
     fetch('/api/dolphin/models', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.models) setModels(d.models) })
+      .then(d => {
+        if (d?.models) setModels(d.models.filter((m: string) => !m.startsWith('nomic-embed')))
+        if (d?.default) setDefaultModel(d.default)
+      })
   }, [])
 
   useEffect(() => {
@@ -247,7 +251,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
                 value={model}
                 onChange={e => setModel(e.target.value)}
               >
-                <option value="">기본 모델</option>
+                <option value="">기본 모델{defaultModel ? ` (${defaultModel.split('/').pop()})` : ''}</option>
                 {models.map(m => <option key={m} value={m}>{m.split('/').pop()}</option>)}
               </select>
             )}
@@ -265,7 +269,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
             <div className="dolphin-welcome">
               <Bot size={32}/>
               <p>로컬 LLM에게 무엇이든 질문하세요.</p>
-              <small>Qwen2.5-Coder-14B · 완전 오프라인 · 검열 없음</small>
+              <small>{(model || defaultModel || '로컬 모델').split('/').pop()} · 완전 오프라인</small>
             </div>
           )}
           {messages.map((msg, i) => (
