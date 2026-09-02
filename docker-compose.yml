@@ -53,6 +53,9 @@ services:
       TRX_TRADING_STATE_PATH: /workspace/trading-state-trx/trx_swing_state.json
       KR_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-kr-rotation/stock_rotation_state.json
       US_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-us-rotation/stock_rotation_state.json
+      DOLPHIN_CHAT_URL: ${DOLPHIN_CHAT_URL:-http://host.docker.internal:7777}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       mysql:
         condition: service_healthy

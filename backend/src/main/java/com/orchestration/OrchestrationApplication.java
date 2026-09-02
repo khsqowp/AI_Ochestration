@@ -1,6 +1,7 @@
 package com.orchestration;
 
 import com.orchestration.auth.AuthProperties;
+import com.orchestration.dolphin.DolphinProperties;
 import com.orchestration.files.FileProperties;
 import com.orchestration.n8n.N8nProperties;
 import com.orchestration.tasks.LlmProperties;
@@ -17,7 +18,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 @EnableScheduling
 @EnableAsync
-@EnableConfigurationProperties({AuthProperties.class, FileProperties.class, N8nProperties.class, LlmProperties.class})
+@EnableConfigurationProperties({AuthProperties.class, DolphinProperties.class, FileProperties.class, N8nProperties.class, LlmProperties.class})
 public class OrchestrationApplication {
   public static void main(String[] args) { SpringApplication.run(OrchestrationApplication.class, args); }
 }

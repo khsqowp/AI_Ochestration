@@ -87,6 +87,8 @@ app:
   budget:
     # 이번 달 누적 예상 비용(USD)이 이 값을 넘으면 사용량 화면에 경고를 표시한다. 실제 청구액이 아닌 추정치 기준이다.
     usd-per-month: ${BUDGET_USD_PER_MONTH:20.00}
+  dolphin:
+    chat-url: ${DOLPHIN_CHAT_URL:http://host.docker.internal:7777}
   llm:
     gemini-api-key: ${GEMINI_API_KEY:}
     deepseek-api-key: ${DEEPSEEK_API_KEY:}
