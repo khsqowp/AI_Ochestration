@@ -32,6 +32,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
   const [mode, setMode] = useState<DolphinMode>('general')
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [models, setModels] = useState<string[]>([])
   const [defaultModel, setDefaultModel] = useState<string>('')
   const [model, setModel] = useState<string>('')
@@ -62,6 +63,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
   }
 
   async function openSession(s: DolphinSession) {
+    if (streaming) return
     setSessionId(s.id)
     setMode(MODES.some(m => m.id === s.mode) ? (s.mode as DolphinMode) : 'general')
     const r = await fetch(`/api/dolphin/sessions/${s.id}`, { credentials: 'include' })
@@ -72,6 +74,8 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
   }
 
   async function newSession() {
+    if (streaming) return
+    setNotice(null)
     const r = await fetch('/api/dolphin/sessions', {
       method: 'POST',
       credentials: 'include',
@@ -83,12 +87,16 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
       setSessions(prev => [s, ...prev])
       setSessionId(s.id)
       setMessages([])
+    } else {
+      setNotice(`새 대화를 만들지 못했습니다 (HTTP ${r.status}).`)
     }
   }
 
   async function deleteSession(id: string, e: React.MouseEvent) {
     e.stopPropagation()
-    await fetch(`/api/dolphin/sessions/${id}`, { method: 'DELETE', credentials: 'include' })
+    if (streaming) return
+    const r = await fetch(`/api/dolphin/sessions/${id}`, { method: 'DELETE', credentials: 'include' })
+    if (!r.ok && r.status !== 404) { setNotice(`삭제 실패 (HTTP ${r.status}).`); return }
     setSessions(prev => prev.filter(s => s.id !== id))
     if (sessionId === id) { setSessionId(null); setMessages([]) }
   }
@@ -101,12 +109,15 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
     })
     if (r.ok) {
       const d = await r.json()
-      alert(`Obsidian 저장 완료: ${d.file ?? d.path}`)
+      setNotice(`Obsidian 저장 완료: ${d.file ?? d.path ?? 'ok'}`)
+    } else {
+      setNotice(`내보내기 실패 (HTTP ${r.status}).`)
     }
   }
 
   async function send() {
     if (!input.trim() || streaming) return
+    setNotice(null)
     const userMsg: DolphinMsg = { role: 'user', content: input.trim() }
     const prompt = userMsg.content
     const newMessages = [...messages, userMsg]
@@ -142,6 +153,8 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
           activeId = s.id
           setSessionId(s.id)
           setSessions(prev => [s, ...prev])
+        } else {
+          setNotice(`세션 생성 실패 (HTTP ${sr.status}) — 이 대화는 저장되지 않습니다.`)
         }
       }
       if (activeId) body.session_id = activeId
@@ -166,7 +179,17 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
         signal: abortRef.current.signal,
       })
 
-      if (!r.ok || !r.body) { setStreaming(false); return }
+      if (!r.ok || !r.body) {
+        const detail = await r.text().catch(() => '')
+        setMessages(prev => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.role === 'assistant') updated[updated.length - 1] = { ...last, content: `⚠️ 응답 실패 (HTTP ${r.status}) ${detail.slice(0, 200)}` }
+          return updated
+        })
+        setStreaming(false)
+        return
+      }
 
       const reader = r.body.getReader()
       const decoder = new TextDecoder()
@@ -227,7 +250,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
       <div className="dolphin-sidebar">
         <div className="dolphin-sidebar-header">
           <Bot size={16}/> 로컬 LLM
-          <button className="dolphin-new-btn" onClick={newSession} title="새 대화"><Plus size={14}/></button>
+          <button className="dolphin-new-btn" onClick={newSession} disabled={streaming} title="새 대화"><Plus size={14}/></button>
         </div>
         <div className="dolphin-session-list">
           {sessions.length === 0 && <p className="dolphin-empty">대화 없음</p>}
@@ -236,10 +259,11 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
               key={s.id}
               className={`dolphin-session-item${s.id === sessionId ? ' active' : ''}`}
               onClick={() => openSession(s)}
+              disabled={streaming}
             >
               <span className="dolphin-session-title">{s.title || '새 대화'}</span>
               <span className="dolphin-session-mode">{s.mode}</span>
-              <button className="dolphin-delete-btn" onClick={e => deleteSession(s.id, e)} title="삭제">
+              <button className="dolphin-delete-btn" onClick={e => deleteSession(s.id, e)} disabled={streaming} title="삭제">
                 <Trash2 size={11}/>
               </button>
             </button>
@@ -255,6 +279,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
                 key={m.id}
                 className={`dolphin-mode-tab${mode === m.id ? ' active' : ''}`}
                 onClick={() => setMode(m.id)}
+                disabled={streaming}
               >
                 {m.label}
               </button>
@@ -279,6 +304,12 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
             <button className="sheet-close" onClick={onClose}><X size={18}/></button>
           </div>
         </div>
+
+        {notice && (
+          <div className="dolphin-notice" onClick={() => setNotice(null)} role="status">
+            {notice}
+          </div>
+        )}
 
         <div className="dolphin-body" ref={bodyRef}>
           {messages.length === 0 && (

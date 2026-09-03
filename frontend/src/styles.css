@@ -269,6 +269,8 @@
 .dolphin-header-actions { display:flex; align-items:center; gap:6px; }
 /* 전역 .sheet-close 는 position:absolute 라 헤더 우상단에 겹친다 — 이 모달에선 흐름 안에 둔다 */
 .dolphin-header .sheet-close { position:static; width:28px; height:28px; display:grid; place-items:center; }
+.dolphin-mode-tab:disabled, .dolphin-new-btn:disabled, .dolphin-session-item:disabled, .dolphin-delete-btn:disabled { opacity:.5; cursor:default; }
+.dolphin-notice { margin:10px 14px 0; padding:9px 12px; border-radius:8px; background:#fdf3e7; border:1px solid #f0d9bf; color:#8a5a20; font-size:12px; cursor:pointer; }
 .dolphin-model-select { border:1px solid #e0dde8; border-radius:7px; padding:4px 6px; font-size:11px; color:#5e5a67; background:#fafaf9; max-width:160px; }
 .dolphin-export-btn { background:#f0eefb; color:#5c4ec2; border-radius:7px; width:28px; height:28px; display:grid; place-items:center; }
 .dolphin-export-btn:hover { background:#ddd9f9; }

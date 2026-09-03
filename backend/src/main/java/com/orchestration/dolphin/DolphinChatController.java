@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import org.springframework.util.StreamUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -20,6 +21,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Enumeration;
+import java.util.Locale;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/dolphin")
@@ -28,6 +31,12 @@ public class DolphinChatController {
 
   private static final Logger log = LoggerFactory.getLogger(DolphinChatController.class);
   private static final int CHUNK = 8192;
+
+  /** dolphin 으로 넘기면 안 되는 헤더: hop-by-hop, 길이/인코딩 협상, 그리고 오케스트레이션 인증정보. */
+  private static final Set<String> SKIP_REQUEST_HEADERS = Set.of(
+      "host", "content-length", "connection", "keep-alive", "transfer-encoding",
+      "te", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate",
+      "accept-encoding", "cookie", "authorization");
 
   private final String baseUrl;
   private final RestClient rest;
@@ -145,7 +154,7 @@ public class DolphinChatController {
     if (headerNames != null) {
       while (headerNames.hasMoreElements()) {
         String name = headerNames.nextElement();
-        if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length")) {
+        if (!SKIP_REQUEST_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
           spec.header(name, incoming.getHeader(name));
         }
       }
@@ -155,7 +164,18 @@ public class DolphinChatController {
       spec.contentType(MediaType.APPLICATION_JSON).body(body);
     }
 
-    return spec.retrieve()
-        .toEntity(byte[].class);
+    // exchange() 는 4xx/5xx 에 예외를 던지지 않는다 — dolphin 의 상태코드/본문을 그대로 클라이언트에 전달한다.
+    // 응답 헤더는 Content-Type 만 넘긴다(Content-Length/Transfer-Encoding 등을 그대로 넘기면 깨질 수 있음).
+    return spec.exchange((clientRequest, clientResponse) -> {
+      byte[] payload = clientResponse.getBody() == null
+          ? new byte[0]
+          : StreamUtils.copyToByteArray(clientResponse.getBody());
+      var out = ResponseEntity.status(clientResponse.getStatusCode());
+      MediaType contentType = clientResponse.getHeaders().getContentType();
+      if (contentType != null) {
+        out.contentType(contentType);
+      }
+      return out.body(payload);
+    });
   }
 }
