@@ -108,6 +108,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
   async function send() {
     if (!input.trim() || streaming) return
     const userMsg: DolphinMsg = { role: 'user', content: input.trim() }
+    const prompt = userMsg.content
     const newMessages = [...messages, userMsg]
     setMessages(newMessages)
     setInput('')
@@ -144,6 +145,18 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
         }
       }
       if (activeId) body.session_id = activeId
+
+      // 서버가 첫 메시지로 세션 제목을 자동 갱신하지만 응답이 끝나야 반영된다 —
+      // 사이드바에 바로 보이도록 낙관적으로 제목/순서를 갱신한다.
+      const sid = activeId
+      if (sid) {
+        setSessions(prev => {
+          const hit = prev.find(x => x.id === sid)
+          const rest = prev.filter(x => x.id !== sid)
+          const title = !hit || hit.title === '새 대화' || !hit.title ? prompt.slice(0, 30) : hit.title
+          return [{ ...(hit ?? { id: sid, mode, model: '', created_at: new Date().toISOString() }), title }, ...rest]
+        })
+      }
 
       const r = await fetch('/api/dolphin/chat', {
         method: 'POST',
@@ -199,7 +212,9 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
       }
     } finally {
       setStreaming(false)
+      // 서버측 제목 자동갱신·저장이 끝난 뒤 실제 목록으로 맞춘다. 저장 태스크가 약간 늦을 수 있어 두 번.
       loadSessions()
+      setTimeout(loadSessions, 1500)
     }
   }
 

@@ -212,6 +212,35 @@
 .position-table td .positive, .position-table td .negative { display:inline-block; padding:5px 12px; border-radius:8px; font-weight:800; font-size:14px; }
 .position-table td .positive { background:#1e8e5a1f; }
 .position-table td .negative { background:#c0392b1f; }
+
+/* 거래소 포지션 북 (모멘텀 로테이션 롱/숏) */
+.posbook { margin:26px 0; border:1px solid #e6e4ec; border-radius:14px; overflow:hidden; background:#fff; box-shadow:0 2px 6px #3a35400d; }
+.posbook-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 18px; background:#f7f6fa; border-bottom:1px solid #e6e4ec; }
+.posbook-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:800; color:#28242e; }
+.posbook-tag { font-size:11px; font-weight:800; padding:3px 8px; border-radius:6px; letter-spacing:.02em; }
+.posbook-tag.long { background:#0e9f6e1c; color:#0b7a54; }
+.posbook-tag.short { background:#e11d481c; color:#b4123a; }
+.posbook-gross { font-size:11px; font-weight:700; color:#8a8592; font-variant-numeric:tabular-nums; }
+.posbook-total { font-size:13px; font-weight:800; font-variant-numeric:tabular-nums; padding:4px 10px; border-radius:8px; }
+.posbook-total.up { background:#0e9f6e1c; color:#0b7a54; }
+.posbook-total.down { background:#e11d481c; color:#b4123a; }
+.posbook-grid { width:100%; overflow-x:auto; }
+.posbook-row { display:grid; grid-template-columns:1.4fr .9fr 1.1fr 1fr .9fr 1.1fr; align-items:center; gap:8px; padding:12px 18px; border-bottom:1px solid #f3f1f5; min-width:620px; }
+.posbook-row:last-child { border-bottom:none; }
+.posbook-hd { background:#fff; font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:#8a8592; padding-top:10px; padding-bottom:10px; }
+.posbook-row.side-long { border-left:3px solid #0e9f6e; }
+.posbook-row.side-short { border-left:3px solid #e11d48; }
+.posbook-row:not(.posbook-hd):hover { background:#faf9fd; }
+.posbook-sym { font-weight:800; color:#28242e; font-size:14px; }
+.posbook-sym i { font-style:normal; font-weight:600; color:#a8a3b0; font-size:11px; }
+.posbook-dir { font-size:10px; font-weight:900; letter-spacing:.06em; padding:3px 7px; border-radius:5px; }
+.posbook-dir.long { background:#0e9f6e; color:#fff; }
+.posbook-dir.short { background:#e11d48; color:#fff; }
+.posbook .ta-r { text-align:right; }
+.posbook .mono { font-variant-numeric:tabular-nums; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; color:#4a4553; font-weight:600; }
+.posbook .mono.up { color:#0b7a54; }
+.posbook .mono.down { color:#b4123a; }
+.posbook > .empty-state { padding:28px; text-align:center; color:#9995a1; font-size:13px; }
 .trading-hub .explorer-sidebar { flex:0 0 220px; }
 .trading-hub .explorer-preview { background:transparent; padding:0 0 0 22px; overflow:hidden; }
 .debate-turn-body p:first-child { margin-top:0; }
@@ -238,6 +267,8 @@
 .dolphin-mode-tab { padding:5px 9px; border-radius:7px; background:#f2f1f5; color:#706c78; font-size:11px; font-weight:750; }
 .dolphin-mode-tab.active { background:#7667dc; color:#fff; }
 .dolphin-header-actions { display:flex; align-items:center; gap:6px; }
+/* 전역 .sheet-close 는 position:absolute 라 헤더 우상단에 겹친다 — 이 모달에선 흐름 안에 둔다 */
+.dolphin-header .sheet-close { position:static; width:28px; height:28px; display:grid; place-items:center; }
 .dolphin-model-select { border:1px solid #e0dde8; border-radius:7px; padding:4px 6px; font-size:11px; color:#5e5a67; background:#fafaf9; max-width:160px; }
 .dolphin-export-btn { background:#f0eefb; color:#5c4ec2; border-radius:7px; width:28px; height:28px; display:grid; place-items:center; }
 .dolphin-export-btn:hover { background:#ddd9f9; }

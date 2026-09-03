@@ -1405,6 +1405,55 @@ function PositionTable({ title, head, rows, empty }: { title: string; head: stri
   </div>
 }
 
+// 거래소 포지션 탭 스타일 — 롱/숏 한 표에 방향 배지·ROE·미실현손익, ROE 내림차순 정렬.
+function PositionBook({ positions }: { positions: [string, MomentumRotationPosition][] }) {
+  if (positions.length === 0) return <div className="posbook"><p className="empty-state">보유 중인 포지션이 없습니다.</p></div>
+  const price = (v: number) => v >= 1000 ? v.toFixed(1) : v >= 1 ? v.toFixed(4) : v.toPrecision(3)
+  const rows = positions
+    .map(([symbol, p]) => ({
+      symbol,
+      side: p.side,
+      notional: Math.abs(p.notionalUsdt),
+      entry: p.entryPrice,
+      pnl: p.unrealizedPnlUsdt,
+      roe: p.notionalUsdt ? (p.unrealizedPnlUsdt / Math.abs(p.notionalUsdt)) * 100 : 0,
+    }))
+    .sort((a, b) => b.roe - a.roe)
+  const longN = rows.filter(r => r.side === 'long').length
+  const shortN = rows.filter(r => r.side === 'short').length
+  const totalPnl = rows.reduce((sum, r) => sum + r.pnl, 0)
+  const gross = rows.reduce((sum, r) => sum + r.notional, 0)
+  return <div className="posbook">
+    <div className="posbook-head">
+      <div className="posbook-title">
+        포지션
+        <span className="posbook-tag long">롱 {longN}</span>
+        <span className="posbook-tag short">숏 {shortN}</span>
+        <span className="posbook-gross">명목 ${gross.toFixed(2)}</span>
+      </div>
+      <div className={`posbook-total ${totalPnl >= 0 ? 'up' : 'down'}`}>
+        미실현 {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+      </div>
+    </div>
+    <div className="posbook-grid">
+      <div className="posbook-row posbook-hd">
+        <span>종목</span><span>방향</span><span className="ta-r">명목가치</span>
+        <span className="ta-r">진입가</span><span className="ta-r">ROE</span><span className="ta-r">미실현 PnL</span>
+      </div>
+      {rows.map(r => (
+        <div key={r.symbol} className={`posbook-row side-${r.side}`}>
+          <span className="posbook-sym">{r.symbol}<i>/USDT</i></span>
+          <span><em className={`posbook-dir ${r.side}`}>{r.side === 'long' ? 'LONG' : 'SHORT'}</em></span>
+          <span className="ta-r mono">${r.notional.toFixed(2)}</span>
+          <span className="ta-r mono">{price(r.entry)}</span>
+          <span className={`ta-r mono ${r.roe >= 0 ? 'up' : 'down'}`}>{r.roe >= 0 ? '+' : ''}{r.roe.toFixed(2)}%</span>
+          <span className={`ta-r mono ${r.pnl >= 0 ? 'up' : 'down'}`}>{r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+}
+
 function Wrap({ embedded, onClose, eyebrow, title, children }: { embedded?: boolean; onClose: () => void; eyebrow: string; title: string; children: React.ReactNode }) {
   if (embedded) return <div className="trading-dashboard-embedded">{children}</div>
   return <aside className="side-modal trading-dashboard" role="dialog" aria-modal="true">
@@ -1646,16 +1695,7 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
         <div><b>{shorts.length}</b><span>숏 포지션</span></div>
       </div>
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
-      <PositionTable title="롱" empty="없음" head={['종목', '수익률', '미실현손익']}
-        rows={longs.map(([symbol, p]) => {
-          const returnPct = p.notionalUsdt ? (p.unrealizedPnlUsdt / p.notionalUsdt) * 100 : 0
-          return { key: symbol, cells: [<b>{symbol}</b>, <span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span>, <span className={p.unrealizedPnlUsdt >= 0 ? 'positive' : 'negative'}>{p.unrealizedPnlUsdt >= 0 ? '+' : ''}${p.unrealizedPnlUsdt.toFixed(2)}</span>] }
-        })}/>
-      <PositionTable title="숏" empty="없음" head={['종목', '수익률', '미실현손익']}
-        rows={shorts.map(([symbol, p]) => {
-          const returnPct = p.notionalUsdt ? (p.unrealizedPnlUsdt / p.notionalUsdt) * 100 : 0
-          return { key: symbol, cells: [<b>{symbol}</b>, <span className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span>, <span className={p.unrealizedPnlUsdt >= 0 ? 'positive' : 'negative'}>{p.unrealizedPnlUsdt >= 0 ? '+' : ''}${p.unrealizedPnlUsdt.toFixed(2)}</span>] }
-        })}/>
+      <PositionBook positions={positions}/>
       <b className="chart-section-title">종목별 미실현손익 추이</b>
       <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">
