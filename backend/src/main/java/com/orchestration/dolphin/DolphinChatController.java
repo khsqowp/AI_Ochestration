@@ -35,13 +35,15 @@ public class DolphinChatController {
 
   public DolphinChatController(DolphinProperties props, RestClient.Builder builder) {
     this.baseUrl = props.chatUrl();
-    this.rest = builder.baseUrl(props.chatUrl()).build();
     // uvicorn(dolphin)은 HTTP/2 미지원. JDK HttpClient 기본값(HTTP_2)이면 cleartext h2c 업그레이드를
-    // 시도하다 본문이 유실돼 dolphin 이 422(body missing)를 낸다 — HTTP/1.1 로 고정한다.
+    // 시도하다 요청 본문이 유실돼 dolphin 이 422(body missing)를 낸다 — 스트리밍/일반 프록시 모두 HTTP/1.1 고정.
     this.http = HttpClient.newBuilder()
         .version(HttpClient.Version.HTTP_1_1)
         .connectTimeout(Duration.ofSeconds(5))
         .build();
+    var restFactory = new org.springframework.http.client.JdkClientHttpRequestFactory(this.http);
+    restFactory.setReadTimeout(Duration.ofSeconds(30));
+    this.rest = builder.requestFactory(restFactory).baseUrl(props.chatUrl()).build();
   }
 
   // ── SSE streaming proxy ──────────────────────────────────────────────────
