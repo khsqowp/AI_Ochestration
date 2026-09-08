@@ -1215,12 +1215,25 @@ const TRADING_PERIOD_DAYS: Record<TradingPeriod, number | null> = { all: null, m
 const TRADING_PERIOD_LABEL: Record<TradingPeriod, string> = { all: '전체', month: '월간', week: '주간', day: '일간' }
 const TRADING_PERIOD_ORDER: TradingPeriod[] = ['day', 'week', 'month', 'all']
 
-function tradingPeriodPnl(data: TradingState, period: TradingPeriod): number {
+/** 기간별 손익: 정규화된 누적손익 시계열(value = 그 시점까지의 누적 총손익)과 현재 총손익으로
+ * "이 기간 동안 늘어난 손익"을 낸다. 기간 시작 이전 포인트가 없으면(히스토리가 기간보다 짧으면)
+ * 가장 오래된 포인트를 기준으로 잡고 shortHistory=true 로 표시한다 — 예전에는 0을 기준으로 삼아
+ * 주간/월간/전체가 전부 같은 값으로 붕괴했다. */
+function periodPnlFromSeries(points: ChartPoint[], currentTotalPnl: number, period: TradingPeriod): { pnl: number; shortHistory: boolean } {
   const days = TRADING_PERIOD_DAYS[period]
-  if (days === null || data.equityHistory.length === 0) return data.totalPnlUsdt
+  if (days === null || points.length === 0) return { pnl: currentTotalPnl, shortHistory: false }
   const cutoff = Date.now() - days * 86400000
-  const baseline = [...data.equityHistory].reverse().find(point => new Date(point.ts).getTime() <= cutoff)
-  return data.totalPnlUsdt - (baseline ? baseline.totalPnlUsdt : 0)
+  const sorted = [...points].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+  const baseline = [...sorted].reverse().find(point => new Date(point.ts).getTime() <= cutoff)
+  if (baseline) return { pnl: currentTotalPnl - baseline.value, shortHistory: false }
+  return { pnl: currentTotalPnl - sorted[0].value, shortHistory: true }
+}
+
+/** equity 히스토리가 실제로 며칠치인지 — PeriodTabs 에서 "이 기간은 전체와 동일" 뱃지 판단에 쓴다. */
+function historySpanDays(points: { ts: string }[]): number | undefined {
+  if (points.length === 0) return undefined
+  const oldest = points.reduce((min, p) => Math.min(min, new Date(p.ts).getTime()), Infinity)
+  return (Date.now() - oldest) / 86400000
 }
 
 /** 여러 봇의 equity_history 필드명이 제각각(totalPnlUsdt/Krw/Usd)이라, 각 봇 쪽에서 {ts, value}로
@@ -1369,8 +1382,14 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
   </div>
 }
 
-function PeriodTabs({ period, onChange }: { period: TradingPeriod; onChange: (value: TradingPeriod) => void }) {
-  return <div className="period-tabs">{TRADING_PERIOD_ORDER.map(value => <button key={value} className={period === value ? 'active' : ''} onClick={() => onChange(value)}>{TRADING_PERIOD_LABEL[value]}</button>)}</div>
+function PeriodTabs({ period, onChange, historyDays }: { period: TradingPeriod; onChange: (value: TradingPeriod) => void; historyDays?: number }) {
+  return <div className="period-tabs">{TRADING_PERIOD_ORDER.map(value => {
+    const days = TRADING_PERIOD_DAYS[value]
+    const short = historyDays != null && days != null && historyDays < days
+    return <button key={value} className={`${period === value ? 'active' : ''}${short ? ' short' : ''}`}
+      title={short ? `보유 데이터 약 ${Math.floor(historyDays!)}일 — 이 기간은 전체와 동일하게 표시됩니다` : undefined}
+      onClick={() => onChange(value)}>{TRADING_PERIOD_LABEL[value]}{short ? ' ·' : ''}</button>
+  })}</div>
 }
 
 /** 종목별 차트 섹션 — 심볼을 고르면 그 심볼의 시계열(가격 또는 손익)을 라인차트로 보여준다.
@@ -1475,11 +1494,14 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
   const fmtDate = (value: string) => new Date(value).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
   const positions = data ? Object.entries(data.positions) : []
   const openNotional = positions.reduce((sum, [, p]) => sum + p.notionalUsdt, 0)
-  const periodPnl = data ? tradingPeriodPnl(data, period) : 0
+  const pnlSeries: ChartPoint[] = data ? data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsdt })) : []
+  const { pnl: periodPnl, shortHistory: periodShort } = data
+    ? periodPnlFromSeries(pnlSeries, data.totalPnlUsdt, period)
+    : { pnl: 0, shortHistory: false }
   const periodReturnPct = data && data.totalCapitalUsdt > 0 ? (periodPnl / data.totalCapitalUsdt) * 100 : 0
   const startingCapital = data ? data.totalCapitalUsdt - data.totalPnlUsdt : 0
   const overallReturnPct = startingCapital > 0 && data ? (data.totalPnlUsdt / startingCapital) * 100 : 0
-  const chartPoints: ChartPoint[] = data ? filterChartPoints(data.equityHistory.map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
+  const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
   const symbolSeries: Record<string, ChartPoint[]> = data ? Object.fromEntries(Object.entries(data.positionHistory).map(([symbol, points]) => [symbol, points.map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))])) : {}
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="트레이딩 대시보드">
     <p className="source-intro">바이낸스 실계좌 실거래 현황입니다. 실제 자금이 투입되며, 총 자본은 매 사이클 실제 잔고를 조회해 동적으로 산정됩니다 — 펀딩비·현물/선물 체결가는 실거래소 실측치이며, 두 다리의 가격 괴리(베이시스)·슬리피지에서 나는 손익도 총 손익에 반영됩니다.</p>
@@ -1490,16 +1512,17 @@ function TradingDashboard({ onClose, embedded }: { onClose: () => void; embedded
     </div>
     {data?.tradingHalted && <p className="trading-halt-banner">누적 손실이 총 자본의 8%를 넘어 전 포지션을 자동 청산하고 신규 진입을 중지했습니다. 재개하려면 서버의 상태 파일을 수동으로 초기화해야 합니다.</p>}
     {data ? <>
-      <PeriodTabs period={period} onChange={setPeriod}/>
+      <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">
         <div><b>${startingCapital.toFixed(2)}</b><span>시작 자본</span></div>
         <div><b>${data.totalCapitalUsdt.toFixed(2)}</b><span>현재 자본</span></div>
         <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
-        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률</span></div>
-        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익</span></div>
+        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
         <div><b>{positions.length}</b><span>보유 종목</span></div>
         <div><b>${openNotional.toFixed(2)}</b><span>매수 금액(진입시점 기준)</span></div>
       </div>
+      {periodShort && <p className="usage-note">* 보유 equity 히스토리가 선택 기간보다 짧아, 기록이 시작된 시점부터의 값으로 표시됩니다(전체와 동일).</p>}
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <p className="usage-note">매수 금액은 각 포지션이 진입한 시점의 노셔널로 고정됩니다 — 청산 전까지 재조정하지 않으므로(왕복수수료 절감), 총 자본이 늘어도 이미 보유중인 포지션의 금액은 그대로입니다. 신규 진입/재진입 시에만 그 시점의 총 자본 기준으로 다시 계산됩니다.</p>
       <PositionTable title="보유 포지션" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '진입가(현물/선물)', '수량', '누적 펀딩수취', '미실현 가격손익', '진입수수료', '순손익', '수익률']}
@@ -1587,7 +1610,10 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
   const entryValue = data?.broker?.positionsEntry ?? data?.entryValue ?? 0
   const currentValue = data?.broker?.positionsEval ?? data?.deployedValue ?? 0
   const returnPct = data?.returnPct ?? (budget > 0 ? (totalPnl / budget) * 100 : 0)
-  const chartPoints: ChartPoint[] = data ? filterChartPoints((data.equityHistory ?? []).map(p => ({ ts: p.ts, value: p.totalPnl })), period) : []
+  const pnlSeries: ChartPoint[] = (data?.equityHistory ?? []).map(p => ({ ts: p.ts, value: p.totalPnl }))
+  const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
+  const periodReturnPct = budget > 0 ? (periodPnl / budget) * 100 : 0
+  const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
   const symbolSeries: Record<string, ChartPoint[]> = Object.fromEntries(Object.entries(data?.positionHistory ?? {}).map(([s, pts]) => [s, (pts ?? []).map(p => ({ ts: p.ts, value: p.unrealizedPnl }))]))
   const queued = [...pendingSells, ...pendingBuys]
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title={cfg.title}>
@@ -1599,17 +1625,20 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
       {data?.broker && market === 'us' && <p className="usage-note">계좌 KRW 예수금(국장·미장 공용) {Math.round(data.broker.accountCashKrw).toLocaleString()}원 · 계좌 총평가 {Math.round(data.broker.accountTotalKrw).toLocaleString()}원</p>}
     </div>
     {data ? <>
-      <PeriodTabs period={period} onChange={setPeriod}/>
+      <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">
         <div><b>{cfg.money(budget)}</b><span>배정 예산</span></div>
         <div><b>{cfg.money(entryValue)}</b><span>진입금액(매입원가)</span></div>
         <div><b>{cfg.money(currentValue)}</b><span>현재금액(평가금액)</span></div>
         <div><b>{cfg.money(equity)}</b><span>현재 잔고(API)</span></div>
-        <div><b className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</b><span>수익률</span></div>
+        <div><b className={returnPct >= 0 ? 'positive' : 'negative'}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
+        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}{cfg.money(periodPnl)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
         <div><b>{brokerPositions.length}</b><span>보유 종목</span></div>
         <div><b>{pendingBuys.length}</b><span>매수 대기</span></div>
         <div><b>{pendingSells.length}</b><span>매도 대기</span></div>
       </div>
+      {periodShort && <p className="usage-note">* 보유 equity 히스토리가 선택 기간보다 짧아, 기록이 시작된 시점부터의 값으로 표시됩니다(전체와 동일).</p>}
       <EquityLineChart points={chartPoints} formatValue={cfg.money} resetKey={period}/>
       <PositionTable title="보유 포지션 (KIS 잔고 API)" empty="현재 보유 중인 포지션이 없습니다." head={['종목', '수량', '현재가', '평가금액', '평가손익']}
         rows={brokerPositions.map(([symbol, p]) => ({ key: symbol, cells: [
@@ -1669,7 +1698,10 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
   const hwm = data?.broker?.hwmUsdt ?? data?.hwmUsdt ?? 0
   const leverage = data?.broker?.leverage ?? 0
   const grossNotional = data?.broker?.grossNotionalUsdt ?? 0
-  const chartPoints: ChartPoint[] = data ? filterChartPoints((data.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt })), period) : []
+  const pnlSeries: ChartPoint[] = (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt }))
+  const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
+  const periodReturnPct = startingCapital > 0 ? (periodPnl / startingCapital) * 100 : 0
+  const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
   const symbolSeries: Record<string, ChartPoint[]> = Object.fromEntries(Object.entries(data?.positionHistory ?? {}).map(([symbol, points]) => [symbol, (points ?? []).map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))]))
   const statusTone: BotTone = data?.halted ? 'deprecated' : 'live'
   const statusLabel = data?.halted ? '⚠ 킬 스위치 발동 · 정지됨' : (live ? `가동 중 · mainnet ${leverage}x` : '가동 중 · 백테스트(페이퍼)')
@@ -1684,16 +1716,19 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
       {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (디레버 20% / 킬 35%)</p>}
     </div>
     {data ? <>
-      <PeriodTabs period={period} onChange={setPeriod}/>
+      <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">
         <div><b>${startingCapital.toFixed(2)}</b><span>진입금액(시작 자본)</span></div>
         <div><b>${equity.toFixed(2)}</b><span>현재금액(API 잔고)</span></div>
         <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
         <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
+        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
         <div><b className={drawdown > 0.15 ? 'negative' : ''}>{(drawdown * 100).toFixed(1)}%</b><span>현재 낙폭</span></div>
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
         <div><b>{shorts.length}</b><span>숏 포지션</span></div>
       </div>
+      {periodShort && <p className="usage-note">* 보유 equity 히스토리가 선택 기간보다 짧아, 기록이 시작된 시점부터의 값으로 표시됩니다(전체와 동일).</p>}
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
       <PositionBook positions={positions}/>
       <b className="chart-section-title">종목별 미실현손익 추이</b>
