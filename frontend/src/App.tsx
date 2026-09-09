@@ -118,7 +118,7 @@ type ChartPoint = { ts: string; value: number }
 type UsdtPositionPoint = { ts: string; price: number; unrealizedPnlUsdt: number }
 type MomentumRotationPosition = { side: 'long' | 'short'; entryPrice: number; notionalUsdt: number; unrealizedPnlUsdt: number }
 type MomentumBroker = { queriedTs: string | null; exchange: string; equityUsdt: number; inceptionEquityUsdt: number; grossNotionalUsdt: number; returnPct: number; unrealizedPnlUsdt: number; drawdown: number; hwmUsdt: number; leverage: number; halted: boolean; positions: Record<string, MomentumRotationPosition> }
-type MomentumRotationState = { positions: Record<string, MomentumRotationPosition>; tradeLog: TradingLogEntry[]; mode: string; equityUsdt: number; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; unrealizedPnlUsdt: number; drawdown: number; hwmUsdt: number; inceptionEquityUsdt: number; halted: boolean; broker: MomentumBroker | null; inceptionTs: string | null; lastRebalanceTs: string | null; equityHistory: TradingEquityPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
+type MomentumRotationState = { positions: Record<string, MomentumRotationPosition>; tradeLog: TradingLogEntry[]; mode: string; equityUsdt: number; cumulativeRealizedPnlUsdt: number; cumulativeFeeUsdt: number; unrealizedPnlUsdt: number; drawdown: number; hwmUsdt: number; inceptionEquityUsdt: number; halted: boolean; broker: MomentumBroker | null; inceptionTs: string | null; lastRebalanceTs: string | null; nextRebalanceTs: string | null; rebalanceEveryDays: number | null; equityHistory: TradingEquityPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
 type RotationBrokerPosition = { qty: number; price: number; evalAmt: number; purchaseAmt: number; pnl: number; pnlPct: number }
 type RotationBroker = { queriedTs: string | null; positions: Record<string, RotationBrokerPosition>; positionsEval: number; positionsEntry: number; positionsUnrealizedPnl: number; accountCashKrw: number; accountTotalKrw: number }
 type RotationEquityPoint = { ts: string; totalPnl: number; equity: number; deployed: number }
@@ -1382,6 +1382,30 @@ function EquityLineChart({ points, formatValue, resetKey }: { points: ChartPoint
   </div>
 }
 
+/** 다음 리밸런스까지 남은 시간 — 일:시:분:초:1/100초 로 라이브 카운트다운.
+ * requestAnimationFrame 으로 갱신하므로 탭이 백그라운드면 브라우저가 자동으로 멈춘다. */
+function RebalanceCountdown({ target }: { target: string | null | undefined }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!target) return
+    let raf = 0
+    const tick = () => { setNow(Date.now()); raf = requestAnimationFrame(tick) }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target])
+  if (!target) return <b>—</b>
+  const ms = new Date(target).getTime() - now
+  if (Number.isNaN(ms)) return <b>—</b>
+  if (ms <= 0) return <b className="positive countdown">리밸런스 대기</b>
+  const p2 = (n: number) => String(n).padStart(2, '0')
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  const s = Math.floor((ms % 60000) / 1000)
+  const cs = Math.floor((ms % 1000) / 10)
+  return <b className="countdown">{d}:{p2(h)}:{p2(m)}:{p2(s)}:{p2(cs)}</b>
+}
+
 function PeriodTabs({ period, onChange, historyDays }: { period: TradingPeriod; onChange: (value: TradingPeriod) => void; historyDays?: number }) {
   return <div className="period-tabs">{TRADING_PERIOD_ORDER.map(value => {
     const days = TRADING_PERIOD_DAYS[value]
@@ -1727,6 +1751,7 @@ function MomentumRotationDashboard({ onClose, embedded }: { onClose: () => void;
         <div><b className={drawdown > 0.15 ? 'negative' : ''}>{(drawdown * 100).toFixed(1)}%</b><span>현재 낙폭</span></div>
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
         <div><b>{shorts.length}</b><span>숏 포지션</span></div>
+        <div><RebalanceCountdown target={data.nextRebalanceTs}/><span>다음 리밸런스까지{data.rebalanceEveryDays ? ` (${data.rebalanceEveryDays}일 주기)` : ''}</span></div>
       </div>
       {periodShort && <p className="usage-note">* 보유 equity 히스토리가 선택 기간보다 짧아, 기록이 시작된 시점부터의 값으로 표시됩니다(전체와 동일).</p>}
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>

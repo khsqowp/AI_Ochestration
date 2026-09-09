@@ -27,6 +27,8 @@ public record MomentumRotationState(
     Broker broker,
     @JsonAlias("inception_ts") String inceptionTs,
     @JsonAlias("last_rebalance_ts") String lastRebalanceTs,
+    @JsonAlias("next_rebalance_ts") String nextRebalanceTs,
+    @JsonAlias("rebalance_every_days") Integer rebalanceEveryDays,
     @JsonAlias("equity_history") List<EquityPoint> equityHistory,
     @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory) {
 
@@ -61,6 +63,6 @@ public record MomentumRotationState(
 
   public static MomentumRotationState empty() {
     return new MomentumRotationState(
-        Map.of(), List.of(), "paper", 0, 0, 0, 0, 0, 0, 0, false, null, null, null, List.of(), Map.of());
+        Map.of(), List.of(), "paper", 0, 0, 0, 0, 0, 0, 0, false, null, null, null, null, null, List.of(), Map.of());
   }
 }
