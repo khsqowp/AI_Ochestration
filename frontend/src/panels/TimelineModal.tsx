@@ -1,0 +1,10 @@
+import { X } from 'lucide-react'
+import type { Task, TaskEvent } from '../lib/types'
+import { archiveTaskLabel } from '../lib/util'
+import { PanelShell } from '../components/shared'
+
+export function TimelineModal({ task, events, onClose, embedded }: { task: Task | null; events: TaskEvent[]; onClose?: () => void; embedded?: boolean }) {
+  const stages = [{ id: 'COLLECT', label: '자료 수집', owner: 'Gemini 수집 담당' }, { id: 'REVIEW_A', label: '1차 정리', owner: 'Review A' }, { id: 'REVIEW_B', label: '독립 재검토', owner: 'Review B' }, { id: 'TEAM_LEAD', label: '팀장 종합', owner: task?.domain === 'ECONOMY' ? 'Atlas Lead' : 'Sentinel Lead' }, { id: 'PM', label: 'PM 최종 판정', owner: 'PM' }, { id: 'ARCHIVE', label: '아카이브 보관', owner: 'Archive' }]
+  const active = events.at(-1)?.stage
+  return <PanelShell embedded={embedded} className="side-modal timeline-modal"><div className="sheet-header"><div><p className="eyebrow">LIVE WORKFLOW</p><h2>작업 진행표</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>{task ? <><p className="timeline-title">{archiveTaskLabel(task.title)}</p><p className="source-intro">현재: {active ?? '작업 대기'} · {events.at(-1)?.message ?? 'PM이 작업을 준비 중입니다.'}</p><div className="gantt-list">{stages.map((stage, index) => { const same = events.filter(event => event.stage === stage.id); const current = active === stage.id && task.status === 'RUNNING'; const done = same.length >= 2 || (stage.id === 'ARCHIVE' && task.status === 'COMPLETED'); return <article key={stage.id} className={current ? 'current' : done ? 'done' : ''}><div><b>{index + 1}. {stage.label}</b><small>{stage.owner}</small></div><span className="gantt-track"><i style={{ width: done ? '100%' : current ? '58%' : '0%' }}/></span><em>{done ? '완료' : current ? '진행 중' : '대기'}</em></article> })}</div><div className="timeline-events">{events.map(event => <p key={event.id}><b>{event.stage}</b> {event.message}</p>)}</div></> : <p className="empty-state">표시할 작업이 없습니다.</p>}</PanelShell>
+}
