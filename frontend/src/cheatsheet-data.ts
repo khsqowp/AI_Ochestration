@@ -27,6 +27,28 @@ export interface CheatSheetCategory {
 
 export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
   {
+    id: 'payloads',
+    name: '페이로드 빌더',
+    tools: [
+      {
+        id: 'xss-payloads', name: 'XSS 페이로드', base: '', options: [],
+        note: '삽입 위치·벡터·실행 코드·우회 기법을 조합해 컨텍스트별 XSS 페이로드를 만듭니다.',
+      },
+      {
+        id: 'sqli-payloads', name: 'SQL Injection 페이로드', base: '', options: [],
+        note: 'DBMS·삽입 컨텍스트·기법(UNION·에러·불리언·시간·스태킹)을 골라 인젝션 문자열을 만듭니다.',
+      },
+      {
+        id: 'ssrf-payloads', name: 'SSRF 페이로드', base: '', options: [],
+        note: '클라우드 메타데이터·내부 서비스·gopher 등 대상과 IP 표기 우회·인코딩을 조합합니다.',
+      },
+      {
+        id: 'csrf-payloads', name: 'CSRF PoC', base: '', options: [],
+        note: 'GET/POST form/JSON 방식별 자동제출 PoC HTML 을 생성합니다.',
+      },
+    ],
+  },
+  {
     id: 'tools',
     name: '펜테스트 도구',
     tools: [
@@ -594,16 +616,6 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'gt-blind', flag: '{"password": {"$gt": ""}}', label: '블라인드 NoSQLi(비교 연산자)', description: '$gt/$lt 연산자로 참/거짓을 유도해 데이터를 추정합니다.' },
           { id: 'js-injection', flag: "'; return true; var x='", label: '서버 사이드 JS 인젝션 시도', description: '$where 등 JavaScript가 실행되는 구문에 삽입해 로직 우회를 시도합니다.' },
         ],
-      },
-    ],
-  },
-  {
-    id: 'web-app',
-    name: '웹 애플리케이션',
-    tools: [
-      {
-        id: 'xss-payloads', name: 'XSS 페이로드', base: '', options: [],
-        note: '조합형 빌더입니다 — 아래 목록에서 이 도구를 선택하면 태그·이벤트·실행 코드·우회 기법을 직접 조합할 수 있습니다.',
       },
     ],
   },

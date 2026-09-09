@@ -1,9 +1,19 @@
-import { useState } from 'react'
+import { useState, type ComponentType } from 'react'
 import { Clipboard, Terminal, X } from 'lucide-react'
 import { CHEATSHEET_CATEGORIES, type CheatSheetTool } from '../cheatsheet-data'
 import { cheatSheetCommand } from '../lib/util'
 import { PanelShell } from '../components/shared'
-import { XssPayloadBuilder } from '../xss-builder'
+import { XssPayloadBuilder } from '../payloads/xss'
+import { SqliPayloadBuilder } from '../payloads/sqli'
+import { SsrfPayloadBuilder } from '../payloads/ssrf'
+import { CsrfPayloadBuilder } from '../payloads/csrf'
+
+const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
+  'xss-payloads': XssPayloadBuilder,
+  'sqli-payloads': SqliPayloadBuilder,
+  'ssrf-payloads': SsrfPayloadBuilder,
+  'csrf-payloads': CsrfPayloadBuilder,
+}
 
 export function CheatSheetModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const [tool, setTool] = useState<CheatSheetTool | null>(null)
@@ -29,7 +39,7 @@ export function CheatSheetModal({ onClose, embedded }: { onClose?: () => void; e
       <div className="explorer-preview">
         {tool ? <>
           <div className="explorer-preview-header"><b>{tool.name}</b></div>
-          {tool.id === 'xss-payloads' ? <div className="explorer-preview-body cheatsheet-options-body"><XssPayloadBuilder/></div> : <div className="explorer-preview-body cheatsheet-options-body">
+          {PAYLOAD_BUILDERS[tool.id] ? <div className="explorer-preview-body cheatsheet-options-body">{(() => { const Builder = PAYLOAD_BUILDERS[tool.id]!; return <Builder/> })()}</div> : <div className="explorer-preview-body cheatsheet-options-body">
             {tool.note && <p className="cheatsheet-note">{tool.note}</p>}
             {tool.options.length === 0 && !tool.targetPlaceholder && <p className="empty-state">이 명령어는 별도 옵션 없이 그대로 사용합니다.</p>}
             {tool.options.map(option => <label className="cheatsheet-option" key={option.id}>
@@ -47,7 +57,7 @@ export function CheatSheetModal({ onClose, embedded }: { onClose?: () => void; e
               </span>
             </label>}
           </div>}
-          {tool.id !== 'xss-payloads' && <div className="cheatsheet-command-bar">
+          {!PAYLOAD_BUILDERS[tool.id] && <div className="cheatsheet-command-bar">
             <pre className="cheatsheet-command">{command || tool.base || '(옵션을 선택하세요)'}</pre>
             <button className="cheatsheet-copy" onClick={copy} disabled={!command}><Clipboard size={14}/>{copied ? '복사됨' : '복사'}</button>
           </div>}
