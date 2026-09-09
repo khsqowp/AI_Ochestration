@@ -4,11 +4,12 @@ import {
   KrTradingDashboard, MomentumRotationDashboard, TradingDashboard, UsTradingDashboard,
 } from '../panels/trading'
 
+const BASE = '/dashboard/invest'
 const TABS = [
-  { to: 'coin', label: '코인 모멘텀', tag: 'live · 2x' },
-  { to: 'kr', label: '국장 로테이션', tag: 'paper' },
-  { to: 'us', label: '미장 로테이션', tag: 'paper' },
-  { to: 'funding-arb', label: '펀딩 아비', tag: 'deprecated' },
+  { to: `${BASE}/coin`, label: '코인 모멘텀', tag: 'live · 2x' },
+  { to: `${BASE}/kr`, label: '국장 로테이션', tag: 'paper' },
+  { to: `${BASE}/us`, label: '미장 로테이션', tag: 'paper' },
+  { to: `${BASE}/funding-arb`, label: '펀딩 아비', tag: 'deprecated' },
 ]
 
 export function InvestPage() {
@@ -23,12 +24,12 @@ export function InvestPage() {
     </div>
     <ErrorBoundary label="투자">
       <Routes>
-        <Route index element={<Navigate to="coin" replace/>}/>
+        <Route index element={<Navigate to={`${BASE}/coin`} replace/>}/>
         <Route path="coin" element={<MomentumRotationDashboard embedded/>}/>
         <Route path="kr" element={<KrTradingDashboard embedded/>}/>
         <Route path="us" element={<UsTradingDashboard embedded/>}/>
         <Route path="funding-arb" element={<TradingDashboard embedded/>}/>
-        <Route path="*" element={<Navigate to="coin" replace/>}/>
+        <Route path="*" element={<Navigate to={`${BASE}/coin`} replace/>}/>
       </Routes>
     </ErrorBoundary>
   </div>

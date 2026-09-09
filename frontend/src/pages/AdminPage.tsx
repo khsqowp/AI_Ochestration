@@ -4,11 +4,12 @@ import { UserManagementModal } from '../panels/UserManagementModal'
 import { UsageModal } from '../panels/UsageModal'
 import { DigestModal } from '../panels/DigestModal'
 
+const BASE = '/dashboard/admin'
 const TABS = [
-  { to: 'settings', label: '설정' },
-  { to: 'users', label: '사용자' },
-  { to: 'usage', label: '사용량·비용' },
-  { to: 'digest', label: '다이제스트' },
+  { to: `${BASE}/settings`, label: '설정' },
+  { to: `${BASE}/users`, label: '사용자' },
+  { to: `${BASE}/usage`, label: '사용량·비용' },
+  { to: `${BASE}/digest`, label: '다이제스트' },
 ]
 
 export function AdminPage() {
@@ -21,12 +22,12 @@ export function AdminPage() {
       </nav>
     </div>
     <Routes>
-      <Route index element={<Navigate to="settings" replace/>}/>
-      <Route path="settings" element={<SettingsPanel embedded onOpenDigest={() => navigate('../digest')}/>}/>
+      <Route index element={<Navigate to={`${BASE}/settings`} replace/>}/>
+      <Route path="settings" element={<SettingsPanel embedded onOpenDigest={() => navigate(`${BASE}/digest`)}/>}/>
       <Route path="users" element={<UserManagementModal embedded/>}/>
       <Route path="usage" element={<UsageModal embedded/>}/>
       <Route path="digest" element={<DigestModal embedded/>}/>
-      <Route path="*" element={<Navigate to="settings" replace/>}/>
+      <Route path="*" element={<Navigate to={`${BASE}/settings`} replace/>}/>
     </Routes>
   </div>
 }

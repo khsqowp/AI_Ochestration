@@ -104,7 +104,15 @@
 .trading-status-card:has(.status-pill.paused) { background:#f6f5f8; border-color:#e6e3ec; }
 .dashboard-tile.tone-live { border-left:3px solid #4c9c78; }.dashboard-tile.tone-deprecated { border-left:3px solid #cf6b6b; }.dashboard-tile.tone-paused { border-left:3px solid #b7b2c0; }
 .cheatsheet-category { margin-bottom:16px; }.cheatsheet-category-title { padding:0 10px 6px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#9a96a1; }.cheatsheet-tool-row { display:flex; align-items:center; gap:8px; width:100%; padding:9px 10px; border-radius:8px; background:transparent; text-align:left; color:#4b4654; font-size:12.5px; font-weight:650; }.cheatsheet-tool-row:hover { background:#f4f2fb; }.cheatsheet-tool-row.active { background:#eeecfc; color:#4e43a5; }.cheatsheet-options-body { display:flex; flex-direction:column; gap:2px; }.cheatsheet-note { margin:0 0 12px; padding:10px 12px; border-radius:9px; background:#f7f6fa; color:#6d6875; font-size:12px; line-height:1.5; }.cheatsheet-option { display:flex; align-items:flex-start; gap:10px; padding:10px; border-radius:9px; }.cheatsheet-option:hover { background:#f7f6fa; }.cheatsheet-option input[type=checkbox] { margin-top:3px; flex:none; width:15px; height:15px; accent-color:#7667dc; }.cheatsheet-option-body { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }.cheatsheet-option-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }.cheatsheet-option-head code { padding:2px 6px; border-radius:5px; background:#efedf3; color:#5d50ba; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }.cheatsheet-option-head b { font-size:12.5px; color:#3f3b47; }.cheatsheet-option small { color:#8a8591; font-size:11.5px; line-height:1.45; }.cheatsheet-option-value { margin-top:4px; padding:7px 9px; border-radius:7px; border:1px solid #e1ddea; font-size:12px; width:100%; max-width:340px; }.cheatsheet-target { border-top:1px solid #eceaf0; margin-top:6px; padding-top:14px; }.cheatsheet-command-bar { flex:0 0 auto; display:flex; align-items:flex-start; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid #eceaf0; }.cheatsheet-command { flex:1; min-width:0; margin:0; padding:12px 14px; border-radius:9px; background:#27242d; color:#f7f4fb; font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; word-break:break-all; }.cheatsheet-copy { flex:none; display:flex; align-items:center; gap:6px; padding:10px 13px; border-radius:9px; background:#eeecfc; color:#5d50ba; font-size:12px; font-weight:750; }.cheatsheet-copy:disabled { opacity:.5; cursor:default; }
-.xss-builder { display:flex; flex-direction:column; }.xss-builder-label { margin:14px 0 6px; font-size:12px; font-weight:750; color:#4b4654; }.xss-builder-label:first-of-type { margin-top:0; }.xss-builder-select { padding:8px 9px; border-radius:7px; border:1px solid #e1ddea; font-size:12px; width:100%; max-width:340px; background:#fff; color:#3f3b47; }
+.payload-builder { display:flex; flex-direction:column; }
+.payload-builder-label { margin:14px 0 6px; font-size:12px; font-weight:750; color:#4b4654; }
+.payload-builder-label:first-of-type { margin-top:0; }
+.payload-builder-select, .payload-builder-input, .payload-builder-textarea { padding:8px 9px; border-radius:7px; border:1px solid #e1ddea; font-size:12px; width:100%; max-width:420px; background:#fff; color:#3f3b47; font-family:inherit; }
+.payload-builder-textarea { max-width:none; resize:vertical; line-height:1.5; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }
+.payload-builder-hint { margin:6px 0 2px; font-size:11px; line-height:1.5; color:#8a8591; }
+.payload-readout-group { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+.payload-readout-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#9a96a1; margin-bottom:4px; }
+.cheatsheet-command.wrap-anywhere { white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; }
 .mermaid-diagram { display:flex; justify-content:center; overflow-x:auto; margin:10px 0; }.mermaid-diagram svg { max-width:100%; }.mermaid-error { white-space:pre-wrap; font-size:12px; padding:10px 12px; border-radius:9px; background:#fdecec; color:#963f3f; }
 .calendar-timeline { margin-top:22px; padding-top:18px; border-top:1px solid #efedf1; display:grid; gap:10px; }.timeline-card { padding:12px 14px; border-radius:12px; background:#f7f6fa; border-left:3px solid #cfc8ec; display:grid; gap:6px; }.timeline-card-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }.timeline-card-head b { font-size:13px; color:#3f3b47; }.timeline-updated { margin-left:auto; font-size:10px; font-weight:800; color:#7667dc; white-space:nowrap; }.timeline-card small { font-size:11.5px; color:#6d6875; line-height:1.5; }.timeline-toggle { justify-self:start; padding:4px 9px; border-radius:100px; background:#eeecfc; color:#5d50ba; font-size:10.5px; font-weight:750; }.timeline-toggle:hover { background:#e2ddf9; }.timeline-history { margin-top:2px; padding-top:8px; border-top:1px dashed #e0dcea; display:grid; gap:6px; }.timeline-history p { margin:0; font-size:11px; color:#6d6875; line-height:1.5; }.timeline-history-date { font-size:10px; font-weight:800; color:#918aa8; margin-right:6px; }
 
@@ -340,8 +348,8 @@
 .update-banner { padding:7px 11px; border-radius:9px; background:#fff2e0; border:1px solid #eec48a; color:#8a5a10; font-size:11px; font-weight:800; white-space:nowrap; }
 .app-main { flex:1; min-height:0; overflow-y:auto; }
 
-/* ── 페이지 컨테이너 ────────────────────────────────────────── */
-.page { max-width:1180px; margin:0 auto; padding:24px clamp(16px, 4vw, 40px) 96px; display:flex; flex-direction:column; gap:24px; }
+/* ── 페이지 컨테이너 (뷰포트 너비에 유동적으로 채움) ─────────── */
+.page { width:100%; max-width:none; margin:0; padding:24px clamp(16px, 5vw, 112px) 96px; display:flex; flex-direction:column; gap:24px; }
 .notes-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
 .notes-header h2 { margin:0; font-size:20px; color:#3f3b4a; }
 .notes-actions { display:flex; flex-wrap:wrap; gap:8px; }
@@ -371,3 +379,36 @@
 
 .notes-page .agent-sheet { position:fixed; right:0; top:56px; bottom:0; z-index:30; }
 .public-shell:has(.login-page) .public-header { display:none; }
+
+/* ── 태블릿: 넓은 여백 회수 ─────────────────────────────────── */
+@media (max-width:1100px) {
+  .page { padding:22px clamp(16px, 4vw, 40px) 88px; }
+}
+
+/* ── 모바일 (≤640px): 전용 레이아웃 ────────────────────────── */
+@media (max-width:640px) {
+  .app-topbar { gap:10px; padding:0 12px; height:52px; }
+  .topbar-logo span { display:none; }
+  .topbar-nav { gap:0; }
+  .topbar-nav a { padding:7px 9px; font-size:12.5px; }
+  .topbar-account { display:none; }
+  .update-banner { font-size:10px; padding:6px 8px; }
+
+  .page { padding:16px 14px 72px; gap:16px; }
+  .notes-header { gap:8px; }
+  .notes-header h2 { font-size:17px; }
+  .notes-actions { width:100%; }
+  .notes-actions .source-add, .notes-actions .source-cancel { flex:1; }
+
+  /* 서브탭: 줄바꿈 대신 가로 스크롤 한 줄 */
+  .invest-tabs { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:0 -14px; padding:0 14px; }
+  .invest-tabs::-webkit-scrollbar { display:none; }
+  .invest-tabs a { flex:0 0 auto; }
+
+  .dashboard-panel-section, .progress-section, .notes-agent-roster { padding:14px; border-radius:12px; }
+  .panel-embedded.file-explorer, .panel-embedded.graph-view, .panel-embedded.trading-hub { min-height:auto; }
+  .panel-embedded .explorer-body { min-height:auto; flex-direction:column; }
+  .panel-embedded .explorer-sidebar { flex:0 0 auto; max-height:38vh; border-right:0; border-bottom:1px solid #eceaf0; padding-right:0; }
+
+  .markdown-document { font-size:13px; }
+}
