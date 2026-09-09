@@ -25,7 +25,7 @@ const MODES: { id: DolphinMode; label: string }[] = [
   { id: 'rag', label: 'Vault RAG' },
 ]
 
-export function DolphinChatModal({ onClose }: { onClose: () => void }) {
+export function DolphinChatModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const [sessions, setSessions] = useState<DolphinSession[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [messages, setMessages] = useState<DolphinMsg[]>([])
@@ -246,7 +246,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <aside className="dolphin-modal" role="dialog" aria-modal="true">
+    <aside className={`dolphin-modal${embedded ? ' dolphin-embedded' : ''}`} role={embedded ? undefined : 'dialog'} aria-modal={embedded ? undefined : 'true'}>
       <div className="dolphin-sidebar">
         <div className="dolphin-sidebar-header">
           <Bot size={16}/> 로컬 LLM
@@ -301,7 +301,7 @@ export function DolphinChatModal({ onClose }: { onClose: () => void }) {
                 <Download size={14}/>
               </button>
             )}
-            <button className="sheet-close" onClick={onClose}><X size={18}/></button>
+            {onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}
           </div>
         </div>
 

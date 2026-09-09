@@ -1,0 +1,30 @@
+import { useEffect, useState } from 'react'
+import { Archive, ScrollText, X } from 'lucide-react'
+import type { MaintenanceResult } from '../lib/types'
+import { PanelShell } from '../components/shared'
+
+export function SettingsPanel({ onClose, onOpenDigest, embedded }: { onClose?: () => void; onOpenDigest: () => void; embedded?: boolean }) {
+  const [running, setRunning] = useState(false); const [result, setResult] = useState<MaintenanceResult | null>(null); const [error, setError] = useState('')
+  const runMaintenance = async () => { setRunning(true); setError(''); const response = await fetch('/api/archive/maintenance/run-now', { method: 'POST', credentials: 'include' }); setRunning(false); if (!response.ok) { setError('정리 작업을 실행하지 못했습니다.'); return } setResult(await response.json() as MaintenanceResult) }
+  const [pmProvider, setPmProvider] = useState<'DEEPSEEK' | 'BEDROCK' | null>(null); const [pmProviderBusy, setPmProviderBusy] = useState(false); const [pmProviderError, setPmProviderError] = useState('')
+  useEffect(() => { fetch('/api/tasks/pm-provider', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(body => body && setPmProvider(body.provider)).catch(() => setPmProviderError('현재 설정을 불러오지 못했습니다.')) }, [])
+  const switchPmProvider = async (provider: 'DEEPSEEK' | 'BEDROCK') => {
+    if (provider === pmProvider || pmProviderBusy) return
+    setPmProviderBusy(true); setPmProviderError('')
+    const response = await fetch('/api/tasks/pm-provider', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider }) })
+    setPmProviderBusy(false)
+    if (!response.ok) { setPmProviderError('전환하지 못했습니다.'); return }
+    const body = await response.json(); setPmProvider(body.provider)
+  }
+  const [collectionEnabled, setCollectionEnabled] = useState<boolean | null>(null); const [collectionBusy, setCollectionBusy] = useState(false); const [collectionError, setCollectionError] = useState('')
+  useEffect(() => { fetch('/api/research-sources/collection-enabled', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(body => body && setCollectionEnabled(body.enabled)).catch(() => setCollectionError('현재 설정을 불러오지 못했습니다.')) }, [])
+  const switchCollectionEnabled = async (enabled: boolean) => {
+    if (enabled === collectionEnabled || collectionBusy) return
+    setCollectionBusy(true); setCollectionError('')
+    const response = await fetch('/api/research-sources/collection-enabled', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) })
+    setCollectionBusy(false)
+    if (!response.ok) { setCollectionError('전환하지 못했습니다.'); return }
+    const body = await response.json(); setCollectionEnabled(body.enabled)
+  }
+  return <PanelShell embedded={embedded} className="side-modal"><div className="sheet-header"><div><p className="eyebrow">DEVELOPMENT SETTINGS</p><h2>설정 안내</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div><p className="source-intro">API 키와 모델 단가는 프로젝트 `.env`에서만 관리합니다. 화면에는 키를 표시하거나 전송하지 않습니다.</p><div className="sheet-section"><b>PM 최종 판정 모델</b><p>PM 단계를 DeepSeek 대신 AWS Bedrock의 Claude로 돌릴 수 있습니다. 필요할 때만 Claude로 켜고, 크레딧을 다 쓰면 다시 DeepSeek으로 되돌리세요.</p><div className="source-actions"><button className={pmProvider === 'DEEPSEEK' ? 'source-add' : 'source-cancel'} onClick={() => switchPmProvider('DEEPSEEK')} disabled={pmProviderBusy || pmProvider === null}>DeepSeek{pmProvider === 'DEEPSEEK' ? ' · 사용 중' : ''}</button><button className={pmProvider === 'BEDROCK' ? 'source-add' : 'source-cancel'} onClick={() => switchPmProvider('BEDROCK')} disabled={pmProviderBusy || pmProvider === null}>Claude (Bedrock){pmProvider === 'BEDROCK' ? ' · 사용 중' : ''}</button></div>{pmProviderError && <p className="form-error">{pmProviderError}</p>}</div><div className="sheet-section"><b>수집 사이트 자동 수집</b><p>뉴스를 못 챙겨볼 만큼 바쁠 때 꺼두면 야간 정기 수집·재시도 수집이 전부 멈춰서 비용이 안 나갑니다. 등록된 사이트 각각의 설정은 그대로 유지되고, "즉시 수집" 버튼은 꺼져있어도 계속 동작합니다.</p><div className="source-actions"><button className={collectionEnabled === true ? 'source-add' : 'source-cancel'} onClick={() => switchCollectionEnabled(true)} disabled={collectionBusy || collectionEnabled === null}>켜짐{collectionEnabled === true ? ' · 사용 중' : ''}</button><button className={collectionEnabled === false ? 'source-add' : 'source-cancel'} onClick={() => switchCollectionEnabled(false)} disabled={collectionBusy || collectionEnabled === null}>꺼짐{collectionEnabled === false ? ' · 사용 중' : ''}</button></div>{collectionError && <p className="form-error">{collectionError}</p>}</div><div className="sheet-section"><b>작업 다이제스트</b><p>일간·주간 작업 처리 현황을 확인하고 n8n으로 전송합니다.</p><button className="source-add" onClick={onOpenDigest}><ScrollText size={16}/> 다이제스트 보기</button></div><div className="sheet-section"><b>아카이브 주간 정리</b><p>서로 다른 폴더에 저장된 중복 노트를 매주 자동으로 찾아 병합하고, 수집 노트는 실제 주제별 폴더로 재분류하며, 질문·직접작성 노트는 웹 진단/암호학 같은 넓은 주제 버킷으로 모으고 버킷이 너무 커지면 하위 주제로 나눕니다. 관련 노트끼리는 [[위키링크]]로 연결합니다. 병합·분할에서 밀린 파일은 삭제하지 않고 obsidian/_archived/로 옮깁니다.</p><button className="source-add" onClick={runMaintenance} disabled={running}><Archive size={16}/>{running ? '정리 실행 중…' : '지금 정리 실행'}</button>{result && <p className="form-notice">{result.notesExamined}개 노트 확인 · {result.merged}건 병합 · {result.reclassified}건 주제 재분류 · {result.bucketed}건 버킷 통합 · {result.split}건 버킷 분할 · {result.weeklyDigested}건 주간 정리 취합 · {result.linked}건 관련 노트 연결{result.mergedPairs.length > 0 ? ' · 병합: ' + result.mergedPairs.join(', ') : ''}{result.reclassifiedNotes.length > 0 ? ' · 재분류: ' + result.reclassifiedNotes.join(', ') : ''}{result.bucketedNotes.length > 0 ? ' · 버킷 통합: ' + result.bucketedNotes.join(', ') : ''}{result.splitBuckets.length > 0 ? ' · 버킷 분할: ' + result.splitBuckets.join(', ') : ''}{result.weeklyDigestedNotes.length > 0 ? ' · 주간 취합: ' + result.weeklyDigestedNotes.join(', ') : ''}</p>}{result && result.failed > 0 && <p className="form-error">⚠ {result.failed}건 처리 실패 · {result.failedNotes.join(' · ')}</p>}{error && <p className="form-error">{error}</p>}</div></PanelShell>
+}

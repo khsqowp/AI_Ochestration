@@ -71,9 +71,16 @@ class SecurityConfig {
         // 개인 할 일 목록 — 계정별로 스코프되어 있어 USER+ADMIN 모두 자신의 항목을 읽고 쓸 수 있어야 함
         .requestMatchers("/api/todos/**").authenticated()
 
+        // 로컬 LLM · AI 토론 — 인증된 USER 도 사용 (2026-09 재편: 별도 카테고리 페이지로 승격)
+        .requestMatchers("/api/dolphin/**").authenticated()
+        .requestMatchers("/api/debate/**").authenticated()
+
+        // 투자 데이터 — anyRequest catch-all 로도 덮이지만, 롤 경계를 명시적으로 고정해 회귀를 막는다
+        .requestMatchers("/api/trading/**").hasRole("ADMIN")
+
         // 치트시트 has no backend endpoints — nothing to declare here
 
-        // everything else (usage, trading, digest, file upload, RAG ask, user admin) is ADMIN-only
+        // everything else (usage, digest, file upload, RAG ask, user admin) is ADMIN-only
         .requestMatchers("/api/admin/**").hasRole("ADMIN")
         .anyRequest().hasRole("ADMIN"));
     return http.build();

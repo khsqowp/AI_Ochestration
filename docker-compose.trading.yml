@@ -1,0 +1,214 @@
+# 트레이딩 봇 전용 compose — 메인(docker-compose.yml)과 완전히 분리된 프로젝트.
+#
+#   왜: Ochestration(api/web/mysql/n8n)을 재빌드하거나 빌드가 깨져도 실거래 봇은 영향받지 않아야 한다.
+#   메인 compose 에는 더 이상 trading-* 서비스가 없으므로 `docker compose up/down/build` (인자 없이)를
+#   실행해도 이 봇들은 건드려지지 않는다.
+#
+#   상태 볼륨은 external — 이 파일도 메인 파일도 볼륨을 "생성/삭제"하지 않는다. 기존
+#   ochestration_trading_* 볼륨을 그대로 공유하고, api 컨테이너는 그걸 :ro 로 읽어 대시보드에 표시한다.
+#
+#   실행:
+#     docker compose -f docker-compose.trading.yml \
+#       --profile momentum-rotation --profile kr-rotation --profile us-rotation \
+#       --profile crypto-tick-stream --profile tick-stream --profile paper-trading \
+#       up -d
+#   중지: docker compose -f docker-compose.trading.yml down   (볼륨은 external 이라 -v 로도 안 지워짐)
+
+name: ochestration-trading
+
+services:
+  trading:
+    build: ./trading
+    env_file:
+      - path: .env
+        required: false
+    networks: [trading]
+    profiles: ["trading"]
+
+  trading-paper-funding-arb:
+    build: ./trading
+    entrypoint: ["python", "-m", "app.paper_trade_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # TRX 스윙 봇으로 자금 이관 진행중 — 보유 포지션은 기존 청산조건대로 자동 매도되지만 재진입은 안 함.
+      FUNDING_ARB_HALT_NEW_ENTRIES: "true"
+    volumes:
+      - trading_paper_state:/app/data
+    networks: [trading]
+    profiles: ["paper-trading"]
+    restart: unless-stopped
+
+  trading-kr-swing:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.kr_swing_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TICK_STATE_PATH: /app/tick-state/tick_state.json
+    volumes:
+      - trading_kr_swing_state:/app/data
+      - trading_tick_state:/app/tick-state:ro
+    networks: [trading]
+    profiles: ["kr-swing"]
+    restart: unless-stopped
+
+  trading-us-swing:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.us_swing_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TICK_STATE_PATH: /app/tick-state/tick_state.json
+    volumes:
+      - trading_us_swing_state:/app/data
+      - trading_tick_state:/app/tick-state:ro
+    networks: [trading]
+    profiles: ["us-swing"]
+    restart: unless-stopped
+
+  # 국장/미장 top-N 모멘텀 로테이션 페이퍼봇 (KIS 모의) — EMA 크로스 스윙 대체 테스트.
+  # 같은 모의계좌를 쓰므로 kr-swing/us-swing 과 동시 기동 금지.
+  trading-kr-rotation:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.stock_rotation_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ROTATION_MARKET: KR
+      ROTATION_LOOKBACK: "20"
+      ROTATION_REBAL_DAYS: "10"
+      ROTATION_TOP_K: "8"
+      ROTATION_REGIME: ew_sma200
+      ROTATION_BUDGET: "4000000"
+      ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
+    volumes:
+      - trading_kr_rotation_state:/app/data
+      - ./.kis-cache:/app/cache
+    networks: [trading]
+    profiles: ["kr-rotation"]
+    restart: unless-stopped
+
+  trading-us-rotation:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.stock_rotation_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ROTATION_MARKET: US
+      ROTATION_LOOKBACK: "120"
+      ROTATION_REBAL_DAYS: "20"
+      ROTATION_TOP_K: "8"
+      ROTATION_REGIME: ew_sma200
+      ROTATION_BUDGET: "2800"
+      ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
+    volumes:
+      - trading_us_rotation_state:/app/data
+      - ./.kis-cache:/app/cache
+    networks: [trading]
+    profiles: ["us-rotation"]
+    restart: unless-stopped
+
+  trading-trx-swing:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.trx_swing_loop"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - trading_trx_swing_state:/app/data
+    networks: [trading]
+    profiles: ["trx-swing"]
+    restart: unless-stopped
+
+  trading-momentum-rotation:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.momentum_rotation_loop"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CRYPTO_TICK_STATE_PATH: /app/crypto-tick-state/crypto_tick_state.json
+      # 실거래 — 자본 145 USDT 중 70 배치, 2배, 달러중립 14/3/8.
+      # 디레버: 고점대비 -20% 에서 배율 2->1. 킬: -35% 에서 전량청산+정지(RESET_HALT=true 로 재개).
+      MOMENTUM_ROTATION_LIVE: "true"
+      MOMENTUM_ROTATION_EXCHANGE: mainnet
+      MOMENTUM_ROTATION_LEVERAGE: "2"
+      # 리밸런스 3->2일: 14일 상대모멘텀 신호가 빨리 감쇠, 2일이 현실 비용(편도 0.10%) 반영
+      # Calmar/Sharpe/CAGR 최적 (백테스트 2022-2026). 1일은 회전율 155x로 비용에 잠식됨.
+      MOMENTUM_ROTATION_REBALANCE_DAYS: "2"
+      MOMENTUM_ROTATION_MAX_DEPLOY_USDT: "70"
+      MOMENTUM_ROTATION_DELEVER_DD: "0.20"
+      MOMENTUM_ROTATION_KILL_DD: "0.35"
+    volumes:
+      - trading_momentum_rotation_state:/app/data
+      - trading_crypto_tick_state:/app/crypto-tick-state:ro
+    networks: [trading]
+    profiles: ["momentum-rotation"]
+    restart: unless-stopped
+
+  trading-crypto-tick-stream:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.crypto_tick_stream"]
+    volumes:
+      - trading_crypto_tick_state:/app/data
+      - ./trading-tick-archive:/app/archive
+    networks: [trading]
+    profiles: ["crypto-tick-stream"]
+    restart: unless-stopped
+
+  trading-tick-stream:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.tick_stream"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      KR_SWING_STATE_PATH: /app/kr-state/kr_swing_state.json
+      US_SWING_STATE_PATH: /app/us-state/us_swing_state.json
+    volumes:
+      - trading_tick_state:/app/data
+      - trading_kr_swing_state:/app/kr-state:ro
+      - trading_us_swing_state:/app/us-state:ro
+      - ./trading-tick-archive:/app/archive
+    networks: [trading]
+    profiles: ["tick-stream"]
+    restart: unless-stopped
+
+networks:
+  trading:
+
+# 메인 compose 가 만들어 둔 기존 볼륨을 그대로 공유한다. external → 이 파일은 볼륨을 생성·삭제하지 않는다.
+volumes:
+  trading_paper_state:
+    external: true
+    name: ochestration_trading_paper_state
+  trading_kr_swing_state:
+    external: true
+    name: ochestration_trading_kr_swing_state
+  trading_us_swing_state:
+    external: true
+    name: ochestration_trading_us_swing_state
+  trading_momentum_rotation_state:
+    external: true
+    name: ochestration_trading_momentum_rotation_state
+  trading_kr_rotation_state:
+    external: true
+    name: ochestration_trading_kr_rotation_state
+  trading_us_rotation_state:
+    external: true
+    name: ochestration_trading_us_rotation_state
+  trading_trx_swing_state:
+    external: true
+    name: ochestration_trading_trx_swing_state
+  trading_tick_state:
+    external: true
+    name: ochestration_trading_tick_state
+  trading_crypto_tick_state:
+    external: true
+    name: ochestration_trading_crypto_tick_state
