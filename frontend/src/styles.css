@@ -344,8 +344,9 @@
 .linklike { background:transparent; color:#7167bd; font-size:12px; text-decoration:underline; padding:0; }
 
 /* ── 앱 셸: 상단바 ──────────────────────────────────────────── */
+:root { --topbar-h: 56px; }
 .app-shell { min-height:100dvh; display:flex; flex-direction:column; background:#f4f4f7; }
-.app-topbar { flex:0 0 auto; display:flex; align-items:center; gap:20px; padding:0 22px; height:56px; background:#fff; border-bottom:1px solid #e6e5ec; position:sticky; top:0; z-index:20; }
+.app-topbar { flex:0 0 auto; display:flex; align-items:center; gap:20px; padding:0 22px; height:var(--topbar-h); background:#fff; border-bottom:1px solid #e6e5ec; position:sticky; top:0; z-index:20; }
 .topbar-logo { display:flex; align-items:center; gap:8px; color:#4e4763; font-weight:800; font-size:14px; text-decoration:none; white-space:nowrap; }
 .topbar-nav { display:flex; align-items:center; gap:2px; flex:1; overflow-x:auto; scrollbar-width:none; }
 .topbar-nav::-webkit-scrollbar { display:none; }
@@ -360,8 +361,36 @@
 .update-banner { padding:7px 11px; border-radius:9px; background:#fff2e0; border:1px solid #eec48a; color:#8a5a10; font-size:11px; font-weight:800; white-space:nowrap; }
 .app-main { flex:1; min-height:0; overflow-y:auto; }
 
-/* ── 페이지 컨테이너 (뷰포트 너비에 유동적으로 채움) ─────────── */
-.page { width:100%; max-width:none; margin:0; padding:24px clamp(16px, 5vw, 112px) 96px; display:flex; flex-direction:column; gap:24px; }
+/* ── 페이지 컨테이너 ────────────────────────────────────────────
+   화면이 커지면 폭을 넓히되(유동), 가독성 한계에서 멈추고 가운데 정렬. */
+.page { width:100%; max-width:1400px; margin-inline:auto; padding:22px clamp(16px, 3vw, 44px) 56px;
+        display:flex; flex-direction:column; gap:20px; }
+/* 투자 대시보드는 표·차트가 많아 조금 더 넓게 허용 */
+.page.invest-page { max-width:1580px; }
+
+/* ── 단일 패널 카테고리 페이지: 뷰포트에 맞추고 내부만 스크롤 ──── */
+.page.calendar-page, .page.diag-page, .page.debate-page, .page.llm-page,
+.page.invest-page, .page.admin-page {
+  height: calc(100dvh - var(--topbar-h));
+  padding-bottom: 20px;
+  overflow: hidden;
+}
+.page.calendar-page > .panel-embedded, .page.admin-page > .panel-embedded {
+  flex: 1 1 auto; min-height: 0 !important;
+  overflow-y: auto !important; overflow-x: hidden;
+}
+/* 투자 탭: 개별 대시보드는 .trading-dashboard-embedded 로 감싸이고 이미 내부 스크롤 설계됨 */
+.page.invest-page > .trading-dashboard-embedded { flex: 1 1 auto; min-height: 0; }
+.page.invest-page > .notes-header, .page.admin-page > .notes-header { flex: 0 0 auto; }
+/* 내부에 자체 스크롤 영역(explorer-body 등)을 가진 패널(진단·토론)은 스스로 넘치지 않게 hidden */
+.page.diag-page > .panel-embedded.file-explorer,
+.page.debate-page > .panel-embedded.file-explorer {
+  flex: 1 1 auto; min-height: 0 !important; overflow: hidden !important;
+}
+.page.llm-page > .panel-embedded.dolphin-modal {
+  flex: 1 1 auto; min-height: 0 !important; height: 100% !important; overflow: hidden !important;
+}
+.page.llm-page .dolphin-embedded { height: 100% !important; }
 .notes-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
 .notes-header h2 { margin:0; font-size:20px; color:#3f3b4a; }
 .notes-actions { display:flex; flex-wrap:wrap; gap:8px; }
@@ -383,23 +412,44 @@
 .panel-embedded.dolphin-modal, .dolphin-embedded { width:100% !important; height:min(72dvh, 780px) !important; border:1px solid #ece9f0 !important; border-radius:16px !important; overflow:hidden !important; }
 
 /* ── 대시보드 본문 (오피스 애니메이션 뷰 폐기 후 정적 배치) ──── */
-.dashboard-page .office-dashboard { position:static; inset:auto; padding:0; height:auto; overflow:visible; gap:16px; }
-@media (max-width:900px) { .dashboard-page .office-dashboard { flex-direction:column; } }
-.dashboard-page .dashboard-chat { flex:0 0 336px; height:min(70dvh, 720px); }
+.dashboard-page .office-dashboard { position:static; inset:auto; padding:0; height:min(64dvh, 680px); overflow:visible; gap:16px; }
+@media (max-width:900px) { .dashboard-page .office-dashboard { flex-direction:column; height:auto; } }
+.dashboard-page .dashboard-chat { flex:0 0 336px; min-height:0; height:auto; }
 @media (max-width:900px) { .dashboard-page .dashboard-chat { flex:none; width:100%; height:460px; } }
-.dashboard-page .dashboard-main { flex:1; min-width:0; }
+.dashboard-page .dashboard-main { flex:1; min-width:0; min-height:0; }
 
-.notes-page .agent-sheet { position:fixed; right:0; top:56px; bottom:0; z-index:30; }
+/* 대시보드·노트: 각 블록은 화면 일부만 차지하고 내부 스크롤 → 페이지 스크롤 최소화 */
+.dashboard-page .dashboard-panel-section, .dashboard-page .progress-section,
+.notes-page .dashboard-panel-section, .notes-page .progress-section, .notes-page .notes-agent-roster {
+  max-height: min(560px, 72dvh); overflow-y: auto;
+}
+.notes-page > .panel-embedded.file-explorer, .notes-page > .panel-embedded.graph-view {
+  height: min(60dvh, 620px); min-height: 0 !important; overflow: hidden !important;
+}
+
+.notes-page .agent-sheet { position:fixed; right:0; top:var(--topbar-h); bottom:0; z-index:30; }
 .public-shell:has(.login-page) .public-header { display:none; }
 
-/* ── 태블릿: 넓은 여백 회수 ─────────────────────────────────── */
-@media (max-width:1100px) {
-  .page { padding:22px clamp(16px, 4vw, 40px) 88px; }
+/* ── 좁은 화면: 뷰포트 고정 레이아웃 해제(세로 스크롤 허용) ──── */
+@media (max-width:900px) {
+  .page.calendar-page, .page.diag-page, .page.debate-page, .page.llm-page,
+  .page.invest-page, .page.admin-page { height:auto; min-height:calc(100dvh - var(--topbar-h)); overflow:visible; }
+  .page.calendar-page > .panel-embedded, .page.diag-page > .panel-embedded,
+  .page.debate-page > .panel-embedded, .page.llm-page > .panel-embedded,
+  .page.admin-page > .panel-embedded {
+    overflow: visible !important;
+  }
+  .page.diag-page > .panel-embedded.file-explorer,
+  .page.debate-page > .panel-embedded.file-explorer { min-height:600px !important; overflow:hidden !important; }
+  .page.llm-page > .panel-embedded.dolphin-modal, .page.llm-page .dolphin-embedded { height:min(72dvh,680px) !important; overflow:hidden !important; }
+  .dashboard-page .dashboard-panel-section, .dashboard-page .progress-section,
+  .notes-page .dashboard-panel-section, .notes-page .progress-section, .notes-page .notes-agent-roster { max-height:none; overflow:visible; }
 }
 
 /* ── 모바일 (≤640px): 전용 레이아웃 ────────────────────────── */
 @media (max-width:640px) {
-  .app-topbar { gap:10px; padding:0 12px; height:52px; }
+  :root { --topbar-h: 52px; }
+  .app-topbar { gap:10px; padding:0 12px; }
   .topbar-logo span { display:none; }
   .topbar-nav { gap:0; }
   .topbar-nav a { padding:7px 9px; font-size:12.5px; }
@@ -407,6 +457,7 @@
   .update-banner { font-size:10px; padding:6px 8px; }
 
   .page { padding:16px 14px 72px; gap:16px; }
+  .notes-page > .panel-embedded.file-explorer, .notes-page > .panel-embedded.graph-view { height:auto; overflow:visible !important; }
   .notes-header { gap:8px; }
   .notes-header h2 { font-size:17px; }
   .notes-actions { width:100%; }
