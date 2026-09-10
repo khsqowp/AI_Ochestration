@@ -8,6 +8,7 @@ import { TodoFloating } from '../components/Todo'
 const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean }[] = [
   { to: '/dashboard', label: '대시보드', end: true },
   { to: '/dashboard/notes', label: '노트 생성' },
+  { to: '/dashboard/order', label: '주문', adminOnly: true },
   { to: '/dashboard/invest', label: '투자', adminOnly: true },
   { to: '/dashboard/calendar', label: '캘린더' },
   { to: '/dashboard/diag', label: '진단' },

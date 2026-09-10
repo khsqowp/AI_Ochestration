@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Bot } from 'lucide-react'
 import { LandingShader } from './LandingShader'
 import { LandingWeather } from './LandingWeather'
@@ -28,7 +28,10 @@ export function LandingPage() {
     <LandingShader/>
     <div className="landing-veil" aria-hidden="true"/>
     <div className="landing-ui">
-      <div className="landing-mark"><Bot size={18}/> <span>Orchestration Lab</span></div>
+      <div className="landing-mark">
+        <Bot size={18}/> <span>Orchestration Lab</span>
+        <Link to="/order" className="landing-order-link">ORDER</Link>
+      </div>
       <div className="landing-foot">
         <div className="landing-clock">
           <time className="landing-time">{time}</time>

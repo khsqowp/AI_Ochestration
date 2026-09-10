@@ -549,3 +549,59 @@
 
   .markdown-document { font-size:13px; }
 }
+
+/* ══ 주문 (공개 ORDER 페이지 + 대시보드 주문판) ═══════════════════════════ */
+.landing-order-link { pointer-events:auto; margin-left:14px; padding:3px 9px; border-radius:6px;
+  border:1px solid rgba(157,141,255,.38); color:rgba(233,230,245,.78); font-size:11px;
+  font-weight:700; letter-spacing:.16em; text-decoration:none; transition:background .15s, border-color .15s; }
+.landing-order-link:hover { background:rgba(118,103,220,.18); border-color:rgba(157,141,255,.7); color:#fff; }
+
+.order-page { max-width:1100px; margin:0 auto; padding:32px 24px 64px; display:flex; flex-direction:column; gap:20px; }
+.order-head h1 { margin:12px 0 6px; font-size:26px; }
+.order-back { display:inline-flex; align-items:center; gap:8px; color:#7667dc; font-weight:700; font-size:13px; text-decoration:none; }
+.order-intro { color:#7a7686; font-size:13px; max-width:60ch; }
+.order-ident { display:flex; flex-wrap:wrap; align-items:flex-end; gap:14px; }
+.order-ident label { display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:#5b5470; }
+.order-ident input { padding:9px 11px; border:1px solid #ddd9e6; border-radius:9px; font-size:14px; min-width:180px; }
+.order-ident input[inputmode="numeric"] { min-width:110px; letter-spacing:.3em; font-variant-numeric:tabular-nums; }
+.order-btn { padding:9px 18px; border:0; border-radius:9px; background:#7667dc; color:#fff; font-weight:700; font-size:13px; cursor:pointer; }
+.order-btn:disabled { opacity:.45; cursor:not-allowed; }
+.order-btn.ghost { background:#f1eefb; color:#5b4fc4; display:inline-flex; align-items:center; gap:6px; }
+.order-msg { font-size:13px; font-weight:600; margin:0; }
+.order-msg.ok { color:#2f9e5e; }
+.order-msg.err { color:#d0473f; }
+
+.order-grid-wrap, .ob-grid-wrap { overflow-x:auto; border:1px solid #ece9f0; border-radius:12px; }
+.order-grid, .ob-grid { width:100%; border-collapse:collapse; font-size:13px; }
+.order-grid th, .ob-grid th { background:#f7f5fb; text-align:left; padding:10px 12px; font-size:11px; font-weight:700;
+  color:#6b6577; letter-spacing:.02em; border-bottom:1px solid #ece9f0; white-space:nowrap; }
+.order-grid td, .ob-grid td { padding:6px 10px; border-bottom:1px solid #f2f0f6; vertical-align:middle; }
+.order-grid tr:last-child td, .ob-grid tr:last-child td { border-bottom:0; }
+.order-num, .ob-num { color:#a6a1b3; font-variant-numeric:tabular-nums; width:34px; text-align:center; }
+.order-grid input, .order-grid select { width:100%; padding:7px 9px; border:1px solid #e3dfec; border-radius:7px; font-size:13px; background:#fff; }
+.order-grid input:disabled, .order-grid select:disabled { background:#f4f2f8; color:#aaa4b6; }
+.order-grid .order-qty { width:64px; text-align:center; }
+.order-row-del { border:0; background:none; color:#c3bdd0; cursor:pointer; padding:4px; }
+.order-row-del:hover { color:#d0473f; }
+.order-actions { display:flex; gap:10px; }
+
+.order-board-page { padding:20px 24px 48px; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
+.ob-head { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.ob-head h2 { margin:0; }
+.ob-me { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:#5b5470; }
+.ob-me select { padding:7px 10px; border:1px solid #ddd9e6; border-radius:8px; font-size:13px; }
+.ob-note { color:#8a8695; font-size:13px; }
+.ob-section { display:flex; flex-direction:column; gap:10px; }
+.ob-label { margin:0; font-size:12px; font-weight:800; letter-spacing:.04em; color:#7667dc; text-transform:uppercase; }
+.ob-table { display:flex; flex-direction:column; gap:6px; }
+.ob-table h3 { margin:0; font-size:15px; }
+.ob-table h3 small { color:#a6a1b3; font-weight:600; margin-left:6px; }
+.ob-grid .ob-check { text-align:center; width:52px; }
+.ob-grid input[type="checkbox"] { width:17px; height:17px; accent-color:#7667dc; cursor:pointer; }
+.ob-done { text-decoration:line-through; color:#a6a1b3; }
+.ob-empty { color:#cfcad9; }
+
+@media (max-width:640px) {
+  .order-page { padding:20px 14px 48px; }
+  .order-ident input { min-width:0; flex:1; }
+}

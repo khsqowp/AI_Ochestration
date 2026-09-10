@@ -1,4 +1,17 @@
 export type Role = 'ADMIN' | 'USER'
+export type OrderUnit = 'EA' | 'BOX'
+export type OrderItem = {
+  id?: string
+  product: string
+  qty: number
+  unit: OrderUnit
+  altProduct: string
+  altQty: number
+  altUnit: OrderUnit
+  boughtPrimary?: boolean
+  boughtAlt?: boolean
+}
+export type PersonOrders = { personName: string; pin: string; items: OrderItem[] }
 export type User = { displayName: string; email: string; role: Role }
 export type Session = { authenticationEnabled: boolean; user: User | null }
 export type Agent = { id: string; name: string; role: string; color: string; left: string; top: string; status: string; message: string }

@@ -71,6 +71,11 @@ class SecurityConfig {
         // 개인 할 일 목록 — 계정별로 스코프되어 있어 USER+ADMIN 모두 자신의 항목을 읽고 쓸 수 있어야 함
         .requestMatchers("/api/todos/**").authenticated()
 
+        // 음료 주문 — 공개 주문 페이지는 계정 없이 이름+PIN 으로 본인 주문만 조회/작성
+        .requestMatchers("/api/orders/mine").permitAll()
+        // 대시보드 주문판(전체 조회·구매 체크)은 ADMIN 전용
+        .requestMatchers("/api/orders/**").hasRole("ADMIN")
+
         // 로컬 LLM · AI 토론 — 인증된 USER 도 사용 (2026-09 재편: 별도 카테고리 페이지로 승격)
         .requestMatchers("/api/dolphin/**").authenticated()
         .requestMatchers("/api/debate/**").authenticated()

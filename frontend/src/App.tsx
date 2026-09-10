@@ -7,6 +7,7 @@ import { RequireAuth } from './routes/RequireAuth'
 import { RequireAdmin } from './routes/RequireAdmin'
 import { LandingPage } from './pages/public/LandingPage'
 import { LoginPage } from './pages/public/LoginPage'
+import { OrderPage } from './pages/public/OrderPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotesPage } from './pages/NotesPage'
 import { CalendarPage } from './pages/CalendarPage'
@@ -16,6 +17,7 @@ const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then(m => (
 const LocalLlmPage = lazy(() => import('./pages/LocalLlmPage').then(m => ({ default: m.LocalLlmPage })))
 const InvestPage = lazy(() => import('./pages/InvestPage').then(m => ({ default: m.InvestPage })))
 const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
+const OrderBoardPage = lazy(() => import('./pages/OrderBoardPage').then(m => ({ default: m.OrderBoardPage })))
 
 export function App() {
   return <BrowserRouter>
@@ -25,6 +27,7 @@ export function App() {
           <Route element={<PublicShell/>}>
             <Route path="/" element={<LandingPage/>}/>
             <Route path="/login" element={<LoginPage/>}/>
+            <Route path="/order" element={<OrderPage/>}/>
           </Route>
           <Route path="/dashboard" element={<RequireAuth/>}>
             <Route element={<AppShell/>}>
@@ -35,6 +38,7 @@ export function App() {
               <Route path="debate" element={<DebatePage/>}/>
               <Route path="llm" element={<LocalLlmPage/>}/>
               <Route element={<RequireAdmin/>}>
+                <Route path="order" element={<OrderBoardPage/>}/>
                 <Route path="invest/*" element={<InvestPage/>}/>
                 <Route path="admin/*" element={<AdminPage/>}/>
               </Route>
