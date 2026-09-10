@@ -1,7 +1,9 @@
 package com.orchestration.orders;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,18 +35,25 @@ public class ProductOrderService {
       repository.deleteAll(existing);
       return List.of();
     }
+
+    // Match by id so a bought row keeps its bought flags even if row order shifts.
+    Map<UUID, ProductOrderItem> byId = new LinkedHashMap<>();
+    for (ProductOrderItem row : existing) byId.put(row.getId(), row);
+
     List<ProductOrderItem> result = new ArrayList<>();
     for (int i = 0; i < items.size(); i++) {
       ItemInput in = items.get(i);
-      ProductOrderItem row = i < existing.size() ? existing.get(i) : new ProductOrderItem(name, code, i);
+      ProductOrderItem row = null;
+      if (in.id() != null && !in.id().isBlank()) {
+        try { row = byId.remove(UUID.fromString(in.id())); } catch (IllegalArgumentException ignored) { /* new row */ }
+      }
+      if (row == null) row = new ProductOrderItem(name, code, i);
       row.setPosition(i);
       row.apply(reqText(in.product(), "제품", 80), clampQty(in.qty()), unit(in.unit()),
           optText(in.altProduct(), 80), in.altQty() == null ? null : clampQty(in.altQty()), unit(in.altUnit()));
       result.add(repository.save(row));
     }
-    if (existing.size() > items.size()) {
-      repository.deleteAll(existing.subList(items.size(), existing.size()));
-    }
+    if (!byId.isEmpty()) repository.deleteAll(byId.values());
     return result;
   }
 
@@ -94,5 +103,5 @@ public class ProductOrderService {
     return UNITS.contains(v) ? v : "EA";
   }
 
-  public record ItemInput(String product, Integer qty, String unit, String altProduct, Integer altQty, String altUnit) {}
+  public record ItemInput(String id, String product, Integer qty, String unit, String altProduct, Integer altQty, String altUnit) {}
 }

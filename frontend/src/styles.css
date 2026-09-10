@@ -581,6 +581,10 @@
 .order-grid input, .order-grid select { width:100%; padding:7px 9px; border:1px solid #e3dfec; border-radius:7px; font-size:13px; background:#fff; }
 .order-grid input:disabled, .order-grid select:disabled { background:#f4f2f8; color:#aaa4b6; }
 .order-grid .order-qty { width:64px; text-align:center; }
+.order-grid td.og-bought { background:#2a2733; border-color:#3a3646; color:#c9c4d4; font-size:13px; }
+.order-grid td.og-bought .og-val { text-decoration:line-through; color:#9a94a8; }
+.og-badge { display:inline-block; margin-left:8px; padding:2px 7px; border-radius:5px;
+  background:#7667dc; color:#fff; font-size:10px; font-weight:800; letter-spacing:.05em; vertical-align:middle; }
 .order-row-del { border:0; background:none; color:#c3bdd0; cursor:pointer; padding:4px; }
 .order-row-del:hover { color:#d0473f; }
 .order-actions { display:flex; gap:10px; }
