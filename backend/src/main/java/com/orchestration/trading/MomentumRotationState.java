@@ -52,6 +52,8 @@ public record MomentumRotationState(
       @JsonAlias("hwm_usdt") double hwmUsdt,
       double leverage,
       boolean halted,
+      @JsonAlias("manual_flat") boolean manualFlat,
+      @JsonAlias("manual_flat_ts") String manualFlatTs,
       Map<String, Position> positions) {}
 
   public record LogEntry(String ts, String message) {}

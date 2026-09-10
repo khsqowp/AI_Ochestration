@@ -53,6 +53,7 @@ services:
       TRX_TRADING_STATE_PATH: /workspace/trading-state-trx/trx_swing_state.json
       KR_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-kr-rotation/stock_rotation_state.json
       US_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-us-rotation/stock_rotation_state.json
+      TRADING_CONTROL_PATH: /workspace/trading-control/control.json
       DOLPHIN_CHAT_URL: ${DOLPHIN_CHAT_URL:-http://host.docker.internal:7777}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -71,6 +72,7 @@ services:
       - trading_trx_swing_state:/workspace/trading-state-trx:ro
       - trading_kr_rotation_state:/workspace/trading-state-kr-rotation:ro
       - trading_us_rotation_state:/workspace/trading-state-us-rotation:ro
+      - trading_control:/workspace/trading-control
     networks: [private, app]
     restart: unless-stopped
 
@@ -151,6 +153,10 @@ volumes:
   trading_crypto_tick_state:
     external: true
     name: ochestration_trading_crypto_tick_state
+  # 수동 제어 채널 — api 가 여기 control.json 에 쓰고, 로테이션 봇이 읽는다 (api 는 rw).
+  trading_control:
+    external: true
+    name: ochestration_trading_control
 
 networks:
   private:

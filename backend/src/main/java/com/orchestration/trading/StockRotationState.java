@@ -40,7 +40,10 @@ public record StockRotationState(
       @JsonAlias("positions_entry") double positionsEntry,
       @JsonAlias("positions_unrealized_pnl") double positionsUnrealizedPnl,
       @JsonAlias("account_cash_krw") double accountCashKrw,
-      @JsonAlias("account_total_krw") double accountTotalKrw) {}
+      @JsonAlias("account_total_krw") double accountTotalKrw,
+      @JsonAlias("manual_flat") boolean manualFlat,
+      @JsonAlias("manual_flat_pending") boolean manualFlatPending,
+      @JsonAlias("manual_flat_ts") String manualFlatTs) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record Position(

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Globe2, Landmark, TrendingUp, X } from 'lucide-react'
 import type {
   ChartPoint, MomentumRotationPosition, MomentumRotationState, PaperTradingTab,
@@ -152,6 +152,69 @@ function RebalanceCountdown({ target }: { target: string | null | undefined }) {
   const s = Math.floor((ms % 60000) / 1000)
   const cs = Math.floor((ms % 1000) / 10)
   return <b className="countdown">{d}:{p2(h)}:{p2(m)}:{p2(s)}:{p2(cs)}</b>
+}
+
+/** 즉시 매도 / 즉시 진입 — 로테이션 봇 수동 제어. flat 이면 진입 버튼, 아니면 청산 버튼(2단계 확인). */
+function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatTs, nextRebalanceTs, onDone }: {
+  bot: 'momentum-rotation' | 'kr-rotation' | 'us-rotation'
+  live?: boolean
+  manualFlat?: boolean
+  manualFlatPending?: boolean
+  manualFlatTs?: string | null
+  nextRebalanceTs?: string | null
+  onDone: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const send = async (cmd: 'flatten' | 'enter') => {
+    setBusy(true); setError('')
+    try {
+      const res = await fetch(`/api/trading/${bot}/${cmd}`, { method: 'POST', credentials: 'include' })
+      if (!res.ok) { setError(cmd === 'flatten' ? '청산 명령 전송 실패' : '진입 명령 전송 실패'); return }
+      setConfirming(false)
+      window.setTimeout(onDone, 1500)
+    } catch {
+      setError('네트워크 오류')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const fmt = (v: string) => new Date(v).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  if (manualFlat) {
+    return <div className="bot-control bot-control-flat">
+      <div>
+        <b>수동 정지됨 (전량 청산)</b>
+        <small>
+          {manualFlatPending ? '장 마감 중 — 다음 개장 시 매도 체결. ' : ''}
+          {manualFlatTs ? `${fmt(manualFlatTs)} 청산. ` : ''}
+          진입 버튼을 누르거나{nextRebalanceTs ? ' 다음 정기 리밸런스 시각' : ' 다음 리밸런스'}에 자동 재진입합니다.
+        </small>
+      </div>
+      <button className="source-add" disabled={busy} onClick={() => send('enter')}>{busy ? '전송 중…' : '지금 진입'}</button>
+      {error && <p className="form-error">{error}</p>}
+    </div>
+  }
+
+  return <div className="bot-control">
+    {confirming ? <>
+      <div>
+        <b>{live ? '실계좌 전량 청산 — 되돌릴 수 없습니다.' : '전량 청산하시겠습니까?'}</b>
+        <small>모든 롱/숏 포지션을 시장가로 청산하고 자동 재진입을 정지합니다. {live ? `봇이 다음 폴링(5초 내)에 실행합니다.` : '개장 중이면 이번 사이클, 장외면 개장 시 체결됩니다.'}</small>
+      </div>
+      <div className="bot-control-actions">
+        <button className="source-cancel" disabled={busy} onClick={() => setConfirming(false)}>취소</button>
+        <button className="source-add danger" disabled={busy} onClick={() => send('flatten')}>{busy ? '전송 중…' : '청산 확인'}</button>
+      </div>
+    </> : <>
+      <div><small>고점이라 판단되면 즉시 전량 청산하고 정지할 수 있습니다. 재진입은 진입 버튼 또는 다음 정기 리밸런스.</small></div>
+      <button className="source-cancel" onClick={() => setConfirming(true)}>즉시 매도</button>
+    </>}
+    {error && <p className="form-error">{error}</p>}
+  </div>
 }
 
 function PeriodTabs({ period, onChange, historyDays }: { period: TradingPeriod; onChange: (value: TradingPeriod) => void; historyDays?: number }) {
@@ -322,12 +385,14 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
   const cfg = ROTATION_MARKETS[market]
   const [data, setData] = useState<StockRotationState | null>(null)
   const [period, setPeriod] = useState<TradingPeriod>('week')
+  const load = useCallback(() => {
+    if (!document.hidden) fetch(cfg.endpoint, { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData)
+  }, [cfg.endpoint])
   useEffect(() => {
-    const load = () => { if (!document.hidden) fetch(cfg.endpoint, { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
     const timer = window.setInterval(load, 30000)
     return () => window.clearInterval(timer)
-  }, [cfg.endpoint])
+  }, [load])
   const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const name = (symbol: string) => { const n = data?.symbolNames?.[symbol]; return n && market === 'kr' ? `${n} (${symbol})` : symbol }
   const brokerPositions = Object.entries(data?.broker?.positions ?? {})
@@ -357,6 +422,9 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
       <p>마지막 리밸런스일: {data?.lastRebalanceDate ?? '아직 없음'} · 최근 계획일: {data?.lastPlanDate ?? '없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {data?.broker && market === 'us' && <p className="usage-note">계좌 KRW 예수금(국장·미장 공용) {Math.round(data.broker.accountCashKrw).toLocaleString()}원 · 계좌 총평가 {Math.round(data.broker.accountTotalKrw).toLocaleString()}원</p>}
     </div>
+    {data && <BotControlPanel bot={market === 'kr' ? 'kr-rotation' : 'us-rotation'}
+      manualFlat={data.broker?.manualFlat} manualFlatPending={data.broker?.manualFlatPending}
+      manualFlatTs={data.broker?.manualFlatTs} onDone={load}/>}
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">
@@ -410,12 +478,14 @@ export function UsTradingDashboard(props: { onClose?: () => void; embedded?: boo
 export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const [data, setData] = useState<MomentumRotationState | null>(null)
   const [period, setPeriod] = useState<TradingPeriod>('week')
+  const load = useCallback(() => {
+    if (!document.hidden) fetch('/api/trading/momentum-rotation/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData)
+  }, [])
   useEffect(() => {
-    const load = () => { if (!document.hidden) fetch('/api/trading/momentum-rotation/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData) }
     load()
     const timer = window.setInterval(load, 30000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [load])
   const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const live = data?.mode === 'live'
   const positions = Object.entries(data?.broker?.positions ?? data?.positions ?? {})
@@ -448,6 +518,9 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (디레버 20% / 킬 35%)</p>}
     </div>
+    {data && !data.halted && <BotControlPanel bot="momentum-rotation" live={live}
+      manualFlat={data.broker?.manualFlat} manualFlatTs={data.broker?.manualFlatTs}
+      nextRebalanceTs={data.nextRebalanceTs} onDone={load}/>}
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">

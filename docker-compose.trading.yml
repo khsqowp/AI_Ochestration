@@ -88,6 +88,7 @@ services:
       ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
     volumes:
       - trading_kr_rotation_state:/app/data
+      - trading_control:/app/control
       - ./.kis-cache:/app/cache
     networks: [trading]
     profiles: ["kr-rotation"]
@@ -109,6 +110,7 @@ services:
       ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
     volumes:
       - trading_us_rotation_state:/app/data
+      - trading_control:/app/control
       - ./.kis-cache:/app/cache
     networks: [trading]
     profiles: ["us-rotation"]
@@ -147,6 +149,7 @@ services:
       MOMENTUM_ROTATION_KILL_DD: "0.35"
     volumes:
       - trading_momentum_rotation_state:/app/data
+      - trading_control:/app/control
       - trading_crypto_tick_state:/app/crypto-tick-state:ro
     networks: [trading]
     profiles: ["momentum-rotation"]
@@ -212,3 +215,7 @@ volumes:
   trading_crypto_tick_state:
     external: true
     name: ochestration_trading_crypto_tick_state
+  # 수동 제어 채널 (api rw ↔ 로테이션 봇 rw). control.json 한 파일.
+  trading_control:
+    external: true
+    name: ochestration_trading_control
