@@ -361,38 +361,37 @@
 .update-banner { padding:7px 11px; border-radius:9px; background:#fff2e0; border:1px solid #eec48a; color:#8a5a10; font-size:11px; font-weight:800; white-space:nowrap; }
 .app-main { flex:1; min-height:0; overflow-y:auto; }
 
-/* ── 페이지 컨테이너 ────────────────────────────────────────────
-   화면이 커지면 폭을 넓히되(유동), 가독성 한계에서 멈추고 가운데 정렬. */
-.page { width:100%; max-width:1400px; margin-inline:auto; padding:22px clamp(16px, 3vw, 44px) 56px;
-        display:flex; flex-direction:column; gap:20px; }
-/* 투자 대시보드는 표·차트가 많아 조금 더 넓게 허용 */
-.page.invest-page { max-width:1580px; }
+/* ── 페이지 컨테이너 ──────────────────────────────────────────── */
+.page { width:100%; margin-inline:auto; padding:18px clamp(14px, 2.2vw, 34px) 22px;
+        display:flex; flex-direction:column; gap:16px; }
+/* 텍스트 위주 단일 패널은 읽기 좋은 폭으로 제한 */
+.page.debate-page { max-width:1180px; }
+.page.calendar-page, .page.diag-page { max-width:1440px; }
 
-/* ── 단일 패널 카테고리 페이지: 뷰포트에 맞추고 내부만 스크롤 ──── */
+/* ── 뷰포트 높이에 고정 — 스크롤은 각 구역 내부에서만 ─────────── */
+.page.dashboard-page, .page.notes-page,
 .page.calendar-page, .page.diag-page, .page.debate-page, .page.llm-page,
 .page.invest-page, .page.admin-page {
   height: calc(100dvh - var(--topbar-h));
-  padding-bottom: 20px;
   overflow: hidden;
 }
+.page.invest-page > .notes-header, .page.admin-page > .notes-header,
+.page.notes-page > .notes-header { flex: 0 0 auto; }
+
+/* 단일 패널 페이지: 패널이 남은 높이를 채우고 내부 스크롤 */
 .page.calendar-page > .panel-embedded, .page.admin-page > .panel-embedded {
-  flex: 1 1 auto; min-height: 0 !important;
-  overflow-y: auto !important; overflow-x: hidden;
+  flex: 1 1 auto; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden;
 }
-/* 투자 탭: 개별 대시보드는 .trading-dashboard-embedded 로 감싸이고 이미 내부 스크롤 설계됨 */
 .page.invest-page > .trading-dashboard-embedded { flex: 1 1 auto; min-height: 0; }
-.page.invest-page > .notes-header, .page.admin-page > .notes-header { flex: 0 0 auto; }
-/* 내부에 자체 스크롤 영역(explorer-body 등)을 가진 패널(진단·토론)은 스스로 넘치지 않게 hidden */
 .page.diag-page > .panel-embedded.file-explorer,
-.page.debate-page > .panel-embedded.file-explorer {
-  flex: 1 1 auto; min-height: 0 !important; overflow: hidden !important;
-}
+.page.debate-page > .panel-embedded.file-explorer,
 .page.llm-page > .panel-embedded.dolphin-modal {
-  flex: 1 1 auto; min-height: 0 !important; height: 100% !important; overflow: hidden !important;
+  flex: 1 1 auto; min-height: 0 !important; height: auto !important; overflow: hidden !important;
 }
 .page.llm-page .dolphin-embedded { height: 100% !important; }
+
 .notes-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
-.notes-header h2 { margin:0; font-size:20px; color:#3f3b4a; }
+.notes-header h2 { margin:0; font-size:19px; color:#3f3b4a; }
 .notes-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .notes-actions .source-add, .notes-actions .source-cancel { width:auto; padding:9px 12px; font-size:12px; }
 .invest-tabs { display:flex; flex-wrap:wrap; gap:6px; }
@@ -400,9 +399,38 @@
 .invest-tabs a small { font-size:9.5px; color:#9a96a1; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
 .invest-tabs a.active { background:#eeecfc; color:#4e43a5; }
 .invest-tabs a.active small { color:#8478c8; }
-.dashboard-panel-section, .progress-section, .notes-agent-roster { background:#fff; border:1px solid #ece9f0; border-radius:16px; padding:20px; }
+
+/* ── 구역(zone) 레이아웃 — 대시보드 / 노트 생성 ───────────────── */
+/* 대시보드: 위 오피스(고정 높이) + 아래 패널 행(남은 높이, auto-fit 열, 각자 스크롤) */
+.dashboard-page { display:grid; grid-template-rows: clamp(320px, 48dvh, 540px) minmax(0, 1fr); gap:16px; }
+.zone-row { min-height:0; display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px; }
+/* 노트: 왼쪽 탐색기(큰 카드) + 오른쪽 레일(스크롤) */
+.notes-grid { flex:1 1 auto; min-height:0; display:grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap:16px; }
+
+.zone { min-height:0; min-width:0; }
+.zone-col { min-height:0; min-width:0; display:flex; flex-direction:column; gap:16px; overflow-y:auto; padding-right:3px; }
+.zone-col > * { flex:0 0 auto; }
+.zone-scroll { overflow-y:auto; overflow-x:hidden; }
+.zone-panel { background:#fff; border:1px solid #ece9f0; border-radius:16px; padding:18px; }
+.zone-panel > .panel-embedded { overflow:visible !important; }
+/* 자체 카드 스타일을 가진 하위 컴포넌트는 zone 안에서 중복 카드 제거 */
+.zone .progress-section, .zone .notes-agent-roster, .zone .dashboard-panel-section {
+  background:none; border:0; border-radius:0; padding:0; }
 .progress-section { display:flex; flex-direction:column; gap:16px; }
-.notes-agent-roster h3, .dashboard-panel-section h3 { margin:0 0 12px; font-size:14px; color:#4a4656; }
+.notes-agent-roster h3, .dashboard-panel-section h3, .zone-panel > h3 { margin:0 0 12px; font-size:14px; color:#4a4656; }
+@media (max-width:1200px) { .zone-row { grid-auto-rows:minmax(280px,auto); } }
+
+/* 오피스 대시보드 구역 */
+.zone-office { background:#fff; border:1px solid #ece9f0; border-radius:16px; padding:14px; overflow:hidden; display:flex; }
+.zone-office .office-dashboard { position:static; inset:auto; padding:0; height:100%; width:100%; overflow:hidden; gap:14px; }
+.dashboard-page .dashboard-chat { flex:0 0 320px; min-height:0; height:auto; }
+.dashboard-page .dashboard-main { flex:1; min-width:0; min-height:0; }
+
+/* 노트: 파일 탐색기/그래프 구역 — 왼쪽 전체 높이 카드 */
+.zone-explorer { min-height:0; min-width:0; display:flex; }
+.zone-explorer > .panel-embedded { flex:1 1 auto; min-height:0 !important; height:auto !important; overflow:hidden !important;
+  background:#fff !important; border:1px solid #ece9f0 !important; border-radius:16px !important; padding:18px !important; }
+.zone-explorer .explorer-body, .page.diag-page .explorer-body, .page.debate-page .explorer-body { min-height:0 !important; }
 
 /* ── 패널 임베드: 우측 고정 모달을 페이지 본문 블록으로 ──────── */
 .panel-embedded { position:static !important; inset:auto !important; width:100% !important; max-width:100% !important; height:auto !important; max-height:none !important; margin:0 !important; padding:0 !important; background:transparent !important; box-shadow:none !important; border:none !important; border-radius:0 !important; transform:none !important; animation:none !important; overflow:visible !important; z-index:auto !important; display:block; }
@@ -411,39 +439,32 @@
 .panel-embedded .explorer-body { min-height:420px; }
 .panel-embedded.dolphin-modal, .dolphin-embedded { width:100% !important; height:min(72dvh, 780px) !important; border:1px solid #ece9f0 !important; border-radius:16px !important; overflow:hidden !important; }
 
-/* ── 대시보드 본문 (오피스 애니메이션 뷰 폐기 후 정적 배치) ──── */
-.dashboard-page .office-dashboard { position:static; inset:auto; padding:0; height:min(64dvh, 680px); overflow:visible; gap:16px; }
-@media (max-width:900px) { .dashboard-page .office-dashboard { flex-direction:column; height:auto; } }
-.dashboard-page .dashboard-chat { flex:0 0 336px; min-height:0; height:auto; }
-@media (max-width:900px) { .dashboard-page .dashboard-chat { flex:none; width:100%; height:460px; } }
-.dashboard-page .dashboard-main { flex:1; min-width:0; min-height:0; }
-
-/* 대시보드·노트: 각 블록은 화면 일부만 차지하고 내부 스크롤 → 페이지 스크롤 최소화 */
-.dashboard-page .dashboard-panel-section, .dashboard-page .progress-section,
-.notes-page .dashboard-panel-section, .notes-page .progress-section, .notes-page .notes-agent-roster {
-  max-height: min(560px, 72dvh); overflow-y: auto;
-}
-.notes-page > .panel-embedded.file-explorer, .notes-page > .panel-embedded.graph-view {
-  height: min(60dvh, 620px); min-height: 0 !important; overflow: hidden !important;
-}
-
 .notes-page .agent-sheet { position:fixed; right:0; top:var(--topbar-h); bottom:0; z-index:30; }
 .public-shell:has(.login-page) .public-header { display:none; }
 
-/* ── 좁은 화면: 뷰포트 고정 레이아웃 해제(세로 스크롤 허용) ──── */
-@media (max-width:900px) {
+/* ── 좁은 화면(≤1000px): 구역 그리드 해제, 페이지 세로 스크롤 ── */
+@media (max-width:1000px) {
+  .page.dashboard-page, .page.notes-page,
   .page.calendar-page, .page.diag-page, .page.debate-page, .page.llm-page,
   .page.invest-page, .page.admin-page { height:auto; min-height:calc(100dvh - var(--topbar-h)); overflow:visible; }
+
+  .dashboard-page { display:flex; flex-direction:column; }
+  .zone-row, .notes-grid { display:flex; flex-direction:column; }
+  .zone-col { overflow:visible; }
+  .zone-scroll { overflow:visible; }
+  .zone-office { height:auto; }
+  .zone-office .office-dashboard { flex-direction:column; overflow-y:auto; height:auto; }
+  .zone-office .dashboard-chat { flex:none; width:100%; height:440px; }
+  .zone-office .dashboard-main { flex:none; }
+  .zone-row > .zone-panel { max-height:min(560px, 70dvh); overflow-y:auto; }
+
   .page.calendar-page > .panel-embedded, .page.diag-page > .panel-embedded,
   .page.debate-page > .panel-embedded, .page.llm-page > .panel-embedded,
-  .page.admin-page > .panel-embedded {
-    overflow: visible !important;
-  }
+  .page.admin-page > .panel-embedded { overflow: visible !important; }
   .page.diag-page > .panel-embedded.file-explorer,
-  .page.debate-page > .panel-embedded.file-explorer { min-height:600px !important; overflow:hidden !important; }
+  .page.debate-page > .panel-embedded.file-explorer,
+  .zone-explorer > .panel-embedded { min-height:600px !important; overflow:hidden !important; }
   .page.llm-page > .panel-embedded.dolphin-modal, .page.llm-page .dolphin-embedded { height:min(72dvh,680px) !important; overflow:hidden !important; }
-  .dashboard-page .dashboard-panel-section, .dashboard-page .progress-section,
-  .notes-page .dashboard-panel-section, .notes-page .progress-section, .notes-page .notes-agent-roster { max-height:none; overflow:visible; }
 }
 
 /* ── 모바일 (≤640px): 전용 레이아웃 ────────────────────────── */
@@ -457,7 +478,7 @@
   .update-banner { font-size:10px; padding:6px 8px; }
 
   .page { padding:16px 14px 72px; gap:16px; }
-  .notes-page > .panel-embedded.file-explorer, .notes-page > .panel-embedded.graph-view { height:auto; overflow:visible !important; }
+  .zone-explorer > .panel-embedded { min-height:70dvh !important; }
   .notes-header { gap:8px; }
   .notes-header h2 { font-size:17px; }
   .notes-actions { width:100%; }

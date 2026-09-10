@@ -53,20 +53,22 @@ export function NotesPage() {
       </div>
     </div>
 
-    {view === 'files'
-      ? <FileExplorer embedded onTaskStarted={onTaskStarted} onOpenGraph={() => setView('graph')} initialPath={initialPath} onInitialPathHandled={() => setInitialPath(undefined)}/>
-      : <GraphView embedded onOpenFile={openFileInExplorer}/>}
-
-    <section className="dashboard-panel-section"><ArchivePanel embedded tasks={recentTasks} onOpenExplorer={() => setView('files')} onRetried={loadTasks}/></section>
-
-    {isAdmin && <section className="dashboard-panel-section"><AskArchiveModal embedded/></section>}
-
-    <ProgressSection/>
-    <AgentRoster/>
-
-    <section className="dashboard-panel-section">
-      <h3>노트 프롬프트 빌더</h3>
-      <NotePromptBuilder/>
-    </section>
+    <div className="notes-grid">
+      <section className="zone zone-explorer">
+        {view === 'files'
+          ? <FileExplorer embedded onTaskStarted={onTaskStarted} onOpenGraph={() => setView('graph')} initialPath={initialPath} onInitialPathHandled={() => setInitialPath(undefined)}/>
+          : <GraphView embedded onOpenFile={openFileInExplorer}/>}
+      </section>
+      <div className="zone-col zone-col-side">
+        <section className="zone zone-panel"><ArchivePanel embedded tasks={recentTasks} onOpenExplorer={() => setView('files')} onRetried={loadTasks}/></section>
+        {isAdmin && <section className="zone zone-panel"><AskArchiveModal embedded/></section>}
+        <section className="zone zone-panel"><ProgressSection/></section>
+        <AgentRoster/>
+        <section className="zone zone-panel">
+          <h3>노트 프롬프트 빌더</h3>
+          <NotePromptBuilder/>
+        </section>
+      </div>
+    </div>
   </div>
 }
