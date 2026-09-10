@@ -15,21 +15,30 @@ function OrderTable({ group, onToggle }: { group: PersonOrders; onToggle: (id: s
           <th>없으면 고르는 항목</th><th>수량</th><th className="ob-check">샀음</th>
         </tr></thead>
         <tbody>
-          {group.items.map((it, i) => <tr key={it.id}>
-            <td className="ob-num">{i + 1}</td>
-            <td className={it.boughtPrimary ? 'ob-done' : ''}>{it.product}</td>
-            <td>{it.qty} {unitLabel(it.unit)}</td>
-            <td className="ob-check">
-              <input type="checkbox" checked={!!it.boughtPrimary}
-                onChange={e => onToggle(it.id!, 'boughtPrimary', e.target.checked)}/>
-            </td>
-            <td className={it.boughtAlt ? 'ob-done' : ''}>{it.altProduct || <span className="ob-empty">—</span>}</td>
-            <td>{it.altProduct ? `${it.altQty ?? 1} ${unitLabel(it.altUnit ?? 'EA')}` : ''}</td>
-            <td className="ob-check">
-              {it.altProduct && <input type="checkbox" checked={!!it.boughtAlt}
-                onChange={e => onToggle(it.id!, 'boughtAlt', e.target.checked)}/>}
-            </td>
-          </tr>)}
+          {group.items.map((it, i) => {
+            const hasAlt = !!it.altProduct
+            return <tr key={it.id}>
+              <td className="ob-num">{i + 1}</td>
+              <td className={`ob-item ${it.boughtPrimary ? 'ob-bought' : ''}`}>
+                <span className="ob-item-name">{it.product}</span>
+                {it.boughtPrimary && <span className="ob-badge">구매완료</span>}
+              </td>
+              <td className={it.boughtPrimary ? 'ob-bought' : ''}>{it.qty} {unitLabel(it.unit)}</td>
+              <td className="ob-check">
+                <input type="checkbox" checked={!!it.boughtPrimary}
+                  onChange={e => onToggle(it.id!, 'boughtPrimary', e.target.checked)}/>
+              </td>
+              <td className={`ob-item ${hasAlt && it.boughtAlt ? 'ob-bought' : ''}`}>
+                {hasAlt ? <span className="ob-item-name">{it.altProduct}</span> : <span className="ob-empty">—</span>}
+                {hasAlt && it.boughtAlt && <span className="ob-badge">구매완료</span>}
+              </td>
+              <td className={hasAlt && it.boughtAlt ? 'ob-bought' : ''}>{hasAlt ? `${it.altQty ?? 1} ${unitLabel(it.altUnit ?? 'EA')}` : ''}</td>
+              <td className="ob-check">
+                {hasAlt && <input type="checkbox" checked={!!it.boughtAlt}
+                  onChange={e => onToggle(it.id!, 'boughtAlt', e.target.checked)}/>}
+              </td>
+            </tr>
+          })}
         </tbody>
       </table>
     </div>

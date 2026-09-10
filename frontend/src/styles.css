@@ -598,7 +598,11 @@
 .ob-table h3 small { color:#a6a1b3; font-weight:600; margin-left:6px; }
 .ob-grid .ob-check { text-align:center; width:52px; }
 .ob-grid input[type="checkbox"] { width:17px; height:17px; accent-color:#7667dc; cursor:pointer; }
-.ob-done { text-decoration:line-through; color:#a6a1b3; }
+.ob-item { position:relative; }
+.ob-bought { background:#2a2733; border-color:#3a3646 !important; color:#b7b1c4; }
+.ob-bought .ob-item-name { color:#8f8a9e; text-decoration:line-through; }
+.ob-badge { display:inline-block; margin-left:8px; padding:2px 7px; border-radius:5px;
+  background:#7667dc; color:#fff; font-size:10px; font-weight:800; letter-spacing:.05em; vertical-align:middle; }
 .ob-empty { color:#cfcad9; }
 
 @media (max-width:640px) {
