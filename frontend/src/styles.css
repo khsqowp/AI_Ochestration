@@ -654,3 +654,25 @@
 .ar-path { max-width:260px; overflow:hidden; text-overflow:ellipsis; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .ar-status { text-align:center; color:#8a8695; }
 .ar-session { text-align:center; color:#e0466a; }
+
+/* ══ 스마트 디코더 (진단 › 인코더·디코더) ═════════════════════════════════ */
+.smart-decoder .payload-builder-label small { font-weight:500; color:#948fa0; }
+.dec-verdict { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:10px 0 4px; font-size:12px; }
+.dec-verdict-label { font-weight:800; font-size:10px; letter-spacing:.06em; color:#7667dc; text-transform:uppercase; }
+.dec-chain-badge { background:#efeafd; color:#5b4fc4; border:1px solid #ddd3fb; border-radius:6px; padding:2px 8px; font-weight:700; font-size:11px; }
+.dec-chain-badge:not(:last-child)::after { content:'→'; margin-left:6px; color:#b3a9e0; }
+.dec-hash-badge { background:#eef0f4; color:#4b5563; border:1px solid #e0e3ea; border-radius:6px; padding:2px 8px; font-weight:700; font-size:11px; }
+.dec-hash-badge.weak { background:#fdeceb; color:#c0392b; border-color:#f4cfcb; }
+.dec-hash-note, .dec-verdict-plain { color:#8a8591; font-size:11px; }
+.dec-verdict-plain { font-style:italic; }
+
+.dec-grid-wrap { margin-top:16px; border-top:1px solid #ece9f0; padding-top:12px; }
+.dec-grid-wrap summary { cursor:pointer; font-size:12px; font-weight:700; color:#5b5470; }
+.dec-grid-wrap .payload-builder-input { max-width:none; margin:10px 0; }
+.dec-grid { display:grid; grid-template-columns:1fr; gap:16px; }
+@media (min-width:900px) { .dec-grid { grid-template-columns:1fr 1fr; } }
+.dec-grid-head { margin:0 0 6px; font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:#948fa0; }
+.dec-row { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+.dec-row-name { flex:0 0 120px; font-size:11px; color:#6b6577; font-weight:600; }
+.dec-row-val { flex:1; min-width:0; padding:5px 7px; border:1px solid #e6e2ee; border-radius:6px; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; background:#faf9fc; color:#3f3b47; }
+.dec-row-copy { flex:0 0 auto; display:flex; align-items:center; gap:2px; border:0; background:#f1eefb; color:#5b4fc4; border-radius:5px; padding:5px 6px; font-size:10px; cursor:pointer; }

@@ -7,12 +7,14 @@ import { XssPayloadBuilder } from '../payloads/xss'
 import { SqliPayloadBuilder } from '../payloads/sqli'
 import { SsrfPayloadBuilder } from '../payloads/ssrf'
 import { CsrfPayloadBuilder } from '../payloads/csrf'
+import { SmartDecoderBuilder } from '../payloads/decoder'
 
 const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'xss-payloads': XssPayloadBuilder,
   'sqli-payloads': SqliPayloadBuilder,
   'ssrf-payloads': SsrfPayloadBuilder,
   'csrf-payloads': CsrfPayloadBuilder,
+  'smart-decoder': SmartDecoderBuilder,
 }
 
 export function CheatSheetModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {

@@ -49,6 +49,16 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     ],
   },
   {
+    id: 'decoder',
+    name: '인코더 · 디코더',
+    tools: [
+      {
+        id: 'smart-decoder', name: '스마트 디코더', base: '', options: [],
+        note: '값을 붙여넣으면 인코딩/해시 포맷을 자동 판별해 디코딩하고, 디코딩 결과를 수정하면 원래 포맷으로 즉시 재인코딩합니다.',
+      },
+    ],
+  },
+  {
     id: 'tools',
     name: '펜테스트 도구',
     tools: [
