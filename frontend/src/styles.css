@@ -360,7 +360,8 @@
 .landing.landing-3d .landing-clock { text-align:left; }
 .landing.landing-3d .landing-time { color:#f3f1fb; font-weight:200; text-shadow:0 2px 40px rgba(118,103,220,.4);
   font-size:clamp(52px,12vw,120px); }
-.landing.landing-3d .landing-date { color:rgba(214,210,230,.66); }
+.landing.landing-3d .landing-date { color:rgba(214,210,230,.66);
+  pointer-events:auto; cursor:default; user-select:none; -webkit-user-select:none; }
 
 .landing-weather { display:flex; flex-direction:column; align-items:flex-end; gap:7px;
   text-align:right; font-variant-numeric:tabular-nums; color:rgba(222,218,238,.74); }

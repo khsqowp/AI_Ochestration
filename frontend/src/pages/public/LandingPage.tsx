@@ -1,10 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bot } from 'lucide-react'
 import { LandingShader } from './LandingShader'
 import { LandingWeather } from './LandingWeather'
 
 export function LandingPage() {
+  const navigate = useNavigate()
+  const clicks = useRef({ n: 0, t: 0 })
   const [now, setNow] = useState(() => new Date())
+
+  // 연월일 3연타(각 600ms 이내) → 대시보드. 미인증이면 RequireAuth 가 /login?next= 로.
+  const tapDate = () => {
+    const ts = Date.now()
+    const c = clicks.current
+    c.n = ts - c.t < 600 ? c.n + 1 : 1
+    c.t = ts
+    if (c.n >= 3) { c.n = 0; navigate('/dashboard') }
+  }
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(timer)
@@ -20,7 +32,7 @@ export function LandingPage() {
       <div className="landing-foot">
         <div className="landing-clock">
           <time className="landing-time">{time}</time>
-          <p className="landing-date">{date}</p>
+          <p className="landing-date" onClick={tapDate}>{date}</p>
         </div>
         <LandingWeather/>
       </div>
