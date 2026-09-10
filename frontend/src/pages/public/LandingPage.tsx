@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Bot } from 'lucide-react'
 import { LandingShader } from './LandingShader'
+import { LandingWeather } from './LandingWeather'
 
 export function LandingPage() {
   const [now, setNow] = useState(() => new Date())
@@ -16,9 +17,12 @@ export function LandingPage() {
     <div className="landing-veil" aria-hidden="true"/>
     <div className="landing-ui">
       <div className="landing-mark"><Bot size={18}/> <span>Orchestration Lab</span></div>
-      <div className="landing-clock">
-        <time className="landing-time">{time}</time>
-        <p className="landing-date">{date}</p>
+      <div className="landing-foot">
+        <div className="landing-clock">
+          <time className="landing-time">{time}</time>
+          <p className="landing-date">{date}</p>
+        </div>
+        <LandingWeather/>
       </div>
     </div>
   </div>

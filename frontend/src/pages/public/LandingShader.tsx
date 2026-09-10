@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
-/* 풀스크린 레이마칭 프래그먼트 셰이더 — cineshader 풍의 유기적 유동 형상.
-   마우스로 카메라 각도 + 첫 메타볼 위치가 반응한다. 소리 없음, 스크롤 없음.
+/* 풀스크린 토포그래픽 컨투어 셰이더 — 노이즈 등고선이 천천히 흐르고,
+   마우스 주변은 렌즈처럼 지형을 밀어낸다. 소리 없음, 스크롤 없음.
    외부 의존성 0 (raw WebGL2). WebGL2 미지원이면 정적 그라디언트로 폴백. */
 
 const VERT = `#version 300 es
@@ -19,74 +19,42 @@ uniform float T;
 uniform vec2 M;
 uniform float RM;
 
-float hash(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
-float smin(float a, float b, float k){ float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0); return mix(b,a,h) - k*h*(1.0-h); }
-
-float map(vec3 p){
-  float t = T*0.22;
-  p += 0.14*sin(p.yzx*1.5 + t);
-  float d = 1e5;
-  for(int i=0;i<5;i++){
-    float fi = float(i);
-    vec3 c = vec3(
-      sin(t*0.7 + fi*2.1),
-      sin(t*0.6 + fi*1.7 + 1.0),
-      cos(t*0.5 + fi*2.6)
-    ) * (0.62 + 0.24*sin(fi));
-    if(i==0) c.xy += M*0.8;
-    d = smin(d, length(p - c) - 0.62, 0.62);
-  }
-  return d;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1,0)), f.x),
+             mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
 }
-
-vec3 nrm(vec3 p){
-  vec2 e = vec2(0.0012, 0.0);
-  return normalize(vec3(
-    map(p+e.xyy)-map(p-e.xyy),
-    map(p+e.yxy)-map(p-e.yxy),
-    map(p+e.yyx)-map(p-e.yyx)));
+float fbm(vec2 p){
+  float a = 0.5, s = 0.0;
+  for(int i = 0; i < 5; i++){ s += a * noise(p); p *= 2.02; a *= 0.5; }
+  return s;
 }
 
 void main(){
-  vec2 uv = (gl_FragCoord.xy - 0.5*R) / R.y;
-  float ca = M.x*0.55 + (RM>0.5 ? 0.0 : sin(T*0.07)*0.32);
-  float cb = -M.y*0.35 + 0.12;
-  vec3 ro = vec3(sin(ca)*4.2, cb*3.0, cos(ca)*4.2);
-  vec3 ta = vec3(0.0);
-  vec3 f = normalize(ta-ro);
-  vec3 rt = normalize(cross(vec3(0.0,1.0,0.0), f));
-  vec3 up = cross(f, rt);
-  vec3 rd = normalize(uv.x*rt + uv.y*up + 1.5*f);
+  vec2 uv = gl_FragCoord.xy / R.y;
+  float drift = RM > 0.5 ? 6.0 : T;
 
-  vec3 bg = mix(vec3(0.028,0.028,0.05), vec3(0.065,0.055,0.11), uv.y*0.5+0.5);
+  vec2 d = uv - M;
+  float r = length(d);
+  uv += d * 0.9 * exp(-r * r * 7.0);
 
-  float dO = 0.0; bool hit = false; vec3 p = ro;
-  for(int i=0;i<96;i++){
-    p = ro + rd*dO;
-    float d = map(p);
-    if(d < 0.0008){ hit = true; break; }
-    dO += d*0.72;
-    if(dO > 16.0) break;
-  }
+  float f = fbm(uv * 2.4 + vec2(drift * 0.03, drift * 0.02));
+  vec3 bg = mix(vec3(0.026,0.026,0.043), vec3(0.05,0.045,0.085), uv.y * 0.6);
 
-  vec3 col = bg;
-  if(hit){
-    vec3 n = nrm(p);
-    vec3 ld = normalize(vec3(0.55, 0.8, 0.25));
-    float diff = clamp(dot(n, ld), 0.0, 1.0);
-    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 3.0);
-    vec3 sheen = mix(vec3(0.35,0.27,0.85), vec3(0.5,0.72,0.95), n.y*0.5+0.5);
-    col = vec3(0.08,0.075,0.15) + diff*0.22*vec3(0.5,0.45,0.72);
-    col += fres * sheen * 1.25;
-    col += pow(fres, 1.6) * vec3(0.4,0.3,0.72) * 0.55;
-  } else {
-    float g = exp(-2.6 * length(cross(rd, ta - ro)));
-    col += g * vec3(0.13,0.11,0.24);
-  }
+  float bands = f * 9.0 - drift * 0.12;
+  float e = abs(fract(bands) - 0.5);
+  float w = fwidth(bands);
+  float line = 1.0 - smoothstep(0.0, w * 1.4, e - 0.012);
+  float major = step(0.5, fract(bands * 0.25));
 
-  col *= 1.0 - 0.34*dot(uv, uv);
-  col += (hash(vec3(gl_FragCoord.xy, floor(T*60.0))) - 0.5) * 0.028;
-  col = pow(clamp(col, 0.0, 1.0), vec3(0.9));
+  vec3 col = bg + line * mix(vec3(0.24,0.21,0.44), vec3(0.46,0.39,0.8), major) * 0.6;
+
+  vec2 vc = uv - vec2(R.x / R.y * 0.5, 0.5);
+  col *= 1.0 - 0.26 * dot(vc, vc);
+  col += (hash(gl_FragCoord.xy + floor(drift * 60.0)) - 0.5) * 0.02;
+  col = pow(clamp(col, 0.0, 1.0), vec3(0.92));
   O = vec4(col, 1.0);
 }`
 
@@ -140,11 +108,12 @@ export function LandingShader() {
     resize()
     window.addEventListener('resize', resize)
 
-    const target = { x: 0, y: 0 }
-    const cur = { x: 0, y: 0 }
+    const aspect = () => window.innerWidth / window.innerHeight
+    const target = { x: aspect() * 0.5, y: 0.5 }
+    const cur = { x: target.x, y: target.y }
     const onMove = (e: PointerEvent) => {
-      target.x = (e.clientX / window.innerWidth) * 2 - 1
-      target.y = -((e.clientY / window.innerHeight) * 2 - 1)
+      target.x = e.clientX / window.innerHeight
+      target.y = (window.innerHeight - e.clientY) / window.innerHeight
     }
     window.addEventListener('pointermove', onMove, { passive: true })
 
@@ -154,14 +123,13 @@ export function LandingShader() {
     const loop = (t: number) => {
       raf = requestAnimationFrame(loop)
       if (document.hidden) { last = t; return }
-      // 30fps 스로틀 — 레이마칭 비용 절감, 시각차 미미
       if (t - last < 32) return
       last = t
       resize()
-      cur.x += (target.x - cur.x) * 0.05
-      cur.y += (target.y - cur.y) * 0.05
+      cur.x += (target.x - cur.x) * 0.06
+      cur.y += (target.y - cur.y) * 0.06
       gl.uniform2f(uM, cur.x, cur.y)
-      gl.uniform1f(uT, reduced ? 8 : (t - start) / 1000)
+      gl.uniform1f(uT, reduced ? 6 : (t - start) / 1000)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
     raf = requestAnimationFrame(loop)

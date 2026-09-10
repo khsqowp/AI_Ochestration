@@ -356,11 +356,34 @@
 .landing-mark { display:flex; align-items:center; gap:8px; color:rgba(233,230,245,.82);
   font-weight:700; font-size:13px; letter-spacing:.04em; text-transform:uppercase; }
 .landing-mark svg { color:#9d8dff; }
+.landing-foot { display:flex; align-items:flex-end; justify-content:space-between; gap:28px; flex-wrap:wrap; }
 .landing.landing-3d .landing-clock { text-align:left; }
 .landing.landing-3d .landing-time { color:#f3f1fb; font-weight:200; text-shadow:0 2px 40px rgba(118,103,220,.4);
   font-size:clamp(52px,12vw,120px); }
 .landing.landing-3d .landing-date { color:rgba(214,210,230,.66); }
+
+.landing-weather { display:flex; flex-direction:column; align-items:flex-end; gap:7px;
+  text-align:right; font-variant-numeric:tabular-nums; color:rgba(222,218,238,.74); }
+.lw-head { display:flex; align-items:center; gap:8px; color:rgba(233,230,245,.9); font-size:14px; }
+.lw-head svg { color:#9d8dff; }
+.lw-city { font-weight:700; letter-spacing:.02em; }
+.lw-now { font-size:20px; font-weight:300; }
+.lw-cond { color:rgba(214,210,230,.55); font-size:12px; }
+.lw-row { display:flex; gap:14px; font-size:12px; flex-wrap:wrap; justify-content:flex-end; }
+.lw-cell { display:flex; align-items:center; gap:5px; }
+.lw-cell svg { color:rgba(180,172,215,.8); }
+.lw-cell b { font-weight:600; color:rgba(233,230,245,.82); }
+.lw-cell em, .lw-cell i { font-style:normal; }
+.lw-cell i { color:rgba(214,210,230,.42); }
+.lw-days .lw-cell b { min-width:26px; }
+
 @media (prefers-reduced-motion: reduce) { .landing-canvas { opacity:.9; } }
+@media (max-width:640px) {
+  .landing-foot { flex-direction:column; align-items:flex-start; gap:16px; }
+  .landing-weather { align-items:flex-start; text-align:left; }
+  .lw-row { justify-content:flex-start; }
+  .landing.landing-3d .landing-time { font-size:clamp(44px,15vw,72px); }
+}
 .linklike { background:transparent; color:#7167bd; font-size:12px; text-decoration:underline; padding:0; }
 
 /* ── 앱 셸: 상단바 ──────────────────────────────────────────── */
