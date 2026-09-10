@@ -12,6 +12,18 @@ export type OrderItem = {
   boughtAlt?: boolean
 }
 export type PersonOrders = { personName: string; pin: string; items: OrderItem[] }
+export type AccessPoint = {
+  ip: string; lat: number; lon: number; accuracy: 'cf' | 'ipapi'
+  city: string | null; region: string | null; country: string | null; countryCode: string | null
+  isp: string | null; org: string | null
+  hits: number; sessionHits: number; lastSeen: string
+}
+export type AccessRecent = {
+  ts: string; ip: string; method: string; path: string; status: number; hadSession: boolean
+  source: 'edge' | 'api'; city: string | null; country: string | null; countryCode: string | null; isp: string | null
+}
+export type AccessStats = { totalHits: number; uniqueIps: number; countries: number; mappedIps: number; last24h: number }
+export type AccessLogSummary = { points: AccessPoint[]; recent: AccessRecent[]; stats: AccessStats }
 export type User = { displayName: string; email: string; role: Role }
 export type Session = { authenticationEnabled: boolean; user: User | null }
 export type Agent = { id: string; name: string; role: string; color: string; left: string; top: string; status: string; message: string }

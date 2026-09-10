@@ -76,6 +76,9 @@ class SecurityConfig {
         // 대시보드 주문판(전체 조회·구매 체크)은 ADMIN 전용
         .requestMatchers("/api/orders/**").hasRole("ADMIN")
 
+        // 접근기록 — nginx mirror 서브요청(내부망에서만, 컨트롤러가 소켓 피어 검사)
+        .requestMatchers("/api/internal/**").permitAll()
+
         // 로컬 LLM · AI 토론 — 인증된 USER 도 사용 (2026-09 재편: 별도 카테고리 페이지로 승격)
         .requestMatchers("/api/dolphin/**").authenticated()
         .requestMatchers("/api/debate/**").authenticated()

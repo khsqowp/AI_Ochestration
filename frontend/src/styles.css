@@ -613,3 +613,44 @@
   .order-page { padding:20px 14px 48px; }
   .order-ident input { min-width:0; flex:1; }
 }
+
+/* ══ 접근기록 (관리 › 접근기록) ═══════════════════════════════════════════ */
+.access-stats { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 18px; }
+.access-stats > div { flex:1 1 92px; background:#f7f5fb; border:1px solid #ece9f0; border-radius:12px; padding:12px 14px; }
+.access-stats b { display:block; font-size:20px; font-variant-numeric:tabular-nums; color:#2b2b3a; }
+.access-stats span { font-size:11px; color:#8a8695; font-weight:600; }
+
+.access-maps { display:grid; grid-template-columns:1fr; gap:16px; }
+@media (min-width:1100px) { .access-maps { grid-template-columns:1.55fr 1fr; } }
+.access-maps section { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.access-maps h3 { margin:0; font-size:13px; font-weight:800; letter-spacing:.04em; color:#5b5470; text-transform:uppercase; }
+.access-maps h3 small { color:#a6a1b3; font-weight:600; margin-left:6px; }
+
+.geo-map { position:relative; border:1px solid #e6e2ee; border-radius:14px; overflow:hidden; background:#0c0b14; }
+.geo-map svg { display:block; width:100%; height:auto; }
+.geo-ocean { fill:#0c0b14; }
+.geo-land path { fill:#1e1b2b; stroke:#2c2840; stroke-width:.4; }
+.geo-heat-blob { fill:#7667dc; opacity:.16; }
+.geo-dot { fill:#c9b8ff; stroke:#0c0b14; stroke-width:.6; cursor:pointer; }
+.geo-dot.session { fill:#ff5a7a; }
+.geo-dot:hover { fill:#fff; }
+.geo-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#6b6577; font-size:12px; pointer-events:none; }
+.geo-tip { position:fixed; z-index:60; background:#17151f; color:#e7e4f0; border:1px solid #33304a; border-radius:9px;
+  padding:8px 10px; font-size:11.5px; display:flex; flex-direction:column; gap:2px; pointer-events:none; max-width:260px; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+.geo-tip b { font-size:12.5px; font-variant-numeric:tabular-nums; }
+.geo-tip-isp { color:#a79fc4; }
+
+.access-recent-title { margin:22px 0 8px; font-size:13px; font-weight:800; letter-spacing:.04em; color:#5b5470; text-transform:uppercase; }
+.access-recent-wrap { overflow-x:auto; border:1px solid #ece9f0; border-radius:12px; max-height:420px; overflow-y:auto; }
+.access-recent { width:100%; border-collapse:collapse; font-size:12px; }
+.access-recent th { position:sticky; top:0; background:#f7f5fb; text-align:left; padding:8px 10px; font-size:10.5px;
+  font-weight:700; color:#6b6577; letter-spacing:.02em; border-bottom:1px solid #ece9f0; white-space:nowrap; }
+.access-recent td { padding:6px 10px; border-bottom:1px solid #f4f2f8; white-space:nowrap; }
+.access-recent tr:last-child td { border-bottom:0; }
+.access-recent tr.has-session { background:#fff4f6; }
+.ar-ts { color:#8a8695; font-variant-numeric:tabular-nums; }
+.ar-ip { font-variant-numeric:tabular-nums; font-weight:600; }
+.ar-isp { max-width:180px; overflow:hidden; text-overflow:ellipsis; color:#7a7686; }
+.ar-path { max-width:260px; overflow:hidden; text-overflow:ellipsis; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.ar-status { text-align:center; color:#8a8695; }
+.ar-session { text-align:center; color:#e0466a; }
