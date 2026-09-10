@@ -1,5 +1,6 @@
 import { useRef, useState, type CSSProperties } from 'react'
 import { useLocation } from 'react-router-dom'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { FileUp, X } from 'lucide-react'
 import { useAppState } from '../context/AppState'
 import { agents } from '../lib/util'
@@ -53,22 +54,38 @@ export function NotesPage() {
       </div>
     </div>
 
-    <div className="notes-grid">
-      <section className="zone zone-explorer">
+    <PanelGroup direction="horizontal" autoSaveId="notes:main" className="zone-split notes-split">
+      <Panel id="explorer" order={1} defaultSize={62} minSize={30} className="zone zone-explorer">
         {view === 'files'
           ? <FileExplorer embedded onTaskStarted={onTaskStarted} onOpenGraph={() => setView('graph')} initialPath={initialPath} onInitialPathHandled={() => setInitialPath(undefined)}/>
           : <GraphView embedded onOpenFile={openFileInExplorer}/>}
-      </section>
-      <div className="zone-col zone-col-side">
-        <section className="zone zone-panel"><ArchivePanel embedded tasks={recentTasks} onOpenExplorer={() => setView('files')} onRetried={loadTasks}/></section>
-        {isAdmin && <section className="zone zone-panel"><AskArchiveModal embedded/></section>}
-        <section className="zone zone-panel"><ProgressSection/></section>
-        <AgentRoster/>
-        <section className="zone zone-panel">
-          <h3>노트 프롬프트 빌더</h3>
-          <NotePromptBuilder/>
-        </section>
-      </div>
-    </div>
+      </Panel>
+      <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
+      <Panel id="rail" order={2} minSize={22}>
+        <PanelGroup direction="vertical" autoSaveId="notes:rail" className="zone-split">
+          <Panel id="archive" order={1} defaultSize={30} minSize={12} className="zone zone-panel zone-scroll">
+            <ArchivePanel embedded tasks={recentTasks} onOpenExplorer={() => setView('files')} onRetried={loadTasks}/>
+          </Panel>
+          {isAdmin && <>
+            <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
+            <Panel id="ask" order={2} defaultSize={22} minSize={12} className="zone zone-panel zone-scroll">
+              <AskArchiveModal embedded/>
+            </Panel>
+          </>}
+          <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
+          <Panel id="progress" order={3} defaultSize={26} minSize={12} className="zone zone-panel zone-scroll">
+            <ProgressSection/>
+          </Panel>
+          <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
+          <Panel id="misc" order={4} defaultSize={22} minSize={12} className="zone zone-scroll">
+            <AgentRoster/>
+            <section className="zone-panel notes-prompt-zone">
+              <h3>노트 프롬프트 빌더</h3>
+              <NotePromptBuilder/>
+            </section>
+          </Panel>
+        </PanelGroup>
+      </Panel>
+    </PanelGroup>
   </div>
 }

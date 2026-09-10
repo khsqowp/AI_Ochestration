@@ -400,33 +400,42 @@
 .invest-tabs a.active { background:#eeecfc; color:#4e43a5; }
 .invest-tabs a.active small { color:#8478c8; }
 
-/* ── 구역(zone) 레이아웃 — 대시보드 / 노트 생성 ───────────────── */
-/* 대시보드: 위 오피스(고정 높이) + 아래 패널 행(남은 높이, auto-fit 열, 각자 스크롤) */
-.dashboard-page { display:grid; grid-template-rows: clamp(320px, 48dvh, 540px) minmax(0, 1fr); gap:16px; }
-.zone-row { min-height:0; display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px; }
-/* 노트: 왼쪽 탐색기(큰 카드) + 오른쪽 레일(스크롤) */
-.notes-grid { flex:1 1 auto; min-height:0; display:grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap:16px; }
+/* ── 구역(zone) 리사이즈 레이아웃 — 대시보드 / 노트 생성 ──────── */
+.dashboard-page, .notes-page { display:flex; flex-direction:column; }
+.zone-split { flex:1 1 auto; min-height:0; min-width:0; width:100%; }
 
-.zone { min-height:0; min-width:0; }
-.zone-col { min-height:0; min-width:0; display:flex; flex-direction:column; gap:16px; overflow-y:auto; padding-right:3px; }
-.zone-col > * { flex:0 0 auto; }
-.zone-scroll { overflow-y:auto; overflow-x:hidden; }
+/* react-resizable-panels 개별 패널 */
+.zone { min-height:0; min-width:0; overflow:hidden; }
+/* react-resizable-panels 는 패널에 inline overflow:hidden 을 주므로 !important 로 스크롤 복원 */
+.zone-scroll { overflow-y:auto !important; overflow-x:hidden !important; display:flex; flex-direction:column; gap:14px; }
+.zone-scroll > * { flex:0 0 auto; }
 .zone-panel { background:#fff; border:1px solid #ece9f0; border-radius:16px; padding:18px; }
-.zone-panel > .panel-embedded { overflow:visible !important; }
+.zone-panel.zone-scroll { padding:16px 18px; }
+.zone-panel > .panel-embedded, .zone-scroll > .panel-embedded { overflow:visible !important; }
 /* 자체 카드 스타일을 가진 하위 컴포넌트는 zone 안에서 중복 카드 제거 */
 .zone .progress-section, .zone .notes-agent-roster, .zone .dashboard-panel-section {
   background:none; border:0; border-radius:0; padding:0; }
+.zone-scroll .notes-agent-roster, .zone-scroll .notes-prompt-zone { flex:0 0 auto; }
 .progress-section { display:flex; flex-direction:column; gap:16px; }
-.notes-agent-roster h3, .dashboard-panel-section h3, .zone-panel > h3 { margin:0 0 12px; font-size:14px; color:#4a4656; }
-@media (max-width:1200px) { .zone-row { grid-auto-rows:minmax(280px,auto); } }
+.notes-agent-roster h3, .dashboard-panel-section h3, .zone-panel > h3, .notes-prompt-zone > h3 { margin:0 0 12px; font-size:14px; color:#4a4656; }
+
+/* 리사이즈 핸들(경계 바) */
+.rz-bar { flex:0 0 auto; display:flex; align-items:center; justify-content:center; background:transparent; }
+[data-panel-group-direction="horizontal"] > .rz-bar { width:12px; cursor:col-resize; }
+[data-panel-group-direction="vertical"] > .rz-bar { height:12px; cursor:row-resize; }
+.rz-grip { background:#dcd8e4; border-radius:100px; transition:background .15s ease; }
+[data-panel-group-direction="horizontal"] > .rz-bar .rz-grip { width:4px; height:46px; }
+[data-panel-group-direction="vertical"] > .rz-bar .rz-grip { width:46px; height:4px; }
+.rz-bar:hover .rz-grip, .rz-bar[data-resize-handle-state="hover"] .rz-grip,
+.rz-bar[data-resize-handle-state="drag"] .rz-grip { background:#7667dc; }
 
 /* 오피스 대시보드 구역 */
-.zone-office { background:#fff; border:1px solid #ece9f0; border-radius:16px; padding:14px; overflow:hidden; display:flex; }
+.zone-office { background:#fff; border:1px solid #ece9f0; border-radius:16px; padding:14px; display:flex; }
 .zone-office .office-dashboard { position:static; inset:auto; padding:0; height:100%; width:100%; overflow:hidden; gap:14px; }
 .dashboard-page .dashboard-chat { flex:0 0 320px; min-height:0; height:auto; }
 .dashboard-page .dashboard-main { flex:1; min-width:0; min-height:0; }
 
-/* 노트: 파일 탐색기/그래프 구역 — 왼쪽 전체 높이 카드 */
+/* 노트: 파일 탐색기/그래프 구역 */
 .zone-explorer { min-height:0; min-width:0; display:flex; }
 .zone-explorer > .panel-embedded { flex:1 1 auto; min-height:0 !important; height:auto !important; overflow:hidden !important;
   background:#fff !important; border:1px solid #ece9f0 !important; border-radius:16px !important; padding:18px !important; }
@@ -448,15 +457,15 @@
   .page.calendar-page, .page.diag-page, .page.debate-page, .page.llm-page,
   .page.invest-page, .page.admin-page { height:auto; min-height:calc(100dvh - var(--topbar-h)); overflow:visible; }
 
-  .dashboard-page { display:flex; flex-direction:column; }
-  .zone-row, .notes-grid { display:flex; flex-direction:column; }
-  .zone-col { overflow:visible; }
-  .zone-scroll { overflow:visible; }
-  .zone-office { height:auto; }
+  /* 리사이즈 스플릿 해제 → 세로 스택, 핸들 숨김 */
+  .zone-split { display:flex !important; flex-direction:column !important; height:auto !important; }
+  .zone-split > .rz-bar { display:none !important; }
+  .zone-split > [data-panel] { flex:0 0 auto !important; overflow:visible !important; }
+  .zone-scroll { max-height:min(600px, 76dvh); overflow-y:auto !important; overflow-x:hidden !important; }
+  .zone-office { height:auto; overflow:visible; }
   .zone-office .office-dashboard { flex-direction:column; overflow-y:auto; height:auto; }
   .zone-office .dashboard-chat { flex:none; width:100%; height:440px; }
   .zone-office .dashboard-main { flex:none; }
-  .zone-row > .zone-panel { max-height:min(560px, 70dvh); overflow-y:auto; }
 
   .page.calendar-page > .panel-embedded, .page.diag-page > .panel-embedded,
   .page.debate-page > .panel-embedded, .page.llm-page > .panel-embedded,
