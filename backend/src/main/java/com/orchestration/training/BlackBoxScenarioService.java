@@ -11,10 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 class BlackBoxScenarioService {
   private final BlackBoxScenarioSessionRepository sessions;
   private final CompetencyAssessmentRepository assessments;
+  private final BlackBoxScenarioIntentResolver intents;
   private final BlackBoxScenarioEngine engine = new BlackBoxScenarioEngine();
 
-  BlackBoxScenarioService(BlackBoxScenarioSessionRepository sessions, CompetencyAssessmentRepository assessments) {
-    this.sessions=sessions; this.assessments=assessments;
+  BlackBoxScenarioService(BlackBoxScenarioSessionRepository sessions, CompetencyAssessmentRepository assessments, BlackBoxScenarioIntentResolver intents) {
+    this.sessions=sessions; this.assessments=assessments; this.intents=intents;
   }
 
   List<BlackBoxScenarioDefinition> scenarios() { return BlackBoxScenarioCatalog.all(); }
@@ -27,7 +28,9 @@ class BlackBoxScenarioService {
 
   @Transactional BlackBoxScenarioSession message(UUID ownerId, UUID sessionId, String rawMessage) {
     BlackBoxScenarioSession session=owned(ownerId, sessionId); String message=clean(rawMessage, 1800, "대화 내용");
-    BlackBoxScenarioEngine.ScenarioReply reply=engine.reply(BlackBoxScenarioCatalog.bySlug(session.getScenarioSlug()), message);
+    BlackBoxScenarioDefinition scenario=BlackBoxScenarioCatalog.bySlug(session.getScenarioSlug());
+    String action=intents.resolve(scenario, message);
+    BlackBoxScenarioEngine.ScenarioReply reply="UNKNOWN".equals(action) ? engine.reply(scenario, message) : engine.replyForAction(scenario, action);
     session.recordUserMessage(message);
     if(reply.observationKey()!=null) session.recordObservation(reply.observationKey(), reply.observation());
     session.recordCoachMessage(reply.coachMessage());

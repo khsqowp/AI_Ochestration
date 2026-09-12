@@ -37,6 +37,17 @@ class BlackBoxScenarioSessionTest {
   }
 
   @Test
+  void maps_a_model_classified_intent_to_the_server_owned_observation() {
+    BlackBoxScenarioEngine engine = new BlackBoxScenarioEngine();
+
+    BlackBoxScenarioEngine.ScenarioReply reply = engine.replyForAction(BlackBoxScenarioCatalog.orderAccess(), "CROSS_ORDER");
+
+    assertThat(reply.observationKey()).isEqualTo("cross-order");
+    assertThat(reply.observation()).contains("O-2008");
+    assertThat(reply.observation()).doesNotContain("인가 누락");
+  }
+
+  @Test
   void closes_with_a_short_text_diagnostic_report_not_a_seven_field_form() {
     BlackBoxScenarioSession session = BlackBoxScenarioSession.start(UUID.randomUUID(), BlackBoxScenarioCatalog.orderAccess());
     session.recordObservation("A 계정으로 B 주문 번호 조회 시 200 OK와 B 배송지가 반환됐다.");

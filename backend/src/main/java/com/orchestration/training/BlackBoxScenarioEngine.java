@@ -4,12 +4,49 @@ import java.util.Locale;
 
 /** The engine owns hidden scenario truth. The chat layer receives only returned observations, never a cause label. */
 final class BlackBoxScenarioEngine {
+  ScenarioReply replyForAction(BlackBoxScenarioDefinition scenario, String action) {
+    return switch (scenario.slug()) {
+      case "order-access" -> orderAction(action);
+      case "coupon-cache" -> couponAction(action);
+      case "login-enumeration" -> loginAction(action);
+      default -> noObservation();
+    };
+  }
+
   ScenarioReply reply(BlackBoxScenarioDefinition scenario, String message) {
     String input = message == null ? "" : message.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     return switch (scenario.slug()) {
       case "order-access" -> orderAccess(input);
       case "coupon-cache" -> couponCache(input);
       case "login-enumeration" -> loginEnumeration(input);
+      default -> noObservation();
+    };
+  }
+
+  private ScenarioReply orderAction(String action) {
+    return switch (action) {
+      case "OWN_ORDER" -> orderAccess("내 주문");
+      case "CROSS_ORDER" -> orderAccess("o-2008");
+      case "OWNER_CONFIRMATION" -> orderAccess("계정 b");
+      case "CROSS_ORDER_CHANGE" -> orderAccess("취소");
+      default -> noObservation();
+    };
+  }
+  private ScenarioReply couponAction(String action) {
+    return switch (action) {
+      case "INITIAL_COUPON" -> couponCache("내 쿠폰");
+      case "CROSS_SESSION" -> new ScenarioReply("coupon-cross-session",
+          "계정 A에서 쿠폰 화면을 연 뒤 로그아웃하고 계정 B로 다시 로그인해 같은 주소를 열자, 계정 B의 쿠폰 정보가 아닌 앞서 본 내용이 그대로 표시됐다.",
+          "계정 전환 전후의 응답이 달랐습니다. 현재 확정된 사실과 가설을 분리해 기록하세요.");
+      case "OWNER_CONFIRMATION" -> couponCache("계정 b");
+      default -> noObservation();
+    };
+  }
+  private ScenarioReply loginAction(String action) {
+    return switch (action) {
+      case "KNOWN_LOGIN" -> loginEnumeration("known");
+      case "UNKNOWN_LOGIN" -> loginEnumeration("unknown");
+      case "REPEAT_TIMING" -> loginEnumeration("10회 반복 측정");
       default -> noObservation();
     };
   }
