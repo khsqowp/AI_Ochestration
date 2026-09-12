@@ -17,4 +17,16 @@ class TrainingAttemptTest {
     assertThat(attempt.getCaseTitleSnapshot()).isEqualTo("첫 문제 제목");
     assertThat(attempt.getCasePromptSnapshot()).contains("첫 문제 본문");
   }
+
+  @Test
+  void backfills_a_missing_legacy_snapshot_without_overwriting_a_new_attempt() {
+    TrainingCase trainingCase = new TrainingCase("case-v1", "현재 제목", TrainingCaseType.STATIC_DIAGNOSIS,
+        "API_SECURITY", 2, "현재 본문", "{\"version\":\"v2\"}");
+    TrainingAttempt attempt = new TrainingAttempt(java.util.UUID.randomUUID(), trainingCase);
+
+    attempt.backfillSnapshotIfMissing("이전 제목", "이전 본문");
+
+    assertThat(attempt.getCaseTitleSnapshot()).isEqualTo("현재 제목");
+    assertThat(attempt.getCasePromptSnapshot()).isEqualTo("현재 본문");
+  }
 }
