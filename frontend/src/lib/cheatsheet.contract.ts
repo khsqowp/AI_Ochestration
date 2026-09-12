@@ -1,18 +1,7 @@
-import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
-
-type QuickStart = { id: string; command: string; expected: string; caution: string }
-type ToolWithQuickStarts = { id: string; quickStarts?: QuickStart[] }
-
-function tool(id: string): ToolWithQuickStarts {
-  for (const category of CHEATSHEET_CATEGORIES) {
-    const found = category.tools.find(candidate => candidate.id === id)
-    if (found) return found as ToolWithQuickStarts
-  }
-  throw new Error(`도구를 찾지 못했습니다: ${id}`)
-}
+import { CHEATSHEET_QUICK_STARTS } from '../cheatsheet-data'
 
 for (const id of ['nmap', 'curl', 'find', 'whoami', 'tcpdump']) {
-  const quickStarts = tool(id).quickStarts
+  const quickStarts = CHEATSHEET_QUICK_STARTS[id]
   if (!quickStarts || quickStarts.length === 0) throw new Error(`${id}에 목적별 권장 명령이 없습니다.`)
   for (const quickStart of quickStarts) {
     if (!quickStart.command || !quickStart.expected || !quickStart.caution) {

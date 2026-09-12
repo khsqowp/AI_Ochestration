@@ -19,10 +19,44 @@ export interface CheatSheetTool {
   options: CheatSheetOption[]
 }
 
+export interface CheatSheetQuickStart {
+  id: string
+  label: string
+  description: string
+  command: string
+  expected: string
+  caution: string
+}
+
 export interface CheatSheetCategory {
   id: string
   name: string
   tools: CheatSheetTool[]
+}
+
+/**
+ * 옵션을 모두 외우지 않아도 점검 목적에 맞는 최소 명령부터 시작하도록 제공한다.
+ * <TARGET>, <URL>, <PATH>는 승인된 실제 대상으로 바꾼다.
+ */
+export const CHEATSHEET_QUICK_STARTS: Record<string, CheatSheetQuickStart[]> = {
+  nmap: [
+    { id: 'service-inventory', label: '서비스 인벤토리', description: '상위 100개 포트에서 서비스와 버전을 낮은 부하로 확인한다.', command: 'nmap -sV --top-ports 100 --open -oN service-inventory.txt <TARGET>', expected: '열린 포트, 서비스명, 추정 버전이 service-inventory.txt에 저장된다.', caution: '승인된 IP·도메인만 입력하고, 운영 환경의 허용 시간·속도를 먼저 확인한다.' },
+    { id: 'web-surface', label: '웹 서비스 확인', description: '이미 확인된 80·443 포트의 제목과 보안 헤더를 확인한다.', command: 'nmap -p 80,443 -sV --script http-title,http-headers -oN web-surface.txt <TARGET>', expected: 'HTTP 제목과 헤더가 web-surface.txt에 기록된다.', caution: '포트 발견 전 전체 스캔을 반복하지 말고, 범위에 포함된 웹 서비스에만 사용한다.' },
+  ],
+  curl: [
+    { id: 'capture-response', label: '응답·헤더 분리 저장', description: '화면이 아닌 실제 HTTP 응답을 본문과 헤더로 나눠 보관한다.', command: 'curl -sS -D response-headers.txt -o response-body.html -w "HTTP %{http_code} | %{time_total}s\\n" <URL>', expected: '상태 코드와 응답 시간이 화면에, 헤더·본문이 별도 파일에 남는다.', caution: '인증 쿠키나 Authorization 헤더를 명령·저장 파일·공유 로그에 남기지 않는다.' },
+    { id: 'redirect-headers', label: '리다이렉트·보안 헤더 확인', description: 'HEAD 요청으로 리다이렉트 체인과 보안 관련 응답 헤더를 빠르게 확인한다.', command: 'curl -sS -I -L <URL>', expected: '각 응답의 상태 코드, Location, 보안 헤더를 확인할 수 있다.', caution: 'HEAD가 지원되지 않는 서비스도 있으므로, 실패 시 안전한 GET 재확인이 필요하다.' },
+  ],
+  find: [
+    { id: 'world-writable', label: '과도한 쓰기 권한 찾기', description: '지정 경로 아래에서 모든 사용자가 쓸 수 있는 일반 파일을 찾는다.', command: 'find <PATH> -type f -perm -002 -print', expected: '검토가 필요한 world-writable 파일 경로가 출력된다.', caution: '결과만 확인한다. 자동 삭제·권한 변경은 소유자와 영향도를 검토한 뒤 별도로 수행한다.' },
+    { id: 'suid-review', label: 'SUID 파일 목록', description: '권한 상승 위험 검토가 필요한 SUID 일반 파일을 나열한다.', command: 'find <PATH> -type f -perm -4000 -ls', expected: 'SUID 권한 파일의 소유자·권한·경로가 출력된다.', caution: '시스템 기본 파일도 포함될 수 있다. 파일명만으로 취약하다고 판정하지 않는다.' },
+  ],
+  whoami: [
+    { id: 'identity-and-privileges', label: '현재 계정·권한 확인', description: 'Windows에서 사용자, 그룹, 권한 토큰을 한 번에 확인한다.', command: 'whoami /all', expected: '현재 사용자 SID, 그룹 멤버십, 활성 권한이 출력된다.', caution: '출력에는 조직·계정 정보가 포함될 수 있으므로 외부 공유 전 마스킹한다.' },
+  ],
+  tcpdump: [
+    { id: 'bounded-http-capture', label: '제한된 HTTP 캡처', description: '지정 인터페이스의 HTTP 통신을 100개 패킷까지만 저장한다.', command: 'sudo tcpdump -i <INTERFACE> -nn -c 100 -w web-check.pcap port 80', expected: 'web-check.pcap에 제한된 패킷 캡처가 저장된다.', caution: '패킷에는 세션·개인정보가 포함될 수 있다. 허가된 구간에서 최소 수집 원칙을 적용한다.' },
+  ],
 }
 
 export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
