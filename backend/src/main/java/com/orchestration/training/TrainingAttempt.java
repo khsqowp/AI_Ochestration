@@ -23,5 +23,6 @@ public class TrainingAttempt {
   protected TrainingAttempt(){}
   TrainingAttempt(UUID ownerId,TrainingCase trainingCase){this.ownerId=ownerId;this.trainingCase=trainingCase;this.caseTitleSnapshot=trainingCase.getTitle();this.casePromptSnapshot=trainingCase.getPromptMd();}
   public UUID getId(){return id;} public UUID getOwnerId(){return ownerId;} public TrainingCase getTrainingCase(){return trainingCase;} public String getCaseTitleSnapshot(){return caseTitleSnapshot;} public String getCasePromptSnapshot(){return casePromptSnapshot;} public AttemptStatus getStatus(){return status;} public String getAnswerMd(){return answerMd;} public String getFeedbackMd(){return feedbackMd;} public Double getScore(){return score;} public Instant getStartedAt(){return startedAt;} public Instant getSubmittedAt(){return submittedAt;}
+  void backfillSnapshotIfMissing(String title,String prompt){if(caseTitleSnapshot==null||caseTitleSnapshot.isBlank())caseTitleSnapshot=title;if(casePromptSnapshot==null||casePromptSnapshot.isBlank())casePromptSnapshot=prompt;}
   void saveAnswer(String answer){answerMd=answer;} void submit(Double score,String feedback){this.score=score;feedbackMd=feedback;status=AttemptStatus.SUBMITTED;submittedAt=Instant.now();}
 }

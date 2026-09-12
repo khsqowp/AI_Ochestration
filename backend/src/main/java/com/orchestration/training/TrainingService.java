@@ -24,7 +24,19 @@ public class TrainingService {
   }
 
   @PostConstruct @Transactional void seedCases() {
+    backfillLegacyAttemptContexts();
     caseSeeds().forEach(this::upsertCase);
+  }
+  private void backfillLegacyAttemptContexts() {
+    Map<String,LegacyCase> legacy=Map.of(
+        "idor-object-owner",new LegacyCase("객체 소유권 인가 판정","## 상황\n로그인 사용자가 `/api/orders/{orderId}`를 호출합니다. Controller는 로그인 여부만 확인하고 orderId의 소유자를 확인하지 않습니다.\n\n## 제출\n취약 여부, 필요한 증거, 성립 조건, 영향, 조치, 재검증 계획을 작성하세요."),
+        "mybatis-like-query",new LegacyCase("MyBatis LIKE 검색과 정렬 파라미터","## 상황\n검색어는 바인딩되지만 정렬 컬럼은 문자열로 조합됩니다.\n\n## 제출\n안전한 부분과 위험한 부분을 분리하고, 허용 목록 기반 조치와 테스트 계획을 작성하세요."),
+        "report-method-overclaim",new LegacyCase("HTTP 메서드 보고서 오류 찾기","## 상황\n보고서는 PUT과 DELETE 응답이 존재한다는 이유만으로 즉시 고위험 취약점이라고 결론냅니다.\n\n## 제출\n보고서의 과장·증거 부족·필요한 추가 검증과 올바른 조치 방향을 작성하세요."),
+        "redirect-ssrf-evidence",new LegacyCase("리다이렉트 응답과 SSRF 증거 판정","## 상황\nURL 입력 기능이 리다이렉트를 반환합니다. 브라우저에는 내부 주소 관련 응답이 보이지만 서버가 실제로 내부 요청을 보냈는지는 확실하지 않습니다.\n\n## 제출\n취약·정상·추가 증거 필요 중 하나를 판정하고 필요한 증거와 방어책을 작성하세요."),
+        "upload-storage-boundary",new LegacyCase("파일 업로드 저장 경계","## 상황\n업로드 파일은 확장자만 검사하고 웹 루트 아래에 원본 파일명으로 저장됩니다.\n\n## 제출\n위험 조건, 조치 계층, 재검증 케이스를 작성하세요."),
+        "ci-secret-hygiene",new LegacyCase("CI 배포 비밀값 점검","## 상황\n배포 설정과 과거 작업 로그에 토큰 또는 개인 키가 포함될 수 있습니다.\n\n## 제출\n즉시 조치, 재발 방지, 로그와 저장소 정리 원칙을 작성하세요.")
+    );
+    attempts.findAll().forEach(attempt -> { LegacyCase source=legacy.get(attempt.getTrainingCase().getSlug()); if(source!=null){attempt.backfillSnapshotIfMissing(source.title(),source.prompt());attempts.save(attempt);} });
   }
   private void upsertCase(CaseSeed seed) {
     cases.findBySlug(seed.slug()).ifPresentOrElse(existing -> {
@@ -202,6 +214,7 @@ public class TrainingService {
           """)
     ); }
   private record CaseSeed(String slug,String title,TrainingCaseType type,String skill,int difficulty,String prompt) {}
+  private record LegacyCase(String title,String prompt) {}
 
   @Transactional
   void ensureAssessments(UUID ownerId) {
