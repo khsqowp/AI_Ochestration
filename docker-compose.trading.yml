@@ -156,6 +156,24 @@ services:
     profiles: ["momentum-rotation"]
     restart: unless-stopped
 
+  # 장 시작 갭업/급등주 전략을 백테스트하려고 개장 직후 등락률순위 스냅샷을 떠서 쌓아두기만
+  # 하는 캡처 전용 컨테이너 — 계좌 조회/주문 없음, kr-rotation과 계좌를 같이 써도 무관.
+  trading-kr-opening-scan:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.opening_scan_capture"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TICK_ARCHIVE_DIR: /app/archive
+      SCAN_START_HHMM: "09:00"
+      SCAN_WINDOW_MINUTES: "120"
+    volumes:
+      - ./trading-tick-archive:/app/archive
+    networks: [trading]
+    profiles: ["kr-opening-scan"]
+    restart: unless-stopped
+
   trading-crypto-tick-stream:
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.crypto_tick_stream"]
