@@ -89,7 +89,9 @@ services:
     restart: unless-stopped
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # #20 -- pinned to the version actually running (was :latest); bump deliberately, not silently on
+    # every pull.
+    image: cloudflare/cloudflared:2026.7.2
     command: tunnel run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
