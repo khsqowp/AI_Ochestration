@@ -1,6 +1,7 @@
 package com.orchestration.training;
 
 import com.orchestration.auth.AuthService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.*;
@@ -17,16 +18,17 @@ public class TrainingController {
   @PostMapping("/cases/{caseId}/attempts") @ResponseStatus(HttpStatus.CREATED) public AttemptResponse start(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID caseId){return AttemptResponse.from(service.start(owner(token),caseId));}
   @GetMapping("/attempts") public List<AttemptResponse> history(@CookieValue(value=COOKIE,required=false)String token){return service.history(owner(token)).stream().map(AttemptResponse::from).toList();}
   @GetMapping("/attempts/{attemptId}") public AttemptResponse get(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID attemptId){return AttemptResponse.from(service.attempt(owner(token),attemptId));}
-  @PutMapping("/attempts/{attemptId}/answer") public AttemptResponse save(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID attemptId,@RequestBody AnswerRequest req){return AttemptResponse.from(service.save(owner(token),attemptId,req.answer()));}
-  @PostMapping("/attempts/{attemptId}/submit") public AttemptResponse submit(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID attemptId,@RequestBody AnswerRequest req){return AttemptResponse.from(service.submit(owner(token),attemptId,req.answer()));}
+  @PutMapping("/attempts/{attemptId}/answer") public AttemptResponse save(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID attemptId,@Valid @RequestBody AnswerRequest req){return AttemptResponse.from(service.save(owner(token),attemptId,req.answer()));}
+  @PostMapping("/attempts/{attemptId}/submit") public AttemptResponse submit(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID attemptId,@Valid @RequestBody AnswerRequest req){return AttemptResponse.from(service.submit(owner(token),attemptId,req.answer()));}
   @PostMapping("/attempts/{attemptId}/evaluate") public AttemptResponse evaluate(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID attemptId){return AttemptResponse.from(service.evaluateExisting(owner(token),attemptId));}
-  @GetMapping("/black-box/scenarios") public List<BlackBoxScenarioResponse> scenarios(){return blackBox().scenarios().stream().map(BlackBoxScenarioResponse::from).toList();}
-  @PostMapping("/black-box/scenarios/{slug}/sessions") @ResponseStatus(HttpStatus.CREATED) public BlackBoxSessionResponse startBlackBox(@CookieValue(value=COOKIE,required=false)String token,@PathVariable String slug){return BlackBoxSessionResponse.from(blackBox().start(owner(token),slug));}
+  @GetMapping("/black-box/active-session") public ActiveBlackBoxSessionResponse activeBlackBox(@CookieValue(value=COOKIE,required=false)String token){return new ActiveBlackBoxSessionResponse(blackBox().active(owner(token)).map(BlackBoxSessionResponse::from).orElse(null));}
+  @PostMapping("/black-box/sessions") @ResponseStatus(HttpStatus.CREATED) public BlackBoxSessionResponse startRecommendedBlackBox(@CookieValue(value=COOKIE,required=false)String token,@RequestBody(required=false) BlackBoxStartRequest req){return BlackBoxSessionResponse.from(blackBox().startRecommended(owner(token),req==null?null:req.skillCode()));}
   @GetMapping("/black-box/sessions") public List<BlackBoxSessionResponse> blackBoxHistory(@CookieValue(value=COOKIE,required=false)String token){return blackBox().history(owner(token)).stream().map(BlackBoxSessionResponse::from).toList();}
   @GetMapping("/black-box/sessions/{sessionId}") public BlackBoxSessionResponse blackBoxSession(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID sessionId){return BlackBoxSessionResponse.from(blackBox().session(owner(token),sessionId));}
   @PostMapping("/black-box/sessions/{sessionId}/messages") public BlackBoxSessionResponse blackBoxMessage(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID sessionId,@RequestBody BlackBoxMessageRequest req){return BlackBoxSessionResponse.from(blackBox().message(owner(token),sessionId,req.message()));}
   @PutMapping("/black-box/sessions/{sessionId}/notes") public BlackBoxSessionResponse blackBoxNotes(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID sessionId,@RequestBody BlackBoxNotesRequest req){return BlackBoxSessionResponse.from(blackBox().notes(owner(token),sessionId,req.facts(),req.hypotheses(),req.unknowns()));}
   @PostMapping("/black-box/sessions/{sessionId}/close") public BlackBoxSessionResponse closeBlackBox(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID sessionId,@RequestBody BlackBoxCloseRequest req){return BlackBoxSessionResponse.from(blackBox().close(owner(token),sessionId,req.verdict(),req.conclusion()));}
+  @PostMapping("/black-box/sessions/{sessionId}/reevaluate") public BlackBoxSessionResponse reevaluateBlackBox(@CookieValue(value=COOKIE,required=false)String token,@PathVariable UUID sessionId){return BlackBoxSessionResponse.from(blackBox().reevaluate(owner(token),sessionId));}
   private UUID owner(String token){return auth.validate(token).map(p->UUID.fromString(p.id())).orElseThrow(()->new ResponseStatusException(HttpStatus.UNAUTHORIZED));}
   record AnswerRequest(@NotBlank String answer){}
   private BlackBoxScenarioService blackBox(){return blackBoxService;}
@@ -45,6 +47,8 @@ public class TrainingController {
     static AttemptResponse from(TrainingAttempt x){return new AttemptResponse(x.getId().toString(),CaseResponse.fromAttempt(x),x.getStatus().name(),x.getAnswerMd(),x.getFeedbackMd(),x.getScore(),x.getStartedAt(),x.getSubmittedAt());}
   }
   record BlackBoxMessageRequest(@NotBlank String message) {}
+  record BlackBoxStartRequest(String skillCode) {}
+  record ActiveBlackBoxSessionResponse(BlackBoxSessionResponse session) {}
   record BlackBoxNotesRequest(String facts,String hypotheses,String unknowns) {}
   record BlackBoxCloseRequest(@NotBlank String verdict,@NotBlank String conclusion) {}
   record BlackBoxScenarioResponse(String slug,String title,String intro,String skillCode,int difficulty){static BlackBoxScenarioResponse from(BlackBoxScenarioDefinition x){return new BlackBoxScenarioResponse(x.slug(),x.title(),x.intro(),x.primarySkillCode(),x.difficulty());}}
