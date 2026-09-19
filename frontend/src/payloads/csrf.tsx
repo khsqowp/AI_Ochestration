@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Download, ExternalLink } from 'lucide-react'
 import { DISCLAIMER, Note, Pick, TextInput, Readout } from './shared'
 
 const METHODS = [
@@ -99,7 +100,29 @@ ${auto ? '  <script>document.forms[0].submit()</script>' : '  <button onclick="d
     {notes.map((t, i) => <p className="payload-builder-hint" key={i}>{t}</p>)}
 
     <div className="payload-readout-group">
-      <Readout title="CSRF PoC (HTML 파일로 저장 후 피해자에게 열도록 유도)" value={poc} wrap="anywhere"/>
+      <Readout title="CSRF PoC" value={poc} wrap="anywhere"/>
+      <div className="csrf-poc-actions">
+        <button className="secondary-button csrf-action-btn" onClick={() => {
+          const blob = new Blob([poc], { type: 'text/html' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url; a.download = 'csrf-poc.html'
+          a.click()
+          URL.revokeObjectURL(url)
+        }}><Download size={14}/>다운로드 (.html)</button>
+        <button className="secondary-button csrf-action-btn" onClick={() => {
+          const blob = new Blob([poc], { type: 'text/html' })
+          const url = URL.createObjectURL(blob)
+          window.open(url, '_blank')
+          setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        }}><ExternalLink size={14}/>새 탭에서 바로 실행(현재 세션)</button>
+      </div>
+      <p className="payload-builder-hint">
+        다운로드한 파일을 <b>두 번째 테스트 계정</b>으로 로그인한 별도 브라우저(시크릿창/다른 프로필)에 옮겨 열면
+        그 계정의 세션으로 요청이 나갑니다 — 이게 실제 CSRF 검증 방법입니다("피해자" = 내가 통제하는 다른 계정).
+        "새 탭에서 바로 실행"은 지금 로그인된 이 브라우저 세션으로 즉시 확인하는 용도입니다. 어느 쪽도 서버에
+        저장되거나 외부에 공개되는 URL을 만들지 않습니다.
+      </p>
     </div>
   </div>
 }

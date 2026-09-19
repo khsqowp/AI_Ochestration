@@ -8,6 +8,7 @@ import { SqliPayloadBuilder } from '../payloads/sqli'
 import { SsrfPayloadBuilder } from '../payloads/ssrf'
 import { CsrfPayloadBuilder } from '../payloads/csrf'
 import { SmartDecoderBuilder } from '../payloads/decoder'
+import { RainbowTableBuilder } from '../payloads/rainbow'
 
 const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'xss-payloads': XssPayloadBuilder,
@@ -15,6 +16,7 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'ssrf-payloads': SsrfPayloadBuilder,
   'csrf-payloads': CsrfPayloadBuilder,
   'smart-decoder': SmartDecoderBuilder,
+  'rainbow-crack': RainbowTableBuilder,
 }
 
 export function CheatSheetModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {

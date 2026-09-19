@@ -154,27 +154,42 @@ function RebalanceCountdown({ target }: { target: string | null | undefined }) {
   return <b className="countdown">{d}:{p2(h)}:{p2(m)}:{p2(s)}:{p2(cs)}</b>
 }
 
+/** 명령 전송 후 봇이 실제로 처리할 때까지 걸리는 최대 대기 시간 — 봇 루프가 무거운 사이클(가격 조회·
+ * 리밸런스) 중이면 다음 제어 폴링까지 밀릴 수 있어, 폴링 주기(5~10초)보다 훨씬 길게 잡는다. 이 시간이
+ * 지나도 처리 안 됐으면 스피너를 계속 돌리는 대신 로그 확인을 안내한다. */
+const CONTROL_CONFIRM_TIMEOUT_MS = 150000
+const CONTROL_POLL_MS = 3000
+
 /** 즉시 매도 / 즉시 진입 — 로테이션 봇 수동 제어. flat 이면 진입 버튼, 아니면 청산 버튼(2단계 확인). */
-function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatTs, nextRebalanceTs, onDone }: {
+function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatTs, nextRebalanceTs, consumedControlNonce, onDone }: {
   bot: 'momentum-rotation' | 'kr-rotation' | 'us-rotation'
   live?: boolean
   manualFlat?: boolean
   manualFlatPending?: boolean
   manualFlatTs?: string | null
   nextRebalanceTs?: string | null
+  consumedControlNonce?: string | null
   onDone: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // 방금 보낸 명령이 봇에 실제로 반영됐는지 nonce 로 추적한다 — POST 가 성공해도 그건 "control.json 에
+  // 써졌다"는 뜻일 뿐, 봇이 그 다음 폴링 틱에 실제로 처리했는지는 별개다. consumedControlNonce 가 이
+  // nonce 와 같아질 때까지 "처리 중"으로 표시하고, 같아지는 순간 잠깐 "처리 완료"를 보여준다.
+  const [pending, setPending] = useState<{ nonce: string; cmd: 'flatten' | 'enter'; since: number } | null>(null)
+  const [justDone, setJustDone] = useState<'flatten' | 'enter' | null>(null)
 
   const send = async (cmd: 'flatten' | 'enter') => {
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setJustDone(null)
     try {
       const res = await fetch(`/api/trading/${bot}/${cmd}`, { method: 'POST', credentials: 'include' })
       if (!res.ok) { setError(cmd === 'flatten' ? '청산 명령 전송 실패' : '진입 명령 전송 실패'); return }
+      const body = await res.json().catch(() => null) as { command?: { nonce?: string } } | null
+      const nonce = body?.command?.nonce
       setConfirming(false)
-      window.setTimeout(onDone, 1500)
+      if (nonce) setPending({ nonce, cmd, since: Date.now() })
+      onDone()
     } catch {
       setError('네트워크 오류')
     } finally {
@@ -182,7 +197,25 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
     }
   }
 
+  useEffect(() => {
+    if (!pending) return
+    if (consumedControlNonce === pending.nonce) {
+      setPending(null); setJustDone(pending.cmd)
+      const clear = window.setTimeout(() => setJustDone(null), 6000)
+      return () => window.clearTimeout(clear)
+    }
+    if (Date.now() - pending.since > CONTROL_CONFIRM_TIMEOUT_MS) { setPending(null); return }
+    const timer = window.setTimeout(onDone, CONTROL_POLL_MS)
+    return () => window.clearTimeout(timer)
+  }, [pending, consumedControlNonce, onDone])
+
   const fmt = (v: string) => new Date(v).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const locked = busy || !!pending
+  const statusLine = pending
+    ? <p className="bot-control-status pending">⏳ {pending.cmd === 'flatten' ? '청산' : '진입'} 명령 처리 대기 중… 봇이 다음 폴링에 반영합니다(최대 2~3분 소요될 수 있음). 화면을 벗어나도 계속 진행됩니다.</p>
+    : justDone
+      ? <p className="bot-control-status done">✓ {justDone === 'flatten' ? '청산' : '진입'} 처리 완료 — 아래 최근 로그와 포지션에 반영됐습니다.</p>
+      : null
 
   if (manualFlat) {
     return <div className="bot-control bot-control-flat">
@@ -194,7 +227,8 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
           진입 버튼을 누르거나{nextRebalanceTs ? ' 다음 정기 리밸런스 시각' : ' 다음 리밸런스'}에 자동 재진입합니다.
         </small>
       </div>
-      <button className="source-add" disabled={busy} onClick={() => send('enter')}>{busy ? '전송 중…' : '지금 진입'}</button>
+      <button className="source-add" disabled={locked} onClick={() => send('enter')}>{busy ? '전송 중…' : pending ? '처리 대기 중…' : '지금 진입'}</button>
+      {statusLine}
       {error && <p className="form-error">{error}</p>}
     </div>
   }
@@ -206,13 +240,14 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
         <small>모든 롱/숏 포지션을 시장가로 청산하고 자동 재진입을 정지합니다. {live ? `봇이 다음 폴링(5초 내)에 실행합니다.` : '개장 중이면 이번 사이클, 장외면 개장 시 체결됩니다.'}</small>
       </div>
       <div className="bot-control-actions">
-        <button className="source-cancel" disabled={busy} onClick={() => setConfirming(false)}>취소</button>
-        <button className="source-add danger" disabled={busy} onClick={() => send('flatten')}>{busy ? '전송 중…' : '청산 확인'}</button>
+        <button className="source-cancel" disabled={locked} onClick={() => setConfirming(false)}>취소</button>
+        <button className="source-add danger" disabled={locked} onClick={() => send('flatten')}>{busy ? '전송 중…' : pending ? '처리 대기 중…' : '청산 확인'}</button>
       </div>
     </> : <>
       <div><small>고점이라 판단되면 즉시 전량 청산하고 정지할 수 있습니다. 재진입은 진입 버튼 또는 다음 정기 리밸런스.</small></div>
-      <button className="source-cancel" onClick={() => setConfirming(true)}>즉시 매도</button>
+      <button className="source-cancel" disabled={locked} onClick={() => setConfirming(true)}>{pending ? '처리 대기 중…' : '즉시 매도'}</button>
     </>}
+    {statusLine}
     {error && <p className="form-error">{error}</p>}
   </div>
 }
@@ -264,6 +299,7 @@ function PositionBook({ positions }: { positions: [string, MomentumRotationPosit
       side: p.side,
       notional: Math.abs(p.notionalUsdt),
       entry: p.entryPrice,
+      mark: p.markPrice,
       pnl: p.unrealizedPnlUsdt,
       roe: p.notionalUsdt ? (p.unrealizedPnlUsdt / Math.abs(p.notionalUsdt)) * 100 : 0,
     }))
@@ -287,7 +323,7 @@ function PositionBook({ positions }: { positions: [string, MomentumRotationPosit
     <div className="posbook-grid">
       <div className="posbook-row posbook-hd">
         <span>종목</span><span>방향</span><span className="ta-r">명목가치</span>
-        <span className="ta-r">진입가</span><span className="ta-r">ROE</span><span className="ta-r">미실현 PnL</span>
+        <span className="ta-r">진입가</span><span className="ta-r">현재가</span><span className="ta-r">ROE</span><span className="ta-r">미실현 PnL</span>
       </div>
       {rows.map(r => (
         <div key={r.symbol} className={`posbook-row side-${r.side}`}>
@@ -295,6 +331,7 @@ function PositionBook({ positions }: { positions: [string, MomentumRotationPosit
           <span><em className={`posbook-dir ${r.side}`}>{r.side === 'long' ? 'LONG' : 'SHORT'}</em></span>
           <span className="ta-r mono">${r.notional.toFixed(2)}</span>
           <span className="ta-r mono">{price(r.entry)}</span>
+          <span className="ta-r mono">{r.mark ? price(r.mark) : '-'}</span>
           <span className={`ta-r mono ${r.roe >= 0 ? 'up' : 'down'}`}>{r.roe >= 0 ? '+' : ''}{r.roe.toFixed(2)}%</span>
           <span className={`ta-r mono ${r.pnl >= 0 ? 'up' : 'down'}`}>{r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</span>
         </div>
@@ -424,7 +461,7 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
     </div>
     {data && <BotControlPanel bot={market === 'kr' ? 'kr-rotation' : 'us-rotation'}
       manualFlat={data.broker?.manualFlat} manualFlatPending={data.broker?.manualFlatPending}
-      manualFlatTs={data.broker?.manualFlatTs} onDone={load}/>}
+      manualFlatTs={data.broker?.manualFlatTs} consumedControlNonce={data.consumedControlNonce} onDone={load}/>}
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">
@@ -501,6 +538,12 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
   const hwm = data?.broker?.hwmUsdt ?? data?.hwmUsdt ?? 0
   const leverage = data?.broker?.leverage ?? 0
   const grossNotional = data?.broker?.grossNotionalUsdt ?? 0
+  // 세션 = 마지막 리밸런스(정기 또는 수동 즉시매도 후 재진입) 이후 손익 — inception 이후 누적인
+  // overallReturnPct 와 달리 리밸런스마다 0으로 리셋된다. "일간" 수익률(periodReturnPct, 'day' 탭)은
+  // 달력상 24시간 창이라 세션과 무관하게 계속 이어진다.
+  const sessionPnl = data?.broker?.sessionPnlUsdt ?? 0
+  const sessionReturnPct = data?.broker?.sessionReturnPct ?? 0
+  const sessionStartTs = data?.broker?.sessionStartTs ?? null
   const pnlSeries: ChartPoint[] = (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt }))
   const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
   const periodReturnPct = startingCapital > 0 ? (periodPnl / startingCapital) * 100 : 0
@@ -514,20 +557,23 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
       : '코인 선물 상대모멘텀 롱숏 로테이션 백테스트(페이퍼) 현황입니다. 실주문 없음 — 가상자본 시뮬레이션.'}</p>
     <div className="trading-status-card">
       <BotStatusPill tone={statusTone} label={statusLabel}/>
-      <p>잔고(바이낸스 API) {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>${equity.toFixed(2)}</b> : '-'} · 손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} (미실현 {data ? unrealized.toFixed(2) : '-'})</p>
+      {data && sessionStartTs && <p className="trading-headline-stat">이번 세션 수익률({fmt(sessionStartTs)}부터) <b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}% ({sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)})</b> — 자동/수동 리밸런스가 일어날 때마다 0으로 다시 시작합니다.</p>}
+      <p>잔고(바이낸스 API) {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>${equity.toFixed(2)}</b> : '-'} · 전체 누적손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} (미실현 {data ? unrealized.toFixed(2) : '-'})</p>
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (디레버 20% / 킬 35%)</p>}
     </div>
     {data && !data.halted && <BotControlPanel bot="momentum-rotation" live={live}
       manualFlat={data.broker?.manualFlat} manualFlatTs={data.broker?.manualFlatTs}
-      nextRebalanceTs={data.nextRebalanceTs} onDone={load}/>}
+      nextRebalanceTs={data.nextRebalanceTs} consumedControlNonce={data.consumedControlNonce} onDone={load}/>}
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">
         <div><b>${startingCapital.toFixed(2)}</b><span>진입금액(시작 자본)</span></div>
         <div><b>${equity.toFixed(2)}</b><span>현재금액(API 잔고)</span></div>
         <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
-        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
+        <div><b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}%</b><span>이번 세션 수익률(마지막 리밸런스 이후)</span></div>
+        <div><b className={sessionPnl >= 0 ? 'positive' : 'negative'}>{sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)}</b><span>이번 세션 손익</span></div>
+        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률(inception 이후 누적)</span></div>
         <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
         <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
         <div><b className={drawdown > 0.15 ? 'negative' : ''}>{(drawdown * 100).toFixed(1)}%</b><span>현재 낙폭</span></div>

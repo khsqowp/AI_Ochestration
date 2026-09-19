@@ -23,6 +23,25 @@ function b64Encode(s: string, urlSafe = false): string {
   const out = btoa(bytesToBinary(te.encode(s)))
   return urlSafe ? out.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : out
 }
+/** %XX 이스케이프와 리터럴 문자(전부 ASCII 범위라고 가정)를 그대로 바이트로 풀어낸다 —
+ * decodeURIComponent 는 항상 UTF-8 로만 해석해서, 옛 한국 사이트가 흔히 쓰는 EUC-KR URL은
+ * 이걸로 그대로 깨진다. 문자셋을 골라 TextDecoder 로 넘길 수 있도록 바이트 단계에서 끊어둔다. */
+function percentDecodeToBytes(raw: string): Uint8Array {
+  const bytes: number[] = []
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '%' && /^[0-9a-fA-F]{2}$/.test(raw.substring(i + 1, i + 3))) {
+      bytes.push(parseInt(raw.substring(i + 1, i + 3), 16))
+      i += 2
+    } else {
+      bytes.push(raw.charCodeAt(i) & 0xff)
+    }
+  }
+  return new Uint8Array(bytes)
+}
+function urlDecodeWithCharset(raw: string, charset: string): string {
+  const bytes = percentDecodeToBytes(raw.replace(/\+/g, ' '))
+  return new TextDecoder(charset, { fatal: false }).decode(bytes)
+}
 function hexDecode(raw: string): string {
   const t = raw.trim().replace(/\s+/g, '')
   const b = new Uint8Array(t.length / 2)
@@ -104,7 +123,14 @@ function detectStep(input: string): Step | null {
     try {
       const d = decodeURIComponent(s.replace(/\+/g, ' '))
       if (d !== s) return { label: 'URL 인코딩', decoded: d, reencode: e => encodeURIComponent(e) }
-    } catch { /* malformed % sequence */ }
+    } catch { /* UTF-8로는 깨짐 — 아래에서 EUC-KR 로 재시도 */ }
+    // UTF-8 로 디코딩하면 깨지거나(예외) 문자열 자체가 안 바뀌는데, 옛 한국 사이트 URL 은 흔히
+    // EUC-KR 로 인코딩돼 있다 — 그걸로 다시 읽으면 정상 텍스트가 나오는지 확인한다. 단, 브라우저는
+    // EUC-KR 인코더를 표준으로 제공하지 않아 재인코딩은 UTF-8 로만 가능하다(원래 바이트와 달라질 수 있음).
+    try {
+      const euckr = urlDecodeWithCharset(s, 'euc-kr')
+      if (strongText(euckr) && euckr !== s) return { label: 'URL 인코딩 (EUC-KR)', decoded: euckr, reencode: e => encodeURIComponent(e) }
+    } catch { /* EUC-KR로도 아님 */ }
   }
 
   if (/&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]{1,31});/.test(s)) {
@@ -208,6 +234,7 @@ const ALL_DECODERS: [string, (s: string) => string][] = [
   ['Base64', b64Decode],
   ['URL 디코딩', s => decodeURIComponent(s.replace(/\+/g, ' '))],
   ['URL 디코딩 (2중)', s => decodeURIComponent(decodeURIComponent(s))],
+  ['URL 디코딩 (EUC-KR)', s => urlDecodeWithCharset(s, 'euc-kr')],
   ['HTML 엔티티', htmlDecode],
   ['Hex', hexDecode],
   ['Unicode escape', unicodeUnescape],
@@ -282,6 +309,7 @@ export function SmartDecoderBuilder() {
       <textarea className="payload-builder-textarea" rows={result.steps.some(s => s.label === 'JWT') ? 10 : 4}
         value={finalText} onChange={e => setEdited(e.target.value)}/>
 
+      {result.steps.some(s => s.label.includes('EUC-KR')) && <p className="dec-hash-note">EUC-KR 로 읽은 값입니다 — 브라우저는 EUC-KR 인코더를 제공하지 않아 재인코딩은 UTF-8 로만 됩니다(원래 바이트와 달라집니다).</p>}
       <div className="payload-readout-title">원래 포맷으로 재인코딩 ({result.steps.map(s => s.label).reverse().join(' → ')})</div>
       <div className="cheatsheet-command-bar">
         <pre className="cheatsheet-command wrap-anywhere">{reencoded}</pre>

@@ -90,6 +90,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'smart-decoder', name: '스마트 디코더', base: '', options: [],
         note: '값을 붙여넣으면 인코딩/해시 포맷을 자동 판별해 디코딩하고, 디코딩 결과를 수정하면 원래 포맷으로 즉시 재인코딩합니다.',
       },
+      {
+        id: 'rainbow-crack', name: '레인보우 테이블 크랙', base: '', options: [],
+        note: '해시값만 넣으면 내장 사전으로 크랙을 시도하고, 원본값을 넣으면 MD5/SHA1/SHA256/SHA384/SHA512 를 계산합니다(해시값을 같이 넣으면 일치 여부 검증). 전부 브라우저 안에서만 계산됩니다.',
+      },
     ],
   },
   {
