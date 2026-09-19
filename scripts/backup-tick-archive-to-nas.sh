@@ -6,6 +6,13 @@
 # macOS의 흔한 함정을 피하려고, 마운트 여부를 먼저 검사하고 아니면 즉시 실패시킨다.
 set -euo pipefail
 
+# launchd 가 이 스크립트를 실행할 땐 PATH 가 /usr/bin:/bin:/usr/sbin:/sbin 뿐이라 Homebrew로
+# 설치한 docker CLI 를 못 찾는다 — 실측 확인: "docker: command not found" 가 매 스케줄마다
+# 조용히 나서 trading-state 백업(entry_log 포함)만 몇 주째 하나도 NAS에 안 올라가고 있었음.
+# ensure_mounted 실패와 달리 이건 exit 1 로 안 죽고(if 안이라 set -e 도 안 걸림) "컨테이너 안
+# 떠있음"으로 오해하기 쉬운 로그만 남기고 조용히 넘어가서 한동안 못 알아챘다.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 SMB_SERVER="${SMB_SERVER:-noroot}"
 SMB_SHARE="${SMB_SHARE:-HDD2TB}"
 SMB_USER="${SMB_USER:-guest}"
