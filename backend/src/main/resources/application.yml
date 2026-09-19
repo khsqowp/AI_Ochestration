@@ -7,8 +7,18 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:change-me-before-sharing}
   jpa:
     hibernate:
-      ddl-auto: update
+      # Medium #17 -- Flyway now owns schema changes; validate only checks entities match what Flyway
+      # already migrated, instead of Hibernate silently auto-altering the schema on every boot.
+      ddl-auto: validate
     open-in-view: false
+  flyway:
+    enabled: true
+    # The schema already exists (built incrementally by ddl-auto: update over time) and was never
+    # Flyway-managed before this -- baseline-on-migrate marks whatever's already there as baseline-version
+    # (below) instead of Flyway refusing to run against a non-empty, non-Flyway schema. Any migration file
+    # from V1 onward is a genuinely new change made from this point forward.
+    baseline-on-migrate: true
+    baseline-version: "0"
   mvc:
     problemdetails:
       enabled: true

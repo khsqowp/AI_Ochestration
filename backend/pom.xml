@@ -22,6 +22,10 @@
     <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>0.12.6</version><scope>runtime</scope></dependency>
     <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>0.12.6</version><scope>runtime</scope></dependency>
     <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><scope>runtime</scope></dependency>
+    <!-- Medium #17: ddl-auto: update let the schema drift silently with every entity change; Flyway
+         makes every future schema change an explicit, reviewable, ordered migration file instead. -->
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-mysql</artifactId></dependency>
     <!-- 업로드 파일 텍스트 추출: PDF, DOCX/XLSX/PPTX, HWP -->
     <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.7</version></dependency>
     <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId><version>5.5.1</version></dependency>
