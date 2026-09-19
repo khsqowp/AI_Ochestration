@@ -125,8 +125,8 @@ class BlackBoxScenarioService {
   }
 
   @Transactional(readOnly=true) BlackBoxScenarioSession session(UUID ownerId, UUID sessionId) { return hydrate(owned(ownerId, sessionId)); }
-  @Transactional(readOnly=true) List<BlackBoxScenarioSession> history(UUID ownerId) {
-    List<BlackBoxScenarioSession> items=sessions.findByOwnerIdOrderByStartedAtDesc(ownerId).stream().filter(BlackBoxScenarioSession::isAiGenerated).toList();
+  @Transactional(readOnly=true) List<BlackBoxScenarioSession> history(UUID ownerId, int page, int size) {
+    List<BlackBoxScenarioSession> items=sessions.findByOwnerIdAndAiGeneratedTrueOrderByStartedAtDesc(ownerId, org.springframework.data.domain.PageRequest.of(page, size));
     items.forEach(this::hydrate);
     return items;
   }

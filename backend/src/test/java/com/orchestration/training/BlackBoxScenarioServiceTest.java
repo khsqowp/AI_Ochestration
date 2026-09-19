@@ -2,15 +2,19 @@ package com.orchestration.training;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 /** High #7 -- the learner's own message must survive an AI outage, not disappear along with the failed
  * reply it was supposed to receive. */
@@ -57,5 +61,24 @@ class BlackBoxScenarioServiceTest {
 
     assertThat(result.getMessages()).anyMatch(entry -> entry.equals("USER::질문"));
     assertThat(result.getMessages()).anyMatch(entry -> entry.equals("COACH::정상 답변"));
+  }
+
+  @Test
+  void history_asksTheRepositoryForOnlyTheRequestedPage_notTheEntireHistory() {
+    // Medium #15 -- history() used to load every AI-generated session for the owner (findByOwnerId...()
+    // returning a full List) and filter in memory. A learner with dozens of past sessions paid that cost
+    // on every visit to the history tab even though the UI only ever showed the first handful.
+    UUID ownerId = UUID.randomUUID();
+    BlackBoxScenarioSession session = BlackBoxScenarioSession.startAi(ownerId, "API_SECURITY", "제목", "개요", "{}", "첫 메시지");
+    when(sessions.findByOwnerIdAndAiGeneratedTrueOrderByStartedAtDesc(eq(ownerId), any(Pageable.class)))
+        .thenReturn(List.of(session));
+
+    List<BlackBoxScenarioSession> result = service().history(ownerId, 1, 10);
+
+    assertThat(result).containsExactly(session);
+    ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+    verify(sessions).findByOwnerIdAndAiGeneratedTrueOrderByStartedAtDesc(eq(ownerId), pageable.capture());
+    assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
+    assertThat(pageable.getValue().getPageSize()).isEqualTo(10);
   }
 }
