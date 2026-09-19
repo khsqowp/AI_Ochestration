@@ -38,6 +38,7 @@ app:
     admin-id: ${ADMIN_ID:}
     admin-password: ${ADMIN_PW:}
     jwt-secret: ${JWT_SECRET:}
+    allowed-origins: ${ALLOWED_ORIGINS:}
   files:
     originals-path: ${ORIGINALS_PATH:../originals}
     obsidian-path: ${OBSIDIAN_PATH:../obsidian}
@@ -93,6 +94,14 @@ app:
   budget:
     # 이번 달 누적 예상 비용(USD)이 이 값을 넘으면 사용량 화면에 경고를 표시한다. 실제 청구액이 아닌 추정치 기준이다.
     usd-per-month: ${BUDGET_USD_PER_MONTH:20.00}
+  training:
+    # 제출 답안의 의미 기반 채점 모델. OPENAI 또는 DEEPSEEK만 지원하며 키는 .env에만 둔다.
+    evaluator-provider: ${TRAINING_EVALUATOR_PROVIDER:OPENAI}
+    # 블랙박스 대상 관측은 모델과 무관하게 즉시 반환한다. 코칭 호출 실패 시 안전한 규칙 기반 질문으로 대체한다.
+    black-box-coach-enabled: ${BLACK_BOX_COACH_ENABLED:true}
+    black-box-coach-provider: ${BLACK_BOX_COACH_PROVIDER:OPENAI}
+    black-box-evaluator-enabled: ${BLACK_BOX_EVALUATOR_ENABLED:true}
+    black-box-evaluator-provider: ${BLACK_BOX_EVALUATOR_PROVIDER:OPENAI}
   dolphin:
     chat-url: ${DOLPHIN_CHAT_URL:http://host.docker.internal:7777}
   llm:

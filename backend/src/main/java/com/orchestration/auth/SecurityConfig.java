@@ -40,6 +40,9 @@ class SecurityConfig {
       return http.build();
     }
 
+    // High #2, CSRF defense-in-depth on top of SameSite=Lax -- runs before the JWT filter so an
+    // untrusted cross-site mutating request is rejected before it even gets a chance at authentication.
+    http.addFilterBefore(new OriginValidationFilter(properties), UsernamePasswordAuthenticationFilter.class);
     http.addFilterBefore(new JwtAuthenticationFilter(authService), UsernamePasswordAuthenticationFilter.class);
     http.authorizeHttpRequests(auth -> auth
         // SSE 스트리밍 응답(예: /api/dolphin/chat)은 StreamingResponseBody 로 async 재디스패치되는데,
@@ -82,6 +85,9 @@ class SecurityConfig {
         // 로컬 LLM · AI 토론 — 인증된 USER 도 사용 (2026-09 재편: 별도 카테고리 페이지로 승격)
         .requestMatchers("/api/dolphin/**").authenticated()
         .requestMatchers("/api/debate/**").authenticated()
+
+        // 역량 강화 — 개인 평가·답안·실습 이력은 USER와 ADMIN 모두 자신의 것만 접근한다.
+        .requestMatchers("/api/training/**").authenticated()
 
         // 투자 데이터 — anyRequest catch-all 로도 덮이지만, 롤 경계를 명시적으로 고정해 회귀를 막는다
         .requestMatchers("/api/trading/**").hasRole("ADMIN")

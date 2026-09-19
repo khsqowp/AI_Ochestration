@@ -10,5 +10,6 @@ public record AuthProperties(
     String devAdminName,
     String adminId,
     String adminPassword,
-    String jwtSecret) {}
+    String jwtSecret,
+    String allowedOrigins) {}
 

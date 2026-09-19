@@ -28,7 +28,7 @@ class AuthServiceTest {
 
   @BeforeEach
   void setUp() {
-    AuthProperties properties = new AuthProperties(true, false, "owner@local.dev", "Owner", "admin", "secret", "test-jwt-secret-0123456789-0123456789");
+    AuthProperties properties = new AuthProperties(true, false, "owner@local.dev", "Owner", "admin", "secret", "test-jwt-secret-0123456789-0123456789", "");
     jwt = new JwtService(properties);
     service = new AuthService(users, sessions, properties, jwt, encoder);
   }
