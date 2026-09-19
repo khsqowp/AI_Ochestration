@@ -240,7 +240,13 @@ public class TrainingService {
     for(TrainingAttempt attempt:history) if(attempt.getScore()!=null) lowestScore.merge(attempt.getTrainingCase().getId(),attempt.getScore(),Math::min);
     return listCases().stream().sorted(Comparator.comparing(trainingCase -> lowestScore.getOrDefault(trainingCase.getId(),100.0))).limit(3).toList();
   }
-  @Transactional TrainingAttempt start(UUID ownerId,UUID caseId){ TrainingCase c=cases.findById(caseId).orElseThrow(NoSuchElementException::new); return attempts.save(new TrainingAttempt(ownerId,c)); }
+  // Medium #16 -- listCases()/recommendations() only ever surface published cases, so an unpublished
+  // (retired/draft) case must be just as unreachable by a caseId someone already has or guesses;
+  // reusing the same NoSuchElementException as "case doesn't exist" avoids revealing that it does.
+  @Transactional TrainingAttempt start(UUID ownerId,UUID caseId){
+    TrainingCase c=cases.findById(caseId).filter(TrainingCase::isPublished).orElseThrow(NoSuchElementException::new);
+    return attempts.save(new TrainingAttempt(ownerId,c));
+  }
   @Transactional TrainingAttempt save(UUID ownerId,UUID attemptId,String answer){ TrainingAttempt a=owned(ownerId,attemptId); a.saveAnswer(answer);return attempts.save(a); }
   @Transactional TrainingAttempt submit(UUID ownerId,UUID attemptId,String answer){
     TrainingAttempt attempt=owned(ownerId,attemptId); attempt.saveAnswer(answer); return evaluateAttempt(attempt,answer);

@@ -72,6 +72,22 @@ class TrainingServiceTest {
   }
 
   @Test
+  void start_rejects_an_unpublished_case() {
+    // Medium #16 -- listCases()/recommendations() already filter to findByPublishedTrueOrderBy...(),
+    // so an unpublished case never appears in the catalog, but start() took a raw caseId with no such
+    // check: anyone who already had (or guessed) the UUID of a retired/draft case could still start it.
+    UUID ownerId = UUID.randomUUID();
+    TrainingCase unpublished = new TrainingCase("draft-case", "제목", TrainingCaseType.STATIC_DIAGNOSIS, "API_SECURITY", 1, "prompt", "{}");
+    unpublished.unpublish();
+    UUID caseId = UUID.randomUUID();
+    when(cases.findById(caseId)).thenReturn(Optional.of(unpublished));
+
+    assertThatThrownBy(() -> service().start(ownerId, caseId))
+        .isInstanceOf(java.util.NoSuchElementException.class);
+    verifyNoInteractions(attempts);
+  }
+
+  @Test
   void submit_still_evaluates_a_real_answer() throws Exception {
     UUID ownerId = UUID.randomUUID();
     UUID attemptId = UUID.randomUUID();

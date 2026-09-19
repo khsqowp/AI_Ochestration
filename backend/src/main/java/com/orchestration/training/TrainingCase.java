@@ -21,6 +21,7 @@ public class TrainingCase {
   TrainingCase(String slug,String title,TrainingCaseType type,String skill,int difficulty,String promptMd,String rubricJson){this.slug=slug;this.title=title;this.caseType=type;this.primarySkillCode=skill;this.difficulty=difficulty;this.promptMd=promptMd;this.rubricJson=rubricJson;}
   public UUID getId(){return id;} public String getSlug(){return slug;} public String getTitle(){return title;} public TrainingCaseType getCaseType(){return caseType;} public String getPrimarySkillCode(){return primarySkillCode;} public int getDifficulty(){return difficulty;} public String getPromptMd(){return promptMd;} public String getRubricJson(){return rubricJson;} public boolean isPublished(){return published;}
   void replaceRubric(String rubricJson){this.rubricJson=rubricJson;}
+  void unpublish(){this.published=false;}
   void refresh(String title,TrainingCaseType type,String skill,int difficulty,String promptMd,String rubricJson){
     this.title=title; this.caseType=type; this.primarySkillCode=skill; this.difficulty=difficulty; this.promptMd=promptMd; this.rubricJson=rubricJson;
   }
