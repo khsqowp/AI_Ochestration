@@ -67,7 +67,16 @@ public class TaskService {
   public WorkTask get(UUID id) { return tasks.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)); }
   @Transactional(readOnly = true)
   public List<WorkTask> recent() { return tasks.findTop20ByOrderByCreatedAtDesc(); }
-  public void retry(UUID id) { get(id); runner.getObject().execute(id); }
+  /** Only a FAILED task can be retried -- retrying a RUNNING task spins up a second concurrent execution
+   * of the same task ID (the original run is still in flight), and retrying a COMPLETED/CANCELLED/QUEUED/
+   * AWAITING_BATCH task would re-run a pipeline that either already finished or is already scheduled. */
+  public void retry(UUID id) {
+    WorkTask task = get(id);
+    if (task.getStatus() != TaskStatus.FAILED) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "실패한 작업만 재시도할 수 있습니다.");
+    }
+    runner.getObject().execute(id);
+  }
   /** Covers both RUNNING (mid-pipeline when the process died) and QUEUED (already committed to the DB but
    * whose in-memory afterCommit() submission to the workflow executor was lost with the old process) --
    * without the QUEUED half, a task queued right before a redeploy is silently orphaned forever, stuck at
