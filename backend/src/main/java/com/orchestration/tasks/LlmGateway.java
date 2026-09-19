@@ -72,11 +72,15 @@ public class LlmGateway {
    */
   public BatchSubmission submitCollectBatch(Map<String, String> promptsByKey) throws Exception {
     requireKey(properties.geminiApiKey(), "Gemini");
+    // batchGenerateContent 는 google_search 툴과 묶이면 개별 항목이 전부 "Requested entity was not
+    // found." 로 실패한다(2026-09-15 야간 배치 34건 전량 실패로 실측 — Gemini 포럼에도 배치+검색 그라운딩
+    // 조합 버그가 다수 보고돼 있음). 동기 호출(collectWithGemini)엔 이 문제가 없어 거기는 유지한다.
+    // 배치용 프롬프트(buildInstruction)는 애초에 수집된 원문 발췌를 본문에 직접 박아넣고 검색은 "부족한
+    // 부분만 보강"용 보조 수단으로만 쓰므로, 툴을 빼도 핵심 근거(발췌)는 그대로 남는다.
     List<Map<String, Object>> requests = promptsByKey.entrySet().stream()
         .map(entry -> Map.<String, Object>of(
             "request", Map.of(
                 "contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", entry.getValue())))),
-                "tools", List.of(Map.of("google_search", Map.of())),
                 "generationConfig", Map.of("temperature", 0.2, "maxOutputTokens", 8000)),
             "metadata", Map.of("key", entry.getKey())))
         .toList();
@@ -158,6 +162,13 @@ public class LlmGateway {
     return chatCompletions("OpenAI", "https://api.openai.com/v1/chat/completions", properties.openaiApiKey(), properties.openaiModel(), system, prompt, Map.of(), timeoutSeconds, maxOutputTokens, 0.2);
   }
 
+  /** Training evaluation must be machine-readable: free-form model prose is not accepted by the evaluator. */
+  public LlmResult evaluateTrainingWithOpenAi(String system, String prompt) throws Exception {
+    requireKey(properties.openaiApiKey(), "OpenAI");
+    return chatCompletions("OpenAI", "https://api.openai.com/v1/chat/completions", properties.openaiApiKey(), properties.openaiModel(), system, prompt,
+        Map.of("response_format", Map.of("type", "json_object")), properties.decisionTimeoutSeconds(), 1800, 0.0);
+  }
+
   public LlmResult decideWithDeepSeek(String system, String prompt) throws Exception {
     return decideWithDeepSeek(system, prompt, 2200);
   }
@@ -166,6 +177,12 @@ public class LlmGateway {
     requireKey(properties.deepseekApiKey(), "DeepSeek");
     return chatCompletions("DeepSeek", "https://api.deepseek.com/chat/completions", properties.deepseekApiKey(), properties.deepseekModel(), system, prompt,
         Map.of("thinking", Map.of("type", "enabled"), "reasoning_effort", "medium"), properties.decisionTimeoutSeconds(), maxOutputTokens, 0.2);
+  }
+
+  public LlmResult evaluateTrainingWithDeepSeek(String system, String prompt) throws Exception {
+    requireKey(properties.deepseekApiKey(), "DeepSeek");
+    return chatCompletions("DeepSeek", "https://api.deepseek.com/chat/completions", properties.deepseekApiKey(), properties.deepseekModel(), system, prompt,
+        Map.of("thinking", Map.of("type", "disabled"), "response_format", Map.of("type", "json_object")), properties.decisionTimeoutSeconds(), 1800, 0.0);
   }
 
   /**
@@ -200,6 +217,17 @@ public class LlmGateway {
     requireKey(properties.deepseekApiKey(), "DeepSeek");
     return chatCompletions("DeepSeek", "https://api.deepseek.com/chat/completions", properties.deepseekApiKey(), properties.deepseekModel(), system, prompt,
         Map.of("thinking", Map.of("type", "enabled"), "reasoning_effort", "high", "frequency_penalty", 0.4), properties.longFormTimeoutSeconds(), maxOutputTokens, 0.55);
+  }
+
+  /**
+   * 보안 뉴스 한 출처의 수집 리포트를 개별 사건 단위로 쪼개면서 각 항목을 분류하는 용도 —
+   * {@link #evaluateTrainingWithDeepSeek}처럼 JSON 객체 응답을 강제하지만, 원문 body 를 거의 그대로
+   * 돌려받아야 해서(요약이 아니라 재수록) 출력 토큰 예산과 타임아웃을 long-form 수준으로 잡는다.
+   */
+  public LlmResult splitJsonWithDeepSeek(String system, String prompt, int maxOutputTokens) throws Exception {
+    requireKey(properties.deepseekApiKey(), "DeepSeek");
+    return chatCompletions("DeepSeek", "https://api.deepseek.com/chat/completions", properties.deepseekApiKey(), properties.deepseekModel(), system, prompt,
+        Map.of("thinking", Map.of("type", "disabled"), "response_format", Map.of("type", "json_object")), properties.longFormTimeoutSeconds(), maxOutputTokens, 0.1);
   }
 
   /**

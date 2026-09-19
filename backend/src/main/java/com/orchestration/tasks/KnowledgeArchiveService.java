@@ -9,6 +9,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -16,13 +18,18 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class KnowledgeArchiveService {
+  private static final Logger log = LoggerFactory.getLogger(KnowledgeArchiveService.class);
   private final FileProperties files;
-  KnowledgeArchiveService(FileProperties files) {
+  private final SecurityNewsItemClassifier newsItemClassifier;
+  KnowledgeArchiveService(FileProperties files, SecurityNewsItemClassifier newsItemClassifier) {
     this.files = files;
+    this.newsItemClassifier = newsItemClassifier;
   }
 
   public String archive(WorkTask task, String report) throws IOException {
@@ -73,19 +80,126 @@ public class KnowledgeArchiveService {
 
   /**
    * 보안 수집 소스는 예전에 11개 고정 카테고리({@link SecurityCategoryClassifier})로 하위폴더를 나눠 모았으나,
-   * 대부분 사이트별 주간 다이제스트가 여러 주제를 섞어 다뤄 카테고리 하나로 분류하는 의미가 크지 않고 폴더만
-   * 늘려 2026-08-28에 폐지했다 — 도메인 뉴스 세그먼트 바로 아래(하위폴더 없이) 그날 하루치 전체 출처를
-   * 파일 하나에 모은다(소스별 파일로 쪼갠 적이 잠깐 있었으나 요청받은 적 없는 변경이라 되돌림). 출처는
-   * 병합된 파일 안에서 굵은 글씨 태그로만 구분한다.
+   * 사이트별 리포트 하나를 통째로 카테고리 하나에 분류하는 게 의미가 크지 않아(리포트 하나가 흔히 서로
+   * 무관한 소식 여러 개를 섞어 다룸) 폴더만 늘어 2026-08-28에 폐지하고 날짜 하나로만 합쳤었다.
+   * 지금은 {@link SecurityNewsItemClassifier}가 그 문제를 정면으로 푼다 — 리포트를 먼저 개별 소식 단위로
+   * 쪼갠 다음 각 조각에 유형(해킹사고·랜섬웨어·AI 보안 등, 고정 목록 아님 — {@link #NEWS_TYPE_REGISTRY_FILE}
+   * 로 계속 재사용·성장)을 붙인다. 파일 자체는 여전히 그날 하루 전체가 {@code <date>.md} 파일 하나 — 서로
+   * 다른 출처의 소식이라도 파일을 쪼개지 않고, 그 한 파일 안에서 "## 유형" 섹션으로만 나뉜다. 같은 유형
+   * 섹션이 이미 있으면 그 아래로 이어 붙이고(출처가 여러 번 등장할 수 있음), 새 유형이면 파일 끝에 새
+   * 섹션을 연다.
    */
   private String archiveDailyByCategory(Path root, String domain, String sourceTitle, WorkTask task, String report) throws IOException {
     LocalDate today = LocalDate.now();
-    Path directory = root.resolve(domain).resolve(SecurityCategoryClassifier.NEWS_SEGMENT);
-    Files.createDirectories(directory);
-    Path note = directory.resolve(today + ".md");
+    Path newsRoot = root.resolve(domain).resolve(SecurityCategoryClassifier.NEWS_SEGMENT);
+    Path note = newsRoot.resolve(today + ".md");
+    List<String> knownTypes = readNewsTypeRegistry(newsRoot);
+    List<SecurityNewsItemClassifier.NewsItem> items = newsItemClassifier.split(sourceTitle, report, knownTypes);
+    growNewsTypeRegistry(newsRoot, knownTypes, items);
+    Files.createDirectories(newsRoot);
+    writeNewsItemsIntoDailyFile(note, domain, today, sourceTitle, items);
+    return root.relativize(note).toString();
+  }
+
+  private static final String NEWS_TYPE_REGISTRY_FILE = ".news-type-labels";
+  private static final Pattern NEWS_SECTION_HEADING = Pattern.compile("(?m)^## (.+)$");
+
+  // 서로 다른 출처가 미세하게 다른 공백으로 같은 유형을 돌려줘도(예: "AI  보안") 섹션이 갈라지지 않게
+  // 공백만 정규화한다 — 폴더명이 아니라 마크다운 섹션 제목이라 나머지 문자는 그대로 둔다.
+  private String normalizeNewsType(String type) {
+    String normalized = type.strip().replaceAll("\\s+", " ");
+    return normalized.isBlank() ? SecurityNewsItemClassifier.FALLBACK_TYPE : normalized;
+  }
+
+  private List<String> readNewsTypeRegistry(Path newsRoot) {
+    Path registry = newsRoot.resolve(NEWS_TYPE_REGISTRY_FILE);
+    if (!Files.exists(registry)) return List.of();
+    try {
+      return Files.readAllLines(registry, StandardCharsets.UTF_8).stream()
+          .map(String::strip).filter(line -> !line.isBlank()).distinct().toList();
+    } catch (IOException exception) {
+      log.warn("news_type_registry_read_failed", exception);
+      return List.of();
+    }
+  }
+
+  private void growNewsTypeRegistry(Path newsRoot, List<String> existing, List<SecurityNewsItemClassifier.NewsItem> items) {
+    Set<String> merged = new LinkedHashSet<>(existing);
+    boolean changed = false;
+    for (SecurityNewsItemClassifier.NewsItem item : items) {
+      changed |= merged.add(normalizeNewsType(item.type()));
+    }
+    if (!changed) return;
+    try {
+      Files.createDirectories(newsRoot);
+      Files.write(newsRoot.resolve(NEWS_TYPE_REGISTRY_FILE), merged, StandardCharsets.UTF_8);
+    } catch (IOException exception) {
+      log.warn("news_type_registry_write_failed", exception);
+    }
+  }
+
+  /**
+   * 기존 파일이 있으면 앞부분(프런트매터 + 날짜 이력 + H1 제목)은 {@link #bumpDateAndHistory}로만 갱신하고,
+   * 그 뒤 본문만 "## 유형" 단위로 파싱해 이번 항목들을 맞는 섹션에 끼워 넣는다 — {@link #writeOrAppend}처럼
+   * 새 블록을 파일 끝에 무조건 붙이면 유형별로 섹션이 갈라지지 않으므로 이 파일만은 별도 경로로 쓴다.
+   */
+  private void writeNewsItemsIntoDailyFile(Path note, String domain, LocalDate today, String sourceTitle,
+      List<SecurityNewsItemClassifier.NewsItem> items) throws IOException {
     String dailyTitle = "보안 뉴스 (" + today + ")";
-    String taggedReport = "**출처: " + sourceTitle + "**\n\n" + report;
-    return writeOrAppend(root, note, domain, dailyTitle, task, taggedReport);
+    String headingLine = "# " + dailyTitle;
+    String head;
+    LinkedHashMap<String, String> sections = new LinkedHashMap<>();
+    if (Files.exists(note)) {
+      String existing = Files.readString(note, StandardCharsets.UTF_8);
+      String bumped = bumpDateAndHistory(existing, today);
+      int headingIndex = bumped.indexOf(headingLine);
+      if (headingIndex < 0) {
+        // 제목 줄을 못 찾을 만큼 형식이 어긋난 레거시 파일이면 안전하게 그대로 두고 끝에 이어 붙인다.
+        head = bumped.stripTrailing() + "\n\n";
+      } else {
+        int bodyStart = headingIndex + headingLine.length();
+        head = bumped.substring(0, bodyStart) + "\n\n";
+        sections.putAll(parseNewsSections(bumped.substring(bodyStart)));
+      }
+    } else {
+      head = "---\n"
+          + "title: \"" + dailyTitle + "\"\n"
+          + "date: " + today + "\n"
+          + "domain: " + domain + "\n"
+          + "doc_type: pm-report\n"
+          + "origin: collection\n"
+          + "tags: [orchestration, " + domain + "]\n"
+          + "---\n\n"
+          + "업데이트 이력: " + today + "\n\n"
+          + headingLine + "\n\n";
+    }
+    for (SecurityNewsItemClassifier.NewsItem item : items) {
+      String type = normalizeNewsType(item.type());
+      String block = "**출처: " + sourceTitle + " · " + item.title() + "**\n\n" + item.body().strip();
+      sections.merge(type, block, (existingContent, newBlock) -> existingContent.stripTrailing() + "\n\n---\n\n" + newBlock);
+    }
+    StringBuilder body = new StringBuilder();
+    for (var entry : sections.entrySet()) {
+      body.append("## ").append(entry.getKey()).append("\n\n").append(entry.getValue().strip()).append("\n\n");
+    }
+    Files.writeString(note, head + body, StandardCharsets.UTF_8);
+  }
+
+  private LinkedHashMap<String, String> parseNewsSections(String body) {
+    LinkedHashMap<String, String> sections = new LinkedHashMap<>();
+    Matcher matcher = NEWS_SECTION_HEADING.matcher(body);
+    List<String> headings = new ArrayList<>();
+    List<int[]> spans = new ArrayList<>();
+    while (matcher.find()) {
+      headings.add(matcher.group(1).trim());
+      spans.add(new int[]{matcher.start(), matcher.end()});
+    }
+    for (int i = 0; i < headings.size(); i++) {
+      int contentStart = spans.get(i)[1];
+      int contentEnd = i + 1 < headings.size() ? spans.get(i + 1)[0] : body.length();
+      sections.put(headings.get(i), body.substring(contentStart, contentEnd).trim());
+    }
+    return sections;
   }
 
   private String writeOrAppend(Path root, Path note, String domain, String title, WorkTask task, String report) throws IOException {

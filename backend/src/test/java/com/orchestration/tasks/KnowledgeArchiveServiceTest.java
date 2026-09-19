@@ -1,7 +1,12 @@
 package com.orchestration.tasks;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orchestration.files.FileProperties;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,7 +20,12 @@ import org.junit.jupiter.api.io.TempDir;
 class KnowledgeArchiveServiceTest {
 
   private KnowledgeArchiveService service(Path obsidian) {
-    return new KnowledgeArchiveService(new FileProperties("/tmp/originals", obsidian.toString(), 30000L));
+    // LlmGateway 를 스텁 없이 mock 하면 splitJsonWithDeepSeek() 가 null 을 돌려주고, 그걸 감싸는
+    // SecurityNewsItemClassifier.attempt() 안에서 NPE 로 터져 split() 의 catch 절이 잡는다 — 즉 이
+    // 테스트들은 항상 결정론적으로 폴백 경로(전체 리포트를 "종합" 유형 하나로 보관)를 탄다. 실제 LLM 분리
+    // 동작 자체는 SecurityNewsItemClassifier 자신의 단위 테스트가 맡는다.
+    SecurityNewsItemClassifier newsItemClassifier = new SecurityNewsItemClassifier(mock(LlmGateway.class), new ObjectMapper());
+    return new KnowledgeArchiveService(new FileProperties("/tmp/originals", obsidian.toString(), 30000L), newsItemClassifier);
   }
 
   private WorkTask task(String title) {
@@ -155,11 +165,12 @@ class KnowledgeArchiveServiceTest {
   void collectionOrigin_securityDomain_routesFlatIntoOneFilePerDay(@TempDir Path obsidian) throws Exception {
     WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
 
+    // LLM 분리가 실패하면(이 테스트처럼 stub 없는 mock) 전체 리포트가 폴백 유형 "종합" 섹션 하나로 보관된다.
     String path = service(obsidian).archive(task, "# 랜섬웨어 동향\n\n본문 내용입니다.");
 
     assertThat(path).isEqualTo("security/뉴스/" + LocalDate.now() + ".md");
     String content = Files.readString(obsidian.resolve(path));
-    assertThat(content).contains("본문 내용입니다.").contains("Krebs on Security");
+    assertThat(content).contains("## 종합").contains("본문 내용입니다.").contains("Krebs on Security");
   }
 
   @Test
@@ -175,6 +186,30 @@ class KnowledgeArchiveServiceTest {
     String content = Files.readString(obsidian.resolve(firstPath));
     assertThat(content).contains("Krebs 본문.").contains("HackerNews 본문.")
         .contains("Krebs on Security").contains("The Hacker News");
+  }
+
+  @Test
+  void collectionOrigin_itemsWithDifferentTypes_getTheirOwnSectionsInTheSameFile(@TempDir Path obsidian) throws Exception {
+    LlmGateway llm = mock(LlmGateway.class);
+    when(llm.splitJsonWithDeepSeek(anyString(), anyString(), anyInt())).thenReturn(new LlmGateway.LlmResult("DeepSeek", "deepseek-v4-pro", """
+        {"items":[
+          {"type":"랜섬웨어","title":"병원 공격","body":"랜섬웨어 조직이 병원을 공격했습니다."},
+          {"type":"AI 보안","title":"AI 침투 가속","body":"AI 에이전트가 침투 시간을 단축시켰습니다."}
+        ]}
+        """, 0, 0, 0, 0));
+    KnowledgeArchiveService service = new KnowledgeArchiveService(
+        new FileProperties("/tmp/originals", obsidian.toString(), 30000L),
+        new SecurityNewsItemClassifier(llm, new ObjectMapper()));
+    WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
+
+    String path = service.archive(task, "랜섬웨어 조직이 병원을 공격했습니다.\n\nAI 에이전트가 침투 시간을 단축시켰습니다.");
+
+    assertThat(path).isEqualTo("security/뉴스/" + LocalDate.now() + ".md");
+    String content = Files.readString(obsidian.resolve(path));
+    assertThat(content).contains("## 랜섬웨어").contains("## AI 보안")
+        .contains("랜섬웨어 조직이 병원을 공격했습니다.").contains("AI 에이전트가 침투 시간을 단축시켰습니다.");
+    // 유형 레지스트리도 다음 호출부터 재사용할 수 있게 남는다.
+    assertThat(Files.readString(obsidian.resolve("security/뉴스/.news-type-labels"))).contains("랜섬웨어").contains("AI 보안");
   }
 
   @Test
