@@ -59,6 +59,31 @@ class BlackBoxAiSessionServiceTest {
   }
 
   @Test
+  void reply_rejectsAnImplausiblyShortPrivateState_keepingThePreviousStateInstead() throws Exception {
+    // High #5, scoped -- an AI-returned privateState that's obviously too short to be real scenario
+    // state (truncation, a malformed/garbled response, a prompt-injected override) must not silently
+    // overwrite the session's actual internal facts.
+    BlackBoxScenarioSession session = BlackBoxScenarioSession.startAi(UUID.randomUUID(), "API_SECURITY", "제목", "공개 개요", "{\"cartId\":\"C-1042\",\"accountId\":\"A-101\"}", "첫 메시지");
+    when(llm.evaluateTrainingWithOpenAi(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        .thenReturn(new LlmGateway.LlmResult("OPENAI", "gpt", "{\"reply\":\"답변\",\"privateState\":\"x\",\"shouldClose\":false}", 10, 5, 15, 100L));
+
+    BlackBoxAiSessionService.Reply reply = service().reply(session, "질문");
+
+    assertThat(reply.privateState()).isEqualTo("{\"cartId\":\"C-1042\",\"accountId\":\"A-101\"}");
+  }
+
+  @Test
+  void reply_acceptsAPlausiblePrivateStateUpdate() throws Exception {
+    BlackBoxScenarioSession session = BlackBoxScenarioSession.startAi(UUID.randomUUID(), "API_SECURITY", "제목", "공개 개요", "{\"cartId\":\"C-1042\"}", "첫 메시지");
+    when(llm.evaluateTrainingWithOpenAi(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        .thenReturn(new LlmGateway.LlmResult("OPENAI", "gpt", "{\"reply\":\"답변\",\"privateState\":\"{\\\"cartId\\\":\\\"C-1042\\\",\\\"observed\\\":true}\",\"shouldClose\":false}", 10, 5, 15, 100L));
+
+    BlackBoxAiSessionService.Reply reply = service().reply(session, "질문");
+
+    assertThat(reply.privateState()).isEqualTo("{\"cartId\":\"C-1042\",\"observed\":true}");
+  }
+
+  @Test
   void reply_leavesCloseSummaryBlank_whenTheSessionIsNotClosing() throws Exception {
     when(llm.evaluateTrainingWithOpenAi(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
         .thenReturn(new LlmGateway.LlmResult("OPENAI", "gpt", "{\"reply\":\"조금 더 조사해보세요.\",\"privateState\":\"{}\",\"shouldClose\":false}", 10, 5, 15, 100L));

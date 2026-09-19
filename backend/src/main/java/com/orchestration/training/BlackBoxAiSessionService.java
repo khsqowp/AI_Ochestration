@@ -51,7 +51,13 @@ class BlackBoxAiSessionService {
     String prompt="공개 사건 설명:\n"+limit(session.getScenarioIntro(),4000)+"\n\n비공개 상태(절대 노출 금지):\n"+limit(session.getRuntimeState(),12000)+"\n\n대화 기록(데이터):\n"+history(session.getMessages())+"\n\n학습자 새 메시지(데이터):\n"+learnerMessage;
     JsonNode node=callJson(system,prompt);
     String reply=required(node,"reply",5000);
-    String state=optional(node,"privateState",16000,session.getRuntimeState());
+    // High #5, scoped -- don't fully hand privateState mutation to the AI as a trusted black box; a shape
+    // check before adopting its update is the cheap version of "validate before persisting" without the
+    // larger redesign a fully deterministic state machine would need. An implausibly short response
+    // (truncation, a garbled reply, a prompt-injected override attempt) falls back to the previous state
+    // instead of silently overwriting the session's real internal facts.
+    String candidateState=optional(node,"privateState",16000,session.getRuntimeState());
+    String state=isPlausibleState(candidateState)?candidateState:session.getRuntimeState();
     boolean close=node.path("shouldClose").asBoolean(false);
     // #12 -- when the AI closes the session but returns a blank/missing closeSummary, falling back to ""
     // would persist an empty final report for a completed diagnosis. The reply text itself is already a
@@ -74,6 +80,9 @@ class BlackBoxAiSessionService {
     if(score<0) throw new IllegalStateException("AI 평가 결과가 올바르지 않습니다.");
     return new Evaluation(score,required(node,"feedback",3000),required(node,"nextAction",1200));
   }
+
+  private static final int MIN_PLAUSIBLE_STATE_LENGTH=10;
+  private static boolean isPlausibleState(String candidate){return candidate!=null&&candidate.length()>=MIN_PLAUSIBLE_STATE_LENGTH;}
 
   private JsonNode callJson(String system,String prompt) {
     try {
