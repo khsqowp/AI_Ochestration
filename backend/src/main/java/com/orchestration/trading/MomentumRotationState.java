@@ -30,12 +30,16 @@ public record MomentumRotationState(
     @JsonAlias("next_rebalance_ts") String nextRebalanceTs,
     @JsonAlias("rebalance_every_days") Integer rebalanceEveryDays,
     @JsonAlias("equity_history") List<EquityPoint> equityHistory,
-    @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory) {
+    @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory,
+    // 프런트가 방금 보낸 즉시매도/진입 명령의 nonce 와 대조해 "봇이 실제로 처리했는지"를 폴링으로
+    // 확인하는 용도 — momentum_rotation_loop.py 의 handle_control() 이 처리한 마지막 nonce.
+    @JsonAlias("consumed_control_nonce") String consumedControlNonce) {
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record Position(
       String side,
       @JsonAlias("entry_price") double entryPrice,
+      @JsonAlias("mark_price") double markPrice,
       @JsonAlias("notional_usdt") double notionalUsdt,
       @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt) {}
 
@@ -47,6 +51,13 @@ public record MomentumRotationState(
       @JsonAlias("inception_equity_usdt") double inceptionEquityUsdt,
       @JsonAlias("gross_notional_usdt") double grossNotionalUsdt,
       @JsonAlias("return_pct") double returnPct,
+      // 세션 = 마지막 리밸런스(정기 2~3일 자동 또는 수동 즉시매도 후 재진입) 이후 손익 — inception 이후
+      // 누적치인 returnPct 와 달리 리밸런스마다 0으로 리셋된다. trading/app/momentum_rotation_loop.py
+      // 의 _rebalance_live() 가 유일한 갱신 지점(자동/수동 공통).
+      @JsonAlias("session_start_equity_usdt") double sessionStartEquityUsdt,
+      @JsonAlias("session_start_ts") String sessionStartTs,
+      @JsonAlias("session_pnl_usdt") double sessionPnlUsdt,
+      @JsonAlias("session_return_pct") double sessionReturnPct,
       @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt,
       double drawdown,
       @JsonAlias("hwm_usdt") double hwmUsdt,
@@ -65,6 +76,6 @@ public record MomentumRotationState(
 
   public static MomentumRotationState empty() {
     return new MomentumRotationState(
-        Map.of(), List.of(), "paper", 0, 0, 0, 0, 0, 0, 0, false, null, null, null, null, null, List.of(), Map.of());
+        Map.of(), List.of(), "paper", 0, 0, 0, 0, 0, 0, 0, false, null, null, null, null, null, List.of(), Map.of(), null);
   }
 }
