@@ -114,4 +114,36 @@ class SourceCollectionServiceTest {
   void trailingSlashOnRootPath_isNormalizedTheSameAsWithout() {
     assertThat(service.pathSegments("/deeplinks/")).isEqualTo(service.pathSegments("/deeplinks"));
   }
+
+  // Medium #10 -- collectNow() (manual button) and the scheduled retry/nightly sweeps can all reach crawl()
+  // for the same source concurrently. contentChanged()'s read-then-write on PageSnapshot isn't atomic across
+  // two such calls, so both can see "changed" for the same page and each spin up its own duplicate analysis
+  // WorkTask. A per-sourceId lock closes that window; these test the lock primitive itself directly rather
+  // than racing real threads through the full network crawl (which would be flaky and slow).
+  @Test
+  void tryAcquireCollectionLock_deniesASecondConcurrentAcquisition_forTheSameSource() {
+    java.util.UUID sourceId = java.util.UUID.randomUUID();
+
+    assertThat(service.tryAcquireCollectionLock(sourceId)).isTrue();
+    assertThat(service.tryAcquireCollectionLock(sourceId)).isFalse();
+  }
+
+  @Test
+  void tryAcquireCollectionLock_allowsReacquisition_onceTheFirstHolderReleasesIt() {
+    java.util.UUID sourceId = java.util.UUID.randomUUID();
+    service.tryAcquireCollectionLock(sourceId);
+
+    service.releaseCollectionLock(sourceId);
+
+    assertThat(service.tryAcquireCollectionLock(sourceId)).isTrue();
+  }
+
+  @Test
+  void tryAcquireCollectionLock_isIndependentPerSource() {
+    java.util.UUID first = java.util.UUID.randomUUID();
+    java.util.UUID second = java.util.UUID.randomUUID();
+    service.tryAcquireCollectionLock(first);
+
+    assertThat(service.tryAcquireCollectionLock(second)).isTrue();
+  }
 }

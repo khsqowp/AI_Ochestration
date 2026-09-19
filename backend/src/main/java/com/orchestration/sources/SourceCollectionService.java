@@ -72,6 +72,13 @@ public class SourceCollectionService {
   private final Executor collectionExecutor;
   private final CollectionSettingService collectionSettings;
   private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NORMAL).build();
+  // Medium #10 -- collectNow() (manual) and the scheduled retry/nightly sweeps can all reach crawl() for
+  // the same source concurrently; contentChanged()'s read-then-write on PageSnapshot isn't atomic across
+  // two such calls, so both could see "changed" and each spin up its own duplicate analysis WorkTask.
+  // A single-permit Semaphore (not ReentrantLock) is used deliberately: this is a "someone else is already
+  // collecting this source" gate, not reentrant per-thread ownership, so even the same thread must never
+  // be treated as already allowed to enter a second time.
+  private final Map<UUID, java.util.concurrent.Semaphore> collectionLocks = new java.util.concurrent.ConcurrentHashMap<>();
 
   SourceCollectionService(ResearchSourceService sources, FileProperties files, TaskService tasks, SecurityCalendarService calendar,
       LlmGateway llm, GeminiCollectionBatchRepository batches, PageSnapshotRepository snapshots, TaskWorkflowRunner runner,
@@ -118,10 +125,31 @@ public class SourceCollectionService {
     return new CollectionResult(outcome.saved(), outcome.changed(), outcome.failed(), outcome.visited(), source.getCrawlDepth(), source.getMaxPages(), outcome.warning(), analysisTask == null ? null : analysisTask.getId());
   }
 
+  /** Package-visible so tests can exercise the lock primitive directly (racing real threads through the
+   * full network crawl would be flaky and slow). Caller must eventually pair a successful acquisition with
+   * {@link #releaseCollectionLock}. */
+  boolean tryAcquireCollectionLock(UUID sourceId) {
+    return collectionLocks.computeIfAbsent(sourceId, id -> new java.util.concurrent.Semaphore(1)).tryAcquire();
+  }
+  void releaseCollectionLock(UUID sourceId) { collectionLocks.get(sourceId).release(); }
+
   /** Crawls a source and saves its pages to disk — shared by the real-time path ({@link #collect}) and
    * the nightly batch path ({@link #crawlAndEnqueue}); only what happens to the resulting WorkTask differs
-   * between the two. */
+   * between the two. Guarded by a per-source lock so two overlapping callers (manual button vs. a
+   * scheduled sweep, or two sweeps) never crawl the same source at once. */
   private CrawlOutcome crawl(ResearchSource source, boolean manual) {
+    if (!tryAcquireCollectionLock(source.getId())) {
+      log.info("research_source_collection_skipped_concurrent sourceId={} manual={}", source.getId(), manual);
+      return new CrawlOutcome(0, 0, 0, 0, "다른 수집이 이미 이 소스를 처리 중입니다.", List.of(), List.of());
+    }
+    try {
+      return doCrawl(source, manual);
+    } finally {
+      releaseCollectionLock(source.getId());
+    }
+  }
+
+  private CrawlOutcome doCrawl(ResearchSource source, boolean manual) {
     ArrayDeque<CrawlTarget> pending = new ArrayDeque<>();
     Set<String> visited = new HashSet<>();
     List<Path> savedPaths = new ArrayList<>();
