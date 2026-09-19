@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import type { Notice, Role, Session, Task, TaskDomain, TaskEvent } from '../lib/types'
 import { archiveTaskLabel } from '../lib/util'
 import { useTodos } from '../components/Todo'
+import { shouldDeferReload } from './AppState.logic'
 
 type AppStateValue = {
   session: Session | null
@@ -124,7 +125,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const role: Role | null = session?.user?.role ?? null
   const isAdmin = role === 'ADMIN'
 
-  // 새 빌드 감지 시 자동 새로고침 — 로컬 LLM 스트리밍 페이지에서만 배너로 미루고 나머지는 즉시 반영.
+  // 새 빌드 감지 시 자동 새로고침 — 진행 중인 스트림·대화가 새로고침으로 끊기면 안 되는 페이지
+  // (로컬 LLM, 역량강화 블랙박스 세션)만 배너로 미루고 나머지는 즉시 반영(shouldDeferReload).
   useEffect(() => {
     const check = async () => {
       if (document.hidden) return
@@ -134,7 +136,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         if (previous === data.buildId) return
         sessionStorage.setItem('orchestration-build', data.buildId)
         if (!previous) return
-        if (pathnameRef.current.startsWith('/dashboard/llm')) setUpdateAvailable(true)
+        if (shouldDeferReload(pathnameRef.current)) setUpdateAvailable(true)
         else window.location.reload()
       } catch { /* 개발 중 임시 연결 실패는 무시 */ }
     }
