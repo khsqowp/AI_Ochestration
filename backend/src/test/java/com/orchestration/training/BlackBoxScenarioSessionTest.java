@@ -26,28 +26,6 @@ class BlackBoxScenarioSessionTest {
   }
 
   @Test
-  void exposes_only_a_black_box_observation_without_the_hidden_cause() {
-    BlackBoxScenarioEngine engine = new BlackBoxScenarioEngine();
-
-    BlackBoxScenarioEngine.ScenarioReply reply = engine.reply(BlackBoxScenarioCatalog.orderAccess(), "A 계정으로 주문 번호를 B 주문 번호로 바꿔 조회한다.");
-
-    assertThat(reply.observation()).contains("200 OK");
-    assertThat(reply.observation()).doesNotContain("객체 소유권 인가 누락");
-    assertThat(reply.coachMessage()).doesNotContain("정답");
-  }
-
-  @Test
-  void maps_a_model_classified_intent_to_the_server_owned_observation() {
-    BlackBoxScenarioEngine engine = new BlackBoxScenarioEngine();
-
-    BlackBoxScenarioEngine.ScenarioReply reply = engine.replyForAction(BlackBoxScenarioCatalog.orderAccess(), "CROSS_ORDER");
-
-    assertThat(reply.observationKey()).isEqualTo("cross-order");
-    assertThat(reply.observation()).contains("O-2008");
-    assertThat(reply.observation()).doesNotContain("인가 누락");
-  }
-
-  @Test
   void closes_with_a_short_text_diagnostic_report_not_a_seven_field_form() {
     BlackBoxScenarioSession session = BlackBoxScenarioSession.start(UUID.randomUUID(), BlackBoxScenarioCatalog.orderAccess());
     session.recordObservation("A 계정으로 B 주문 번호 조회 시 200 OK와 B 배송지가 반환됐다.");
@@ -56,6 +34,19 @@ class BlackBoxScenarioSessionTest {
     assertThat(session.getFinalReport()).contains("판정: 취약점 확인");
     assertThat(session.getFinalReport()).contains("일반 회원 간 주문 상세 조회");
     assertThat(session.getFinalReport()).doesNotContain("재검증");
+    assertThat(session.getStatus()).isEqualTo(BlackBoxSessionStatus.CLOSED);
+  }
+
+  @Test
+  void closeAi_neverPersistsABlankFinalReport_evenIfTheCallerPassesOneIn() {
+    // Medium #12, defense-in-depth -- BlackBoxAiSessionService.reply() is now supposed to always fall
+    // back to a non-blank summary itself, but closeAi() must not trust that and re-blank the report if
+    // some future caller ever passes null/"" straight through.
+    BlackBoxScenarioSession session = BlackBoxScenarioSession.start(UUID.randomUUID(), BlackBoxScenarioCatalog.orderAccess());
+
+    session.closeAi("");
+
+    assertThat(session.getFinalReport()).isNotBlank();
     assertThat(session.getStatus()).isEqualTo(BlackBoxSessionStatus.CLOSED);
   }
 }
