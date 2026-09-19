@@ -71,7 +71,13 @@ public class SourceCollectionService {
   private final TaskWorkflowRunner runner;
   private final Executor collectionExecutor;
   private final CollectionSettingService collectionSettings;
-  private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NORMAL).build();
+  // Critical #1 -- Redirect.NEVER + manual hop-by-hop following in sendValidated() below is deliberate:
+  // the JDK client would otherwise resolve and connect to every redirect hop (including the terminal one)
+  // before this code ever gets a chance to inspect where it landed, so validating only the final
+  // response.uri() (the old approach) is too late -- the request to a private/internal address has
+  // already gone out by then.
+  private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NEVER).build();
+  private static final int MAX_REDIRECTS = 5;
   // Medium #10 -- collectNow() (manual) and the scheduled retry/nightly sweeps can all reach crawl() for
   // the same source concurrently; contentChanged()'s read-then-write on PageSnapshot isn't atomic across
   // two such calls, so both could see "changed" and each spin up its own duplicate analysis WorkTask.
@@ -169,10 +175,11 @@ public class SourceCollectionService {
         if (!visited.add(target.uri().toString())) continue;
         if (robots.disallows(target.uri())) { skippedByRobots++; continue; }
         try {
-          rejectPrivateTarget(target.uri());
+          // sendValidated() itself validates every hop (including this initial one) before connecting to
+          // it, so there is no separate rejectPrivateTarget() call needed here any more.
           if (!firstFetch) Thread.sleep(delayMs);
           firstFetch = false;
-          HttpResponse<byte[]> response = fetch(target.uri());
+          HttpResponse<byte[]> response = sendValidated(target.uri());
           if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IOException("HTTP " + response.statusCode());
           if (response.body().length > MAX_RESPONSE_BYTES) throw new IOException("response exceeds 2MB limit");
           String contentType = response.headers().firstValue("content-type").orElse("");
@@ -337,25 +344,36 @@ public class SourceCollectionService {
     }
   }
 
-  private HttpResponse<byte[]> fetch(URI uri) throws Exception {
-    HttpRequest request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
-        .header("User-Agent", USER_AGENT)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml,text/xml,text/plain;q=0.8,*/*;q=0.1")
-        .GET().build();
-    HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
-    // The client now follows redirects automatically (needed so a plain 301/302 isn't treated as a
-    // failed fetch); re-validate wherever it actually landed so a redirect can't be used to reach a
-    // private/local address that rejectPrivateTarget already cleared for the original URL.
-    if (!response.uri().equals(uri)) rejectPrivateTarget(response.uri());
-    return response;
+  /** Sends a GET request, validating every hop (the initial URI and every redirect target) against
+   * {@link #rejectPrivateTarget} <em>before</em> ever connecting to it -- used by both the page crawl and
+   * the robots.txt fetch, since both were SSRF vectors (robots.txt had no validation at all; the page
+   * fetch validated only after the JDK client had already auto-followed redirects). */
+  private HttpResponse<byte[]> sendValidated(URI uri) throws Exception {
+    URI current = uri;
+    for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      rejectPrivateTarget(current);
+      HttpRequest request = HttpRequest.newBuilder(current).timeout(Duration.ofSeconds(30))
+          .header("User-Agent", USER_AGENT)
+          .header("Accept", "text/html,application/xhtml+xml,application/xml,text/xml,text/plain;q=0.8,*/*;q=0.1")
+          .GET().build();
+      HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+      int status = response.statusCode();
+      if (status < 300 || status >= 400) return response;
+      URI location = response.headers().firstValue("Location").map(current::resolve)
+          .orElseThrow(() -> new IOException("redirect response without a Location header"));
+      current = normalize(location);
+    }
+    throw new IOException("too many redirects (>" + MAX_REDIRECTS + ")");
   }
 
   private RobotsRules fetchRobotsRules(URI root) {
     try {
-      HttpRequest request = HttpRequest.newBuilder(URI.create(root.getScheme() + "://" + root.getHost() + "/robots.txt"))
-          .timeout(Duration.ofSeconds(10)).header("User-Agent", USER_AGENT).GET().build();
-      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-      return response.statusCode() == 200 ? parseRobots(response.body()) : RobotsRules.permissive();
+      // (Incidentally found while fixing this: the port was previously dropped entirely, so a source on a
+      // non-default port silently never fetched robots.txt at all -- always caught as a connection failure
+      // to the wrong port and treated as "no robots.txt", never as an actual error.)
+      String portSuffix = root.getPort() == -1 ? "" : ":" + root.getPort();
+      HttpResponse<byte[]> response = sendValidated(URI.create(root.getScheme() + "://" + root.getHost() + portSuffix + "/robots.txt"));
+      return response.statusCode() == 200 ? parseRobots(new String(response.body(), StandardCharsets.UTF_8)) : RobotsRules.permissive();
     } catch (Exception exception) {
       return RobotsRules.permissive(); // missing/unreachable robots.txt is not a signal to block ourselves
     }
@@ -463,7 +481,9 @@ public class SourceCollectionService {
     return Path.of(files.originalsPath()).toAbsolutePath().normalize().resolve("web").resolve(source.getDomain().name().toLowerCase(Locale.ROOT)).resolve(host).resolve(stamp + "." + extension);
   }
 
-  private void rejectPrivateTarget(URI uri) throws Exception {
+  /** Package-visible so tests can exercise it directly with IP literals (no DNS lookup needed for those,
+   * so this stays fully offline in tests) instead of only indirectly through a live crawl. */
+  void rejectPrivateTarget(URI uri) throws Exception {
     for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
       if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isSiteLocalAddress()) throw new SecurityException("private or local address is not a valid research source");
     }

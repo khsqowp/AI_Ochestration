@@ -84,12 +84,33 @@ public class ResearchSourceService {
   @Transactional
   public void delete(UUID id) { sources.deleteById(id); }
 
+  private static final java.util.regex.Pattern IPV4_LITERAL = java.util.regex.Pattern.compile("^\\d{1,3}(\\.\\d{1,3}){3}$");
+
   private void validateUrl(String value) {
     try {
       URI uri = URI.create(value.trim());
       if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) || uri.getHost() == null) throw new IllegalArgumentException();
+      rejectLiteralPrivateAddress(uri.getHost());
     } catch (IllegalArgumentException exception) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "http 또는 https URL을 입력하세요.");
+    }
+  }
+
+  // Critical #1, defense-in-depth: rejects an obviously-private literal IP right at registration time.
+  // A hostname that currently resolves publicly but could later be repointed at a private address (DNS
+  // rebinding) is NOT caught here -- that's crawl-time's job (SourceCollectionService.rejectPrivateTarget
+  // runs on every actual fetch, since resolution can change after registration). Only strings that already
+  // look like a literal IP are checked, and only via InetAddress's local octet parsing -- never a real DNS
+  // lookup -- so this never makes a network call for an ordinary hostname.
+  private void rejectLiteralPrivateAddress(String host) {
+    String candidate = host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
+    boolean looksLikeLiteralIp = IPV4_LITERAL.matcher(candidate).matches() || candidate.contains(":");
+    if (!looksLikeLiteralIp) return;
+    try {
+      java.net.InetAddress address = java.net.InetAddress.getByName(candidate);
+      if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isSiteLocalAddress()) throw new IllegalArgumentException();
+    } catch (java.net.UnknownHostException malformed) {
+      throw new IllegalArgumentException();
     }
   }
   private String normalizeNote(String note) { return note == null || note.isBlank() ? null : note.trim(); }

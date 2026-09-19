@@ -1,6 +1,8 @@
 package com.orchestration.sources;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -145,5 +147,71 @@ class SourceCollectionServiceTest {
     service.tryAcquireCollectionLock(first);
 
     assertThat(service.tryAcquireCollectionLock(second)).isTrue();
+  }
+
+  // Critical #1 -- rejectPrivateTarget() is the single choke point every fetch (page and robots.txt) must
+  // pass before connecting. These use IP literals only, so InetAddress never performs a real DNS lookup
+  // and the tests stay fully offline/deterministic.
+  @Test
+  void rejectPrivateTarget_throwsForLoopbackAddress() {
+    assertThatThrownBy(() -> service.rejectPrivateTarget(URI.create("http://127.0.0.1/"))).isInstanceOf(SecurityException.class);
+  }
+
+  @Test
+  void rejectPrivateTarget_throwsForLinkLocalAddress_includingCloudMetadataEndpoint() {
+    assertThatThrownBy(() -> service.rejectPrivateTarget(URI.create("http://169.254.169.254/latest/meta-data/"))).isInstanceOf(SecurityException.class);
+  }
+
+  @Test
+  void rejectPrivateTarget_throwsForRfc1918PrivateAddresses() {
+    assertThatThrownBy(() -> service.rejectPrivateTarget(URI.create("http://10.0.0.5/"))).isInstanceOf(SecurityException.class);
+    assertThatThrownBy(() -> service.rejectPrivateTarget(URI.create("http://192.168.1.1/"))).isInstanceOf(SecurityException.class);
+  }
+
+  @Test
+  void rejectPrivateTarget_throwsForAnyLocalAddress() {
+    assertThatThrownBy(() -> service.rejectPrivateTarget(URI.create("http://0.0.0.0/"))).isInstanceOf(SecurityException.class);
+  }
+
+  @Test
+  void rejectPrivateTarget_allowsAPublicLiteralIp() {
+    assertThatCode(() -> service.rejectPrivateTarget(URI.create("http://8.8.8.8/"))).doesNotThrowAnyException();
+  }
+
+  @Test
+  void collectNow_neverSendsARequest_whenTheSourceUrlIsALoopbackAddress() throws Exception {
+    // Covers both vectors together: fetchRobotsRules() used to have zero validation (would unconditionally
+    // hit /robots.txt on a private target), and the page fetch used to auto-follow redirects (Redirect.
+    // NORMAL) before ever checking where it landed -- validating only the final response.uri() was too
+    // late, since the JDK client had already connected to every hop by then. A source pointed straight at
+    // a loopback origin must never receive a single request, robots.txt included.
+    java.util.concurrent.atomic.AtomicInteger requestCount = new java.util.concurrent.atomic.AtomicInteger();
+    com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/", exchange -> {
+      requestCount.incrementAndGet();
+      byte[] body = "<html></html>".getBytes(StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders(200, body.length);
+      exchange.getResponseBody().write(body);
+      exchange.close();
+    });
+    server.start();
+    try {
+      ResearchSource source = new ResearchSource("로컬 테스트 서버", "http://127.0.0.1:" + server.getAddress().getPort() + "/",
+          ResearchDomain.SECURITY, 24, 1, 5, null);
+      org.springframework.test.util.ReflectionTestUtils.setField(source, "id", java.util.UUID.randomUUID());
+      ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
+      when(sourceLookup.get(any())).thenReturn(source);
+      SourceCollectionService target = new SourceCollectionService(sourceLookup,
+          new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), mock(TaskService.class),
+          mock(SecurityCalendarService.class), mock(LlmGateway.class), mock(GeminiCollectionBatchRepository.class),
+          mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class), mock(Executor.class), mock(CollectionSettingService.class));
+
+      SourceCollectionService.CollectionResult result = target.collectNow(source.getId());
+
+      assertThat(requestCount.get()).isEqualTo(0);
+      assertThat(result.savedPages()).isEqualTo(0);
+    } finally {
+      server.stop(0);
+    }
   }
 }
