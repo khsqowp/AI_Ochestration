@@ -32,6 +32,12 @@ public class BlackBoxScenarioSession {
   @Lob @Column(name="feedback_md", columnDefinition="TEXT") private String feedbackMd;
   @Column(nullable=false) private Instant startedAt=Instant.now();
   private Instant closedAt;
+  // High #6 -- message()/messageAi() do read-then-write on the whole message/observation/runtimeState set
+  // (session -> mutate in memory -> save). Two overlapping requests for the same session (e.g. a double
+  // click, or a retried request racing the original) both load the same version, and without this the
+  // second save() silently wins and erases whatever the first one appended. With @Version, the second
+  // save() throws OptimisticLockingFailureException instead (mapped to 409 in GlobalExceptionHandler).
+  @Version private long version;
   protected BlackBoxScenarioSession() {}
   static BlackBoxScenarioSession start(UUID owner, BlackBoxScenarioDefinition scenario) {
     BlackBoxScenarioSession session=new BlackBoxScenarioSession(); session.ownerId=owner; session.scenarioSlug=scenario.slug(); session.scenarioTitle=scenario.title();

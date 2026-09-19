@@ -71,6 +71,14 @@ class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(new Message(message == null || message.isBlank() ? "현재 상태에서는 처리할 수 없습니다." : message));
   }
 
+  /** High #6 -- entities that can be edited by overlapping requests (e.g. a black-box session's messages)
+   * carry a JPA {@code @Version} column; two concurrent saves on stale data land here instead of one
+   * silently overwriting the other's already-committed changes. */
+  @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+  public ResponseEntity<Message> onOptimisticLock(org.springframework.dao.OptimisticLockingFailureException exception) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(new Message("다른 요청이 먼저 처리되어 최신 상태와 충돌했습니다. 새로고침 후 다시 시도하세요."));
+  }
+
   @ExceptionHandler(Exception.class)
   public ResponseEntity<Message> onUnexpected(Exception exception, jakarta.servlet.http.HttpServletRequest request) {
     log.error("unhandled_exception path={} method={}", request.getRequestURI(), request.getMethod(), exception);
