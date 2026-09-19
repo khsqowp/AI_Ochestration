@@ -459,6 +459,10 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
       <p>마지막 리밸런스일: {data?.lastRebalanceDate ?? '아직 없음'} · 최근 계획일: {data?.lastPlanDate ?? '없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {data?.broker && market === 'us' && <p className="usage-note">계좌 KRW 예수금(국장·미장 공용) {Math.round(data.broker.accountCashKrw).toLocaleString()}원 · 계좌 총평가 {Math.round(data.broker.accountTotalKrw).toLocaleString()}원</p>}
     </div>
+    {data && data.consecutiveCycleFailures >= 30 && <p className="budget-alert">
+      ⚠ KIS 서버 연결이 계속 실패하고 있습니다(연속 {data.consecutiveCycleFailures}회{data.lastCycleErrorTs ? `, 마지막 ${fmt(data.lastCycleErrorTs)}` : ''}) — 매수/매도가 진행되지 않고 있을 수 있습니다.
+      {data.lastCycleError ? <><br/><span className="usage-note">{data.lastCycleError}</span></> : null}
+    </p>}
     {data && <BotControlPanel bot={market === 'kr' ? 'kr-rotation' : 'us-rotation'}
       manualFlat={data.broker?.manualFlat} manualFlatPending={data.broker?.manualFlatPending}
       manualFlatTs={data.broker?.manualFlatTs} consumedControlNonce={data.consumedControlNonce} onDone={load}/>}

@@ -33,7 +33,12 @@ public record StockRotationState(
     @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory,
     // 프런트가 방금 보낸 즉시매도/진입 명령의 nonce 와 대조해 "봇이 실제로 처리했는지"를 폴링으로
     // 확인하는 용도 — stock_rotation_loop.py 의 handle_control() 이 처리한 마지막 nonce.
-    @JsonAlias("consumed_control_nonce") String consumedControlNonce) {
+    @JsonAlias("consumed_control_nonce") String consumedControlNonce,
+    // 봇 헬스 — KIS 모의투자 서버 연결이 계속 실패하면(실측: 미장 봇이 인셉션 이후 단 한 번도
+    // 체결 못 한 사례) 대시보드가 "방치된 예산"과 "정상 대기 중"을 구분할 수 있어야 한다.
+    @JsonAlias("consecutive_cycle_failures") int consecutiveCycleFailures,
+    @JsonAlias("last_cycle_error") String lastCycleError,
+    @JsonAlias("last_cycle_error_ts") String lastCycleErrorTs) {
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record Broker(
@@ -66,6 +71,6 @@ public record StockRotationState(
   public static StockRotationState empty() {
     return new StockRotationState(
         Map.of(), 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), null, null, false,
-        null, List.of(), List.of(), Map.of(), null);
+        null, List.of(), List.of(), Map.of(), null, 0, null, null);
   }
 }
