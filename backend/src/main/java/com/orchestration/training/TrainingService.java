@@ -264,7 +264,10 @@ public class TrainingService {
     // 호출로 이어진다(둘 다 실측 확인된 문제). submit()과 evaluateExisting() 둘 다 이
     // 메서드를 거치므로 한 곳만 막으면 됨.
     if (answer == null || answer.isBlank()) throw new IllegalArgumentException("답안을 입력하세요.");
-    String cacheKey=evaluator.cacheKey(attempt.getTrainingCase(),answer); String answerHash=evaluator.answerHash(answer);
+    // High #8 -- always score against what the attempt actually snapshotted at start(), never whatever
+    // the case's row says right now (an edit to the rubric/prompt after the attempt started must not
+    // retroactively change how it's judged).
+    String cacheKey=evaluator.cacheKey(attempt.getTrainingCase().getId(),attempt.effectiveRubricJson(),answer); String answerHash=evaluator.answerHash(answer);
     Optional<TrainingEvaluationCache> cached=evaluationCache.findByCacheKey(cacheKey);
     if(cached.isPresent()) {
       TrainingEvaluationCache hit=cached.get(); attempt.submit(hit.getScore(),hit.getFeedbackMd()); attempts.save(attempt);
@@ -273,7 +276,7 @@ public class TrainingService {
       return attempt;
     }
     try {
-      TrainingAiEvaluator.EvaluationResult result=evaluator.evaluate(attempt.getTrainingCase(),answer); LlmGateway.LlmResult usage=result.providerResponse(); BigDecimal cost=evaluator.estimatedCost(usage);
+      TrainingAiEvaluator.EvaluationResult result=evaluator.evaluate(attempt.effectivePromptMd(),attempt.effectiveRubricJson(),answer); LlmGateway.LlmResult usage=result.providerResponse(); BigDecimal cost=evaluator.estimatedCost(usage);
       attempt.submit((double)result.score(),result.feedbackMd()); attempts.save(attempt);
       evaluations.save(new TrainingEvaluation(attempt,usage.provider(),usage.model(),TrainingAiEvaluator.PROMPT_VERSION,answerHash,TrainingEvaluationStatus.COMPLETED,result.resultJson(),null,usage.inputTokens(),usage.outputTokens(),usage.totalTokens(),usage.elapsedMs(),cost));
       evaluationCache.save(new TrainingEvaluationCache(cacheKey,usage.provider(),usage.model(),result.resultJson(),result.score(),result.feedbackMd(),usage.inputTokens(),usage.outputTokens(),usage.totalTokens(),usage.elapsedMs(),cost));
@@ -290,8 +293,11 @@ public class TrainingService {
   private TrainingAttempt owned(UUID ownerId,UUID id){return attempts.findByIdAndOwnerId(id,ownerId).orElseThrow(NoSuchElementException::new);}
   /** Rebuild each skill from its own completed evaluations only. A case can never overwrite another skill's feedback. */
   private void recalculateAssessments(UUID ownerId) {
+    // High #8 -- group by the skill snapshotted on each attempt, not the case's current skill code: if a
+    // case is later reclassified to a different skill, its already-completed evaluations must stay counted
+    // under the skill the learner was actually practicing at the time.
     Map<String,List<TrainingEvaluation>> bySkill=evaluations.findCompletedForOwner(ownerId,TrainingEvaluationStatus.COMPLETED).stream()
-        .collect(java.util.stream.Collectors.groupingBy(evaluation -> evaluation.getAttempt().getTrainingCase().getPrimarySkillCode()));
+        .collect(java.util.stream.Collectors.groupingBy(evaluation -> evaluation.getAttempt().effectiveSkillCode()));
     for(CompetencyAssessment assessment:assessments.findByOwnerIdOrderBySkillCode(ownerId)) {
       assessment.initializeBaselineIfMissing(); List<TrainingEvaluation> rows=bySkill.getOrDefault(assessment.getSkillCode(),List.of());
       if(rows.isEmpty()) { assessments.save(assessment); continue; }

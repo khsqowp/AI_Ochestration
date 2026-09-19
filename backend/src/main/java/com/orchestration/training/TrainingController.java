@@ -36,11 +36,12 @@ public class TrainingController {
   record AssessmentResponse(String skillCode,double score,String confidence,String rationale,String nextAction,int evidenceCount,int evaluationCount,Double blackBoxScore,int blackBoxEvaluationCount,String blackBoxRationale,String blackBoxNextAction,Instant assessedAt){static AssessmentResponse from(CompetencyAssessment x){return new AssessmentResponse(x.getSkillCode(),x.getScore(),x.getConfidence().name(),x.getRationale(),x.getNextAction(),x.getEvidenceCount(),x.getEvaluationCount(),x.getBlackBoxScore(),x.getBlackBoxEvaluationCount(),x.getBlackBoxRationale(),x.getBlackBoxNextAction(),x.getAssessedAt());}}
   record CaseResponse(String id,String slug,String title,String caseType,String skillCode,int difficulty,String promptMd){
     static CaseResponse from(TrainingCase x){return new CaseResponse(x.getId().toString(),x.getSlug(),x.getTitle(),x.getCaseType().name(),x.getPrimarySkillCode(),x.getDifficulty(),x.getPromptMd());}
+    // High #8 -- id/slug are stable identity, safe to read live; everything else that could change under
+    // an in-flight or already-scored attempt (title/prompt/type/skill/difficulty) must reflect what the
+    // learner actually saw and was graded against, i.e. the attempt's own snapshot.
     static CaseResponse fromAttempt(TrainingAttempt attempt){
       TrainingCase current=attempt.getTrainingCase();
-      String title=attempt.getCaseTitleSnapshot()==null||attempt.getCaseTitleSnapshot().isBlank()?current.getTitle():attempt.getCaseTitleSnapshot();
-      String prompt=attempt.getCasePromptSnapshot()==null||attempt.getCasePromptSnapshot().isBlank()?current.getPromptMd():attempt.getCasePromptSnapshot();
-      return new CaseResponse(current.getId().toString(),current.getSlug(),title,current.getCaseType().name(),current.getPrimarySkillCode(),current.getDifficulty(),prompt);
+      return new CaseResponse(current.getId().toString(),current.getSlug(),attempt.effectiveTitle(),attempt.effectiveCaseType().name(),attempt.effectiveSkillCode(),attempt.effectiveDifficulty(),attempt.effectivePromptMd());
     }
   }
   record AttemptResponse(String id,CaseResponse trainingCase,String status,String answerMd,String feedbackMd,Double score,Instant startedAt,Instant submittedAt){
