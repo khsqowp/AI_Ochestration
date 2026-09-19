@@ -28,6 +28,25 @@
     <dependency><groupId>kr.dogfoot</groupId><artifactId>hwplib</artifactId><version>1.1.9</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
   </dependencies>
-  <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
+  <build><plugins>
+    <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin>
+    <!-- Mockito's inline mock maker self-attaches a ByteBuddy agent at runtime by default, which JDK 21+
+         increasingly restricts/warns on (and outright fails on some newer JDK builds — confirmed on
+         JDK 22/26 here: "Mockito cannot mock this class"). Mockito's own docs recommend loading the
+         agent explicitly via -javaagent instead of relying on dynamic self-attach, which works
+         regardless of which JDK actually runs the tests. -->
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-dependency-plugin</artifactId>
+      <executions>
+        <execution><id>resolve-mockito-agent-path</id><goals><goal>properties</goal></goals></execution>
+      </executions>
+    </plugin>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-surefire-plugin</artifactId>
+      <configuration><argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine></configuration>
+    </plugin>
+  </plugins></build>
 </project>
 
