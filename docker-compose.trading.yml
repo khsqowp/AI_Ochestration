@@ -86,6 +86,9 @@ services:
       ROTATION_REGIME: ew_sma200
       ROTATION_BUDGET: "4000000"
       ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
+      # 10초->3초(2026-09-20). KIS 초당 거래건수 한도(kis_auth._MIN_REQUEST_INTERVAL_SECONDS=1.05초,
+      # 이건 하한선이라 안 건드림) 때문에 크립토(웹소켓, 여유 넉넉)만큼은 못 줄임 — 안전마진 두고 3초.
+      ROTATION_LOOP_SLEEP_SECONDS: "3"
     volumes:
       - trading_kr_rotation_state:/app/data
       - trading_control:/app/control
@@ -108,6 +111,8 @@ services:
       ROTATION_REGIME: ew_sma200
       ROTATION_BUDGET: "2800"
       ROTATION_STATE_PATH: /app/data/stock_rotation_state.json
+      # 10초->3초(2026-09-20), kr-rotation과 동일 근거(KIS 초당한도 안전마진 두고 3초까지만).
+      ROTATION_LOOP_SLEEP_SECONDS: "3"
     volumes:
       - trading_us_rotation_state:/app/data
       - trading_control:/app/control
