@@ -572,18 +572,20 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
     {data ? <>
       <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
       <div className="trading-metrics">
+        {/* 2열 그리드라 인접 두 칸이 한 행 — 서로 짝이 되는 지표끼리 붙여야 시각적으로 헷갈리지 않는다
+            (전엔 세션수익률/세션손익이 다른 행에 떨어져 표시됐음). */}
         <div><b>${startingCapital.toFixed(2)}</b><span>진입금액(시작 자본)</span></div>
         <div><b>${equity.toFixed(2)}</b><span>현재금액(API 잔고)</span></div>
-        <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
         <div><b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}%</b><span>이번 세션 수익률(마지막 리밸런스 이후)</span></div>
         <div><b className={sessionPnl >= 0 ? 'positive' : 'negative'}>{sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)}</b><span>이번 세션 손익</span></div>
         <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률(inception 이후 누적)</span></div>
+        <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
         <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
         <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
         <div><b className={drawdown > 0.15 ? 'negative' : ''}>{(drawdown * 100).toFixed(1)}%</b><span>현재 낙폭</span></div>
+        <div><RebalanceCountdown target={data.nextRebalanceTs}/><span>다음 리밸런스까지{data.rebalanceEveryDays ? ` (${data.rebalanceEveryDays}일 주기)` : ''}</span></div>
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
         <div><b>{shorts.length}</b><span>숏 포지션</span></div>
-        <div><RebalanceCountdown target={data.nextRebalanceTs}/><span>다음 리밸런스까지{data.rebalanceEveryDays ? ` (${data.rebalanceEveryDays}일 주기)` : ''}</span></div>
       </div>
       {periodShort && <p className="usage-note">* 보유 equity 히스토리가 선택 기간보다 짧아, 기록이 시작된 시점부터의 값으로 표시됩니다(전체와 동일).</p>}
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
