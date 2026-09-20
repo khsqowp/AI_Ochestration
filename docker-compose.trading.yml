@@ -155,6 +155,11 @@ services:
       MOMENTUM_ROTATION_DEPLOY_PCT: "0.8"
       MOMENTUM_ROTATION_DELEVER_DD: "0.20"
       MOMENTUM_ROTATION_KILL_DD: "0.35"
+      # 체결가 자체는 이미 실시간 웹소켓(crypto-tick-stream)인데, 대시보드/state.json은 이 사이클
+      # 주기로만 갱신돼서 화면이 최대 2분 묵어 보이는 게 진짜 원인이었음(2026-09-20). 매매판단
+      # (리밸런스 2일 주기)엔 영향 없음, 순수 조회/표시 빈도만 올림 — fetch_positions/fetch_balance
+      # weight 낮아서(각 ~5, 분당한도 2400) 8배로 늘려도 여유 충분.
+      MOMENTUM_ROTATION_CHECK_INTERVAL_SECONDS: "15"
     volumes:
       - trading_momentum_rotation_state:/app/data
       - trading_control:/app/control
