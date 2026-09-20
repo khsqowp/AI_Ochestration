@@ -137,11 +137,12 @@ services:
     environment:
       CRYPTO_TICK_STATE_PATH: /app/crypto-tick-state/crypto_tick_state.json
       # 실거래 — equity 의 80% 배치(2026-09-17부터 고정 70 USDT 대신 비율제 — 잔고가 늘면 배치도 같이
-      # 늘어난다), 2배, 달러중립 14/3/8.
-      # 디레버: 고점대비 -20% 에서 배율 2->1. 킬: -35% 에서 전량청산+정지(RESET_HALT=true 로 재개).
+      # 늘어난다), 4배(2026-09-19 2->4 변경 — 기존 열린 포지션은 2x 유지, 다음 리밸런스부터 신규/조정
+      # 종목에 4x 적용), 달러중립 14/3/8.
+      # 디레버: 고점대비 -20% 에서 배율 4->1. 킬: -35% 에서 전량청산+정지(RESET_HALT=true 로 재개).
       MOMENTUM_ROTATION_LIVE: "true"
       MOMENTUM_ROTATION_EXCHANGE: mainnet
-      MOMENTUM_ROTATION_LEVERAGE: "2"
+      MOMENTUM_ROTATION_LEVERAGE: "4"
       # 리밸런스 3->2일: 14일 상대모멘텀 신호가 빨리 감쇠, 2일이 현실 비용(편도 0.10%) 반영
       # Calmar/Sharpe/CAGR 최적 (백테스트 2022-2026). 1일은 회전율 155x로 비용에 잠식됨.
       MOMENTUM_ROTATION_REBALANCE_DAYS: "2"
