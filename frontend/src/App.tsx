@@ -18,6 +18,7 @@ const LocalLlmPage = lazy(() => import('./pages/LocalLlmPage').then(m => ({ defa
 const InvestPage = lazy(() => import('./pages/InvestPage').then(m => ({ default: m.InvestPage })))
 const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
 const OrderBoardPage = lazy(() => import('./pages/OrderBoardPage').then(m => ({ default: m.OrderBoardPage })))
+const CompetencyPage = lazy(() => import('./pages/CompetencyPage').then(m => ({ default: m.CompetencyPage })))
 
 export function App() {
   return <BrowserRouter>
@@ -37,6 +38,7 @@ export function App() {
               <Route path="diag" element={<DiagnosticsPage/>}/>
               <Route path="debate" element={<DebatePage/>}/>
               <Route path="llm" element={<LocalLlmPage/>}/>
+              <Route path="역량강화/*" element={<CompetencyPage/>}/>
               <Route element={<RequireAdmin/>}>
                 <Route path="order" element={<OrderBoardPage/>}/>
                 <Route path="invest/*" element={<InvestPage/>}/>

@@ -14,6 +14,7 @@ const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean }[] =
   { to: '/dashboard/diag', label: '진단' },
   { to: '/dashboard/debate', label: '토론' },
   { to: '/dashboard/llm', label: '로컬 LLM' },
+  { to: '/dashboard/역량강화', label: '역량 강화' },
   { to: '/dashboard/admin', label: '관리', adminOnly: true },
 ]
 
