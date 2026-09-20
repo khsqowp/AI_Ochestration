@@ -557,7 +557,7 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
   const statusLabel = data?.halted ? '⚠ 킬 스위치 발동 · 정지됨' : (live ? `가동 중 · mainnet ${leverage}x` : '가동 중 · 백테스트(페이퍼)')
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="모멘텀 로테이션 대시보드">
     <p className="source-intro">{live
-      ? '바이낸스 실계좌(mainnet) 코인 선물 상대모멘텀 롱숏 로테이션입니다. 자본 145 USDT 중 70 배치 · 2배 · 47종목 중 14일 모멘텀 상위 8 롱 / 하위 8 숏 · 2일마다 리밸런스. 포트폴리오 손절: 고점대비 -20% 디레버(2배→1배), -35% 킬 스위치(전량 청산 후 정지).'
+      ? `바이낸스 실계좌(mainnet) 코인 선물 상대모멘텀 롱숏 로테이션입니다. equity의 80% 배치 · ${leverage}배 · 47종목 중 14일 모멘텀 상위 12 롱 / 하위 12 숏 · 2일마다 리밸런스. 포트폴리오 손절: 고점대비 -20% 디레버(${leverage}배→1배), -35% 킬 스위치(전량 청산 후 정지).`
       : '코인 선물 상대모멘텀 롱숏 로테이션 백테스트(페이퍼) 현황입니다. 실주문 없음 — 가상자본 시뮬레이션.'}</p>
     <div className="trading-status-card">
       <BotStatusPill tone={statusTone} label={statusLabel}/>
