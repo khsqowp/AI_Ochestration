@@ -131,7 +131,9 @@ app:
     # 검토/팀장/PM 단계에서 담당 모델이 실패하면 다른 모델로 넘어가 재시도하는 총 시도 횟수(1이면 폴백 비활성화).
     # 수집(COLLECT) 단계는 Gemini의 Google Search grounding에 의존하므로 폴백 대상에서 제외한다.
     max-provider-attempts: ${LLM_MAX_PROVIDER_ATTEMPTS:2}
-    max-task-characters: ${LLM_MAX_TASK_CHARACTERS:12000}
+    # 12000->20000(2026-09-22): 질문형 수집 프롬프트를 "폭넓게"로 바꾸며 수집 출력이 커져도
+    # 검토/팀장 단계로 넘어가기 전에 limit()이 잘라버리지 않게 캡도 같이 올림.
+    max-task-characters: ${LLM_MAX_TASK_CHARACTERS:20000}
     # 분량을 강제하지 않되, 충분히 상세한 노트를 쓸 여유는 남겨둔다.
     archive-max-output-tokens: ${ARCHIVE_MAX_OUTPUT_TOKENS:9000}
     # 화면의 토큰 비용 추정치입니다. 공개 API 단가를 기본값으로 쓰며, 실제 계약 단가는 .env가 우선합니다.
