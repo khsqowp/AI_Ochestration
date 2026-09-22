@@ -710,8 +710,21 @@
 
 /* ══ 점심 룰렛 (공개 LUNCH 페이지) ═══════════════════════════════════════ */
 .lunch-roulette-page { min-height:calc(100dvh - 60px); display:flex; align-items:center; justify-content:center; padding:24px; }
-.lunch-roulette-placeholder { display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; color:#4a4552; }
-.lunch-roulette-placeholder svg { color:#7667dc; }
-.lunch-roulette-placeholder h1 { margin:0; font-size:26px; }
-.lunch-roulette-placeholder p { margin:0; color:#8a8591; font-size:13px; }
+.lunch-roulette-shell { width:min(640px,100%); display:flex; flex-direction:column; gap:16px; }
+.lunch-roulette-head { display:flex; align-items:center; gap:10px; color:#37333d; }
+.lunch-roulette-head svg { color:#7667dc; }
+.lunch-roulette-head h1 { margin:0; font-size:24px; }
+.lunch-roulette-error { margin:0; padding:10px 12px; border-radius:8px; background:#fdecec; color:#963f3f; font-size:13px; }
+.lunch-roulette-loading, .lunch-roulette-empty { color:#8a8591; font-size:13px; }
+.lunch-roulette-candidates { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:8px; }
+.lunch-roulette-candidates li { padding:8px 13px; border:1px solid #e7e3ea; border-radius:20px; background:#fff; color:#413b4b; font-size:13px; font-weight:600; }
+.lunch-roulette-empty { list-style:none; border:none !important; background:none !important; padding:0 !important; }
+.lunch-roulette-form { display:flex; gap:8px; }
+.lunch-roulette-form input { flex:1; padding:11px 13px; border:1px solid #dcd7e4; border-radius:10px; font:inherit; font-size:13px; }
+.lunch-roulette-form button, .lunch-roulette-start { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #dfd9e7; border-radius:10px; background:#fff; color:#625c6b; padding:10px 16px; font:inherit; font-weight:750; cursor:pointer; }
+.lunch-roulette-start { background:#7060d2; border-color:#7060d2; color:#fff; }
+.lunch-roulette-form button:disabled, .lunch-roulette-start:disabled { opacity:.55; cursor:not-allowed; }
+.lunch-roulette-canvas { width:100%; height:min(70vh,640px); border:1px solid #e7e3ea; border-radius:14px; background:#faf9fd; }
+.lunch-roulette-winner { margin:0; text-align:center; font-size:18px; color:#37333d; }
+.lunch-roulette-winner b { color:#7060d2; }
 .rainbow-keyspace-hint { margin-left:auto; font-size:11px; font-weight:700; color:#5b4fc4; }

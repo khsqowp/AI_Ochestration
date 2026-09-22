@@ -78,6 +78,9 @@ class SecurityConfig {
         // 대시보드 주문판(전체 조회·구매 체크)은 ADMIN 전용
         .requestMatchers("/api/orders/**").hasRole("ADMIN")
 
+        // 점심 룰렛 — 공개 페이지, 계정 없이 아무나 후보 등록·시작(/api/orders/mine과 동일 신뢰모델)
+        .requestMatchers("/api/lunch-roulette/**").permitAll()
+
         // 접근기록 — nginx mirror 서브요청(내부망에서만, 컨트롤러가 소켓 피어 검사)
         .requestMatchers("/api/internal/**").permitAll()
 
