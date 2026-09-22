@@ -19,7 +19,8 @@ public class LunchRouletteService {
   @Transactional
   public LunchRoulette today() {
     LocalDate today = LocalDate.now(KST);
-    return repository.findByDay(today).orElseGet(() -> repository.save(new LunchRoulette(today)));
+    LunchRoulette roulette = repository.findByDay(today).orElseGet(() -> repository.save(new LunchRoulette(today)));
+    return hydrate(roulette);
   }
 
   @Transactional
@@ -30,7 +31,7 @@ public class LunchRouletteService {
     if (roulette.getCandidates().size() >= MAX_CANDIDATES) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "후보는 최대 " + MAX_CANDIDATES + "명까지입니다.");
     if (roulette.getCandidates().contains(name)) throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 이름입니다.");
     roulette.addCandidate(name);
-    return repository.save(roulette);
+    return hydrate(repository.save(roulette));
   }
 
   @Transactional
@@ -38,8 +39,13 @@ public class LunchRouletteService {
     LunchRoulette roulette = today();
     if (roulette.getCandidates().size() < MIN_CANDIDATES_TO_START) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "후보가 " + MIN_CANDIDATES_TO_START + "명 이상이어야 시작할 수 있습니다.");
     roulette.startIfNotStarted();
-    return repository.save(roulette);
+    return hydrate(repository.save(roulette));
   }
+
+  // open-in-view=false라 트랜잭션 끝나면 세션도 끝난다 -- candidates(@ElementCollection, 기본
+  // LAZY)를 컨트롤러가 Response로 매핑할 때 처음 건드리면 세션 없이 지연로딩하다 그대로 500.
+  // 여기서 미리 한 번 읽어(size 트리거) 초기화해두면 컨트롤러는 이미 로드된 값만 읽는다.
+  private LunchRoulette hydrate(LunchRoulette roulette) { roulette.getCandidates().size(); return roulette; }
 
   private String clean(String rawName) {
     if (rawName == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름을 입력하세요.");
