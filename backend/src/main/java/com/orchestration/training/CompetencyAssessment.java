@@ -22,6 +22,9 @@ public class CompetencyAssessment {
   @Column(nullable=false) private int blackBoxEvaluationCount;
   @Lob @Column(columnDefinition="TEXT") private String blackBoxRationale;
   @Lob @Column(columnDefinition="TEXT") private String blackBoxNextAction;
+  /** 최근 N개 블랙박스 세션의 feedback_md를 모아 AI가 뽑은 반복 약점 요약. 세션 하나짜리 피드백과
+   * 달리 여러 세션에 걸친 패턴만 담는다 — refreshBlackBoxAssessment()가 세션이 새로 닫힐 때만 갱신. */
+  @Lob @Column(name="pattern_summary", columnDefinition="TEXT") private String patternSummary;
   @Column(nullable = false) private Instant assessedAt = Instant.now();
   protected CompetencyAssessment() {}
   CompetencyAssessment(UUID ownerId, String skillCode, double score, AssessmentConfidence confidence, String rationale, int evidenceCount) {
@@ -31,6 +34,8 @@ public class CompetencyAssessment {
   public double getScore(){return score;} public AssessmentConfidence getConfidence(){return confidence;} public String getRationale(){return rationale;}
   public String getNextAction(){return nextAction;} public int getEvidenceCount(){return evidenceCount;} public int getEvaluationCount(){return evaluationCount;} public Instant getAssessedAt(){return assessedAt;}
   public Double getBlackBoxScore(){return blackBoxScore;} public int getBlackBoxEvaluationCount(){return blackBoxEvaluationCount;} public String getBlackBoxRationale(){return blackBoxRationale;} public String getBlackBoxNextAction(){return blackBoxNextAction;}
+  public String getPatternSummary(){return patternSummary;}
+  void updatePatternSummary(String summary){this.patternSummary=summary;}
   double baselineScore(){return baselineScore==null?score:baselineScore;}
   void initializeBaselineIfMissing(){if(baselineScore==null)baselineScore=score;if(nextAction==null||nextAction.isBlank())nextAction=defaultNextAction(skillCode);}
   void updateFromPractice(double score, AssessmentConfidence confidence, String rationale, String nextAction, int evaluationCount) { this.score=score; this.confidence=confidence; this.rationale=rationale; this.nextAction=nextAction; this.evaluationCount=evaluationCount; this.assessedAt=Instant.now(); }

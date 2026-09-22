@@ -16,9 +16,10 @@ class BlackBoxScenarioService {
   private final BlackBoxConclusionEvaluator conclusionEvaluator;
   private final BlackBoxCompletionJudge completionJudge;
   private final BlackBoxAiSessionService aiSessions;
+  private final BlackBoxPatternAnalyzer patternAnalyzer;
 
-  BlackBoxScenarioService(BlackBoxScenarioSessionRepository sessions, CompetencyAssessmentRepository assessments, BlackBoxScenarioIntentResolver intents, BlackBoxCoach coach, BlackBoxConclusionEvaluator conclusionEvaluator, BlackBoxCompletionJudge completionJudge, BlackBoxAiSessionService aiSessions) {
-    this.sessions=sessions; this.assessments=assessments; this.intents=intents; this.coach=coach; this.conclusionEvaluator=conclusionEvaluator; this.completionJudge=completionJudge; this.aiSessions=aiSessions;
+  BlackBoxScenarioService(BlackBoxScenarioSessionRepository sessions, CompetencyAssessmentRepository assessments, BlackBoxScenarioIntentResolver intents, BlackBoxCoach coach, BlackBoxConclusionEvaluator conclusionEvaluator, BlackBoxCompletionJudge completionJudge, BlackBoxAiSessionService aiSessions, BlackBoxPatternAnalyzer patternAnalyzer) {
+    this.sessions=sessions; this.assessments=assessments; this.intents=intents; this.coach=coach; this.conclusionEvaluator=conclusionEvaluator; this.completionJudge=completionJudge; this.aiSessions=aiSessions; this.patternAnalyzer=patternAnalyzer;
   }
 
   List<BlackBoxScenarioDefinition> scenarios() { return BlackBoxScenarioCatalog.all(); }
@@ -147,8 +148,24 @@ class BlackBoxScenarioService {
     CompetencyAssessment assessment=assessments.findByOwnerIdAndSkillCode(ownerId, skillCode).orElseGet(() -> assessments.save(new CompetencyAssessment(ownerId, skillCode, 50, AssessmentConfidence.LOW, "블랙박스 사건 분석 기록을 수집 중입니다.", 0)));
     String next=evaluatedNextAction==null||evaluatedNextAction.isBlank()?(closed.size()<3?"서로 다른 사건을 더 풀어 신뢰도를 높이세요.":"반복 누락된 관측을 줄이는 사건을 선택하세요."):evaluatedNextAction;
     assessment.updateBlackBox(average, closed.size(), "최근 "+closed.size()+"회 블랙박스 사건 분석 평균 "+Math.round(average)+"점.", next);
+    // 세션이 새로 닫힐 때만 재호출(캐시) -- 대시보드 열 때마다 LLM 부르지 않는다. 실패/데이터 부족이면
+    // null이 와서 기존 summary를 그대로 둔다(analyze()의 계약).
+    List<String> feedbacks=closed.stream().map(BlackBoxScenarioSession::getFeedbackMd).filter(item -> item!=null && !item.isBlank()).toList();
+    String pattern=patternAnalyzer.analyze(skillCode, feedbacks);
+    if(pattern!=null) assessment.updatePatternSummary(pattern);
     assessments.save(assessment);
   }
+
+  /** 레이더/추이 차트용 경량 조회 -- 메시지·관측 등 무거운 컬렉션은 건드리지 않아(hydrate 안 함)
+   * 세션 본문을 끌어오지 않는다. */
+  @Transactional(readOnly=true) List<ScorePoint> scoreTrend(UUID ownerId) {
+    return sessions.findByOwnerIdAndStatusOrderByClosedAtDesc(ownerId, BlackBoxSessionStatus.CLOSED).stream()
+        .filter(item -> item.isAiGenerated() && item.getScore()!=null)
+        .map(item -> new ScorePoint(item.getPrimarySkillCode(), item.getScore(), item.getClosedAt()))
+        .toList();
+  }
+
+  record ScorePoint(String skillCode, double score, java.time.Instant closedAt) {}
   private void closeAutomaticallyWhenSufficient(BlackBoxScenarioSession session, BlackBoxScenarioDefinition scenario) {
     BlackBoxCompletionJudge.Decision decision=completionJudge.decide(scenario, session.getMessages(), session.getObservationKeys(), session.getObservations());
     if (!decision.shouldClose()) return;

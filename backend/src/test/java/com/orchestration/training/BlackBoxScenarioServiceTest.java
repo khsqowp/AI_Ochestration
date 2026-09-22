@@ -27,9 +27,10 @@ class BlackBoxScenarioServiceTest {
   @Mock private BlackBoxConclusionEvaluator conclusionEvaluator;
   @Mock private BlackBoxCompletionJudge completionJudge;
   @Mock private BlackBoxAiSessionService aiSessions;
+  @Mock private BlackBoxPatternAnalyzer patternAnalyzer;
 
   private BlackBoxScenarioService service() {
-    return new BlackBoxScenarioService(sessions, assessments, intents, coach, conclusionEvaluator, completionJudge, aiSessions);
+    return new BlackBoxScenarioService(sessions, assessments, intents, coach, conclusionEvaluator, completionJudge, aiSessions, patternAnalyzer);
   }
 
   @Test
