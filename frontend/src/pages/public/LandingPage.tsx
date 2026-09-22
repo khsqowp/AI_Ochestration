@@ -31,6 +31,7 @@ export function LandingPage() {
       <div className="landing-mark">
         <Bot size={18}/> <span>Orchestration Lab</span>
         <Link to="/order" className="landing-order-link">ORDER</Link>
+        <Link to="/lunch" className="landing-order-link">LUNCH</Link>
       </div>
       <div className="landing-foot">
         <div className="landing-clock">

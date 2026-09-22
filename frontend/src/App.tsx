@@ -19,6 +19,8 @@ const InvestPage = lazy(() => import('./pages/InvestPage').then(m => ({ default:
 const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
 const OrderBoardPage = lazy(() => import('./pages/OrderBoardPage').then(m => ({ default: m.OrderBoardPage })))
 const CompetencyPage = lazy(() => import('./pages/CompetencyPage').then(m => ({ default: m.CompetencyPage })))
+// box2d-wasm이 무거워서(2MB+) 코드분할 -- 방문객이 룰렛 안 열면 다운로드 안 함.
+const LunchRoulettePage = lazy(() => import('./pages/public/LunchRoulettePage').then(m => ({ default: m.LunchRoulettePage })))
 
 export function App() {
   return <BrowserRouter>
@@ -29,6 +31,7 @@ export function App() {
             <Route path="/" element={<LandingPage/>}/>
             <Route path="/login" element={<LoginPage/>}/>
             <Route path="/order" element={<OrderPage/>}/>
+            <Route path="/lunch" element={<LunchRoulettePage/>}/>
           </Route>
           <Route path="/dashboard" element={<RequireAuth/>}>
             <Route element={<AppShell/>}>

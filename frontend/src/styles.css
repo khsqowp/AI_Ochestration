@@ -707,4 +707,11 @@
 .rainbow-length-range { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
 .rainbow-length-range span { color:#8a8591; font-size:12px; }
 .rainbow-num { width:70px !important; max-width:70px !important; text-align:center; }
+
+/* ══ 점심 룰렛 (공개 LUNCH 페이지) ═══════════════════════════════════════ */
+.lunch-roulette-page { min-height:calc(100dvh - 60px); display:flex; align-items:center; justify-content:center; padding:24px; }
+.lunch-roulette-placeholder { display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; color:#4a4552; }
+.lunch-roulette-placeholder svg { color:#7667dc; }
+.lunch-roulette-placeholder h1 { margin:0; font-size:26px; }
+.lunch-roulette-placeholder p { margin:0; color:#8a8591; font-size:13px; }
 .rainbow-keyspace-hint { margin-left:auto; font-size:11px; font-weight:700; color:#5b4fc4; }
