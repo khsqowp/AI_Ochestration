@@ -6,12 +6,13 @@ import { MarkdownBody } from '../components/shared'
 
 /** 대시보드 좌측에 세로로 붙는 대화 패널 — PM 대화와 RAG 아카이브 질문을 탭으로 오가며 쓴다. PM 대화 쪽 상태는
  * 앱 전역 상태(AppState)를 그대로 공유해서, 페이지를 오갈 때 대화가 끊기지 않는다. */
-export function DashboardSidebarChat({ recentTasks, taskTracks, chatInput, setChatInput, taskDomain, setTaskDomain, chatError, onSubmitTask, onOpenFile }: {
-  recentTasks: Task[]; taskTracks: Record<string, TaskEvent[]>; chatInput: string; setChatInput: (value: string) => void
+export function DashboardSidebarChat({ isAdmin, recentTasks, taskTracks, chatInput, setChatInput, taskDomain, setTaskDomain, chatError, onSubmitTask, onOpenFile }: {
+  isAdmin: boolean; recentTasks: Task[]; taskTracks: Record<string, TaskEvent[]>; chatInput: string; setChatInput: (value: string) => void
   taskDomain: TaskDomain; setTaskDomain: (value: TaskDomain) => void
   chatError: string; onSubmitTask: (event: FormEvent) => void; onOpenFile: (path: string) => void
 }) {
-  const [tab, setTab] = useState<'pm' | 'rag'>('pm')
+  // PM 대화는 ADMIN 전용(백엔드 POST /api/tasks 도 ADMIN-only) — 일반 계정은 RAG 대화만 노출.
+  const [tab, setTab] = useState<'pm' | 'rag'>(isAdmin ? 'pm' : 'rag')
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [answer, setAnswer] = useState<RagAnswer | null>(null)
@@ -46,11 +47,11 @@ export function DashboardSidebarChat({ recentTasks, taskTracks, chatInput, setCh
   }
   const stopAsking = () => { ragAbortRef.current?.abort() }
   return <aside className="dashboard-chat">
-    <div className="dashboard-chat-tabs">
+    {isAdmin && <div className="dashboard-chat-tabs">
       <button className={tab === 'pm' ? 'active' : ''} onClick={() => setTab('pm')}>PM 대화</button>
       <button className="dashboard-chat-flip" onClick={() => setTab(current => current === 'pm' ? 'rag' : 'pm')} title="대화 전환"><RotateCcw size={13}/></button>
       <button className={tab === 'rag' ? 'active' : ''} onClick={() => setTab('rag')}>RAG 대화</button>
-    </div>
+    </div>}
     {tab === 'pm' ? <div className="dashboard-chat-body">
       <p className="chat-bubble">수집 사이트를 등록하거나 작업을 지시해 주세요. PM이 팀과 검토 단계를 계획하겠습니다.</p>
       {recentTasks.filter(task => task.status === 'RUNNING' || task.status === 'QUEUED').map(task => (

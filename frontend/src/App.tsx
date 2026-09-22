@@ -36,13 +36,13 @@ export function App() {
               <Route path="notes" element={<NotesPage/>}/>
               <Route path="calendar" element={<CalendarPage/>}/>
               <Route path="diag" element={<DiagnosticsPage/>}/>
-              <Route path="debate" element={<DebatePage/>}/>
               <Route path="llm" element={<LocalLlmPage/>}/>
-              <Route path="역량강화/*" element={<CompetencyPage/>}/>
               <Route element={<RequireAdmin/>}>
                 <Route path="order" element={<OrderBoardPage/>}/>
                 <Route path="invest/*" element={<InvestPage/>}/>
                 <Route path="admin/*" element={<AdminPage/>}/>
+                <Route path="debate" element={<DebatePage/>}/>
+                <Route path="역량강화/*" element={<CompetencyPage/>}/>
               </Route>
             </Route>
           </Route>

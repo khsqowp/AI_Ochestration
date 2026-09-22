@@ -57,8 +57,7 @@ class SecurityConfig {
         .requestMatchers(HttpMethod.GET, "/api/archive/files", "/api/archive/content", "/api/archive/search", "/api/archive/graph").authenticated()
         .requestMatchers("/api/archive/**").hasRole("ADMIN")
 
-        // 수집 사이트 — listing is USER+ADMIN ("조회만"); add/edit/delete/collect-now is ADMIN-only
-        .requestMatchers(HttpMethod.GET, "/api/research-sources", "/api/research-sources/due").authenticated()
+        // 수집 사이트 — 2026-09-22부터 일반 계정 노출 범위 축소로 조회 포함 전체 ADMIN-only.
         .requestMatchers("/api/research-sources/**").hasRole("ADMIN")
 
         // 수집 제안 사이트 — entirely ADMIN-only, including viewing candidates
@@ -82,12 +81,13 @@ class SecurityConfig {
         // 접근기록 — nginx mirror 서브요청(내부망에서만, 컨트롤러가 소켓 피어 검사)
         .requestMatchers("/api/internal/**").permitAll()
 
-        // 로컬 LLM · AI 토론 — 인증된 USER 도 사용 (2026-09 재편: 별도 카테고리 페이지로 승격)
+        // 로컬 LLM — 인증된 USER 도 사용
         .requestMatchers("/api/dolphin/**").authenticated()
-        .requestMatchers("/api/debate/**").authenticated()
+        // AI 토론 — 2026-09-22부터 일반 계정 노출 범위 축소로 ADMIN-only.
+        .requestMatchers("/api/debate/**").hasRole("ADMIN")
 
-        // 역량 강화 — 개인 평가·답안·실습 이력은 USER와 ADMIN 모두 자신의 것만 접근한다.
-        .requestMatchers("/api/training/**").authenticated()
+        // 역량 강화 — 2026-09-22부터 일반 계정 노출 범위 축소로 ADMIN-only.
+        .requestMatchers("/api/training/**").hasRole("ADMIN")
 
         // 투자 데이터 — anyRequest catch-all 로도 덮이지만, 롤 경계를 명시적으로 고정해 회귀를 막는다
         .requestMatchers("/api/trading/**").hasRole("ADMIN")

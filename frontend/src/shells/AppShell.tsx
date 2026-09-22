@@ -12,9 +12,9 @@ const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean }[] =
   { to: '/dashboard/invest', label: '투자', adminOnly: true },
   { to: '/dashboard/calendar', label: '캘린더' },
   { to: '/dashboard/diag', label: '진단' },
-  { to: '/dashboard/debate', label: '토론' },
   { to: '/dashboard/llm', label: '로컬 LLM' },
-  { to: '/dashboard/역량강화', label: '역량 강화' },
+  { to: '/dashboard/debate', label: '토론', adminOnly: true },
+  { to: '/dashboard/역량강화', label: '역량 강화', adminOnly: true },
   { to: '/dashboard/admin', label: '관리', adminOnly: true },
 ]
 
@@ -44,9 +44,11 @@ export function AppShell() {
     <TodoFloating items={todos.items} onAdd={todos.add} onToggle={todos.toggle}/>
     {helpOpen && <aside className="side-modal" role="dialog" aria-modal="true">
       <div className="sheet-header"><div><p className="eyebrow">QUICK HELP</p><h2>사용 방법</h2></div><button className="sheet-close" onClick={() => setHelpOpen(false)}><X size={18}/></button></div>
-      <p className="source-intro">PM 대화에서 지시를 보내면 수집 → 상호 검토 → 팀장 → PM → 아카이브 순서로 진행됩니다. 상단바에서 카테고리를 골라 이동하세요.</p>
-      <p className="source-intro">아래에 주제를 입력하면 이 오케스트레이션에 맞는 노트 생성 프롬프트가 완성됩니다 — 복사해서 PM 대화창에 붙여넣으세요.</p>
-      <NotePromptBuilder/>
+      {isAdmin ? <>
+        <p className="source-intro">PM 대화에서 지시를 보내면 수집 → 상호 검토 → 팀장 → PM → 아카이브 순서로 진행됩니다. 상단바에서 카테고리를 골라 이동하세요.</p>
+        <p className="source-intro">아래에 주제를 입력하면 이 오케스트레이션에 맞는 노트 생성 프롬프트가 완성됩니다 — 복사해서 PM 대화창에 붙여넣으세요.</p>
+        <NotePromptBuilder/>
+      </> : <p className="source-intro">RAG 대화 탭에서 아카이브에 쌓인 노트에 질문할 수 있습니다. 상단바에서 카테고리를 골라 이동하세요.</p>}
     </aside>}
   </div>
 }
