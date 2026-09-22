@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -35,15 +36,38 @@ public class FileIntakeService {
     Files.createDirectories(obsidianRoot());
   }
 
+  // 매 스캔마다 트리 전체(web/ 크롤 캐시 포함 1만4천+ 파일)를 걸으면서 파일마다 existsBySourcePath
+  // 쿼리를 날리면 실행마다 DB 왕복 수만 건이 튀어 mysql CPU가 수초간 90%대로 치솟는다(실측). 이미
+  // 등록된 옛 파일은 mtime이 지난 스캔 이후로 바뀔 일이 없으므로, lastScanAt 이후 수정된 파일만 걸러
+  // DB에 물어보면 정상 상태에서는 왕복이 거의 0건으로 준다. 인스턴스 필드라 재시작하면 한 번은 전체
+  // 재검사하지만(허용 가능한 1회 비용), 그 뒤로는 새/변경 파일만 본다.
+  private volatile Instant lastScanAt = Instant.EPOCH;
+
+  // 파일시스템/마운트에 따라 mtime이 초 단위로 반올림될 수 있어, 다음 커트라인을 스캔 시작 시각보다
+  // 살짝 앞당겨(여유 2초) 잡는다 -- 그 경계에 걸린 파일은 다음 스캔에서 한 번 더(저렴하게) 재확인될
+  // 뿐이지만, 여유를 안 두면 반올림 때문에 영영 걸러지지 않는 파일이 생길 수 있다.
+  private static final java.time.Duration SCAN_CLOCK_SKEW_MARGIN = java.time.Duration.ofSeconds(2);
+
   @Scheduled(fixedDelayString = "${app.files.scan-delay-ms:30000}")
   @Transactional
   public void discoverNewOriginals() {
     Path root = originalsRoot();
+    Instant scanStartedAt = Instant.now();
     try (Stream<Path> paths = Files.walk(root)) {
       paths.filter(Files::isRegularFile).filter(path -> !path.getFileName().toString().equals(".gitkeep"))
+          .filter(this::modifiedSinceLastScan)
           .forEach(this::enqueueIfNew);
+      lastScanAt = scanStartedAt.minus(SCAN_CLOCK_SKEW_MARGIN);
     } catch (IOException exception) {
       log.warn("originals_scan_failed root={}", root, exception);
+    }
+  }
+
+  private boolean modifiedSinceLastScan(Path path) {
+    try {
+      return Files.getLastModifiedTime(path).toInstant().isAfter(lastScanAt);
+    } catch (IOException exception) {
+      return true; // mtime 조회 실패하면 안전하게 검사 대상에 포함
     }
   }
 
