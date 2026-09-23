@@ -81,6 +81,9 @@ class SecurityConfig {
         // 점심 룰렛 — 공개 페이지, 계정 없이 아무나 후보 등록·시작(/api/orders/mine과 동일 신뢰모델)
         .requestMatchers("/api/lunch-roulette/**").permitAll()
 
+        // 랜딩 페이지 날씨 — 서울 고정, 방문자별로 다를 게 없어 서버가 한 번 받아서 캐싱해 공개로 내려준다
+        .requestMatchers(HttpMethod.GET, "/api/public/weather").permitAll()
+
         // 접근기록 — nginx mirror 서브요청(내부망에서만, 컨트롤러가 소켓 피어 검사)
         .requestMatchers("/api/internal/**").permitAll()
 

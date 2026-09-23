@@ -4,15 +4,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-/* 서울 실시간 날씨 — Open-Meteo (키 불필요, CORS 허용). 10분마다 갱신.
+/* 서울 실시간 날씨 — 서버가 Open-Meteo를 대신 불러 캐싱해둔 걸 받아온다. 10분마다 갱신.
    우측 하단: 시간별 한 줄 + 일자별 한 줄. 실패 시 조용히 숨김. */
 
-const SEOUL = 'latitude=37.5665&longitude=126.9780'
-const API = `https://api.open-meteo.com/v1/forecast?${SEOUL}`
-  + '&current=temperature_2m,weather_code'
-  + '&hourly=temperature_2m,weather_code'
-  + '&daily=weather_code,temperature_2m_max,temperature_2m_min'
-  + '&timezone=Asia%2FSeoul&forecast_days=5'
+const API = '/api/public/weather'
 
 function wx(code: number): { label: string; Icon: LucideIcon } {
   if (code === 0) return { label: '맑음', Icon: Sun }
