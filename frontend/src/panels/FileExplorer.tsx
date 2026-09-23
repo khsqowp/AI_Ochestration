@@ -29,15 +29,23 @@ export function FileExplorer({ onClose, onTaskStarted, onOpenGraph, initialPath,
     return () => window.clearInterval(timer)
   }, [])
   const openFile = async (file: Pick<ArchiveFile, 'path'>) => {
-    const response = await fetch(`/api/archive/content?path=${encodeURIComponent(file.path)}`, { credentials: 'include' })
-    if (!response.ok) { setError('Markdown 미리보기를 열지 못했습니다.'); return }
-    setSelected(await response.json())
-    setReadPaths(previous => {
-      if (previous.has(file.path)) return previous
-      const next = new Set(previous); next.add(file.path)
-      localStorage.setItem('archive-read-files', JSON.stringify([...next]))
-      return next
-    })
+    setError('')
+    try {
+      const response = await fetch(`/api/archive/content?path=${encodeURIComponent(file.path)}`, { credentials: 'include' })
+      if (!response.ok) { setError(`Markdown 미리보기를 열지 못했습니다. (HTTP ${response.status})`); return }
+      setSelected(await response.json())
+      setReadPaths(previous => {
+        if (previous.has(file.path)) return previous
+        const next = new Set(previous); next.add(file.path)
+        localStorage.setItem('archive-read-files', JSON.stringify([...next]))
+        return next
+      })
+    } catch (cause) {
+      // fetch 자체가 실패(네트워크 오류, 타임아웃, 응답이 JSON이 아님)하면 위 try 없이는 아무 반응도
+      // 없이 조용히 실패해서 "클릭해도 안 열림"으로만 보였다 -- 항상 화면에 이유를 보여준다.
+      console.error('archive_open_failed', file.path, cause)
+      setError('Markdown 미리보기를 열지 못했습니다. (네트워크 오류 -- 콘솔 확인)')
+    }
   }
   // 대시보드의 "최근 파일" 목록에서 특정 파일을 클릭했을 때, 목록만 보여주고 끝나지 않도록 곧바로 그 파일을 열어준다.
   useEffect(() => { if (!initialPath) return; openFile({ path: initialPath }); onInitialPathHandled?.() }, [initialPath])
