@@ -11,6 +11,8 @@ import org.springframework.data.repository.query.Param;
 interface AccessEventRepository extends JpaRepository<AccessEvent, UUID> {
   List<AccessEvent> findAllByOrderByTsDesc(Pageable pageable);
 
+  List<AccessEvent> findByUserEmailOrderByTsDesc(String userEmail, Pageable pageable);
+
   long countByTsAfter(Instant since);
 
   long deleteByTsBefore(Instant cutoff);
@@ -24,11 +26,23 @@ interface AccessEventRepository extends JpaRepository<AccessEvent, UUID> {
       from AccessEvent e group by e.ip""")
   List<IpAggregate> aggregateByIp();
 
+  @Query("""
+      select e.userEmail as email, e.userDisplayName as displayName, count(e) as hits, max(e.ts) as lastSeen
+      from AccessEvent e where e.userEmail is not null group by e.userEmail, e.userDisplayName""")
+  List<UserAggregate> aggregateByUser();
+
   interface IpAggregate {
     String getIp();
     long getHits();
     Instant getLastSeen();
     long getSessionHits();
+  }
+
+  interface UserAggregate {
+    String getEmail();
+    String getDisplayName();
+    long getHits();
+    Instant getLastSeen();
   }
 }
 

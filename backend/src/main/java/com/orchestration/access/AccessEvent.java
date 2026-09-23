@@ -31,10 +31,16 @@ public class AccessEvent {
   @Column(name = "had_session", nullable = false) private boolean hadSession = false;
   /** "edge" (nginx mirror) or "api" (filter). */
   @Column(length = 8, nullable = false) private String source = "edge";
+  /** Set only when the request carried a valid session JWT (JwtAuthenticationFilter runs before this
+   * filter, so SecurityContextHolder already has the principal by record-time) -- null for anonymous
+   * edge hits and logged-out API calls. Powers 관리 › 접근기록's per-계정 활동 로그. */
+  @Column(name = "user_email", length = 320) private String userEmail;
+  @Column(name = "user_display_name", length = 120) private String userDisplayName;
 
   protected AccessEvent() {}
 
-  public AccessEvent(String ip, String method, String path, int status, String userAgent, boolean hadSession, String source) {
+  public AccessEvent(String ip, String method, String path, int status, String userAgent, boolean hadSession,
+                      String source, String userEmail, String userDisplayName) {
     this.ip = ip;
     this.method = method;
     this.path = trim(path, 512);
@@ -42,6 +48,8 @@ public class AccessEvent {
     this.userAgent = trim(userAgent, 512);
     this.hadSession = hadSession;
     this.source = source;
+    this.userEmail = userEmail;
+    this.userDisplayName = userDisplayName;
   }
 
   private static String trim(String v, int max) {
@@ -58,4 +66,6 @@ public class AccessEvent {
   public String getUserAgent() { return userAgent; }
   public boolean isHadSession() { return hadSession; }
   public String getSource() { return source; }
+  public String getUserEmail() { return userEmail; }
+  public String getUserDisplayName() { return userDisplayName; }
 }

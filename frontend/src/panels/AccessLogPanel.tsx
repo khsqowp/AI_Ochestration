@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
-import type { AccessLogSummary } from '../lib/types'
+import type { AccessLogSummary, AccessRecent } from '../lib/types'
 import { PanelShell } from '../components/shared'
 import { GeoHeatMap } from '../components/GeoHeatMap'
 
@@ -9,6 +9,9 @@ const fmtTime = (iso: string) => new Date(iso).toLocaleString('ko-KR', { month: 
 export function AccessLogPanel({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const [data, setData] = useState<AccessLogSummary | null>(null)
   const [err, setErr] = useState(false)
+  const [selectedUser, setSelectedUser] = useState('')
+  const [userActivity, setUserActivity] = useState<AccessRecent[] | null>(null)
+  const [userActivityErr, setUserActivityErr] = useState(false)
 
   const load = () => {
     fetch('/api/admin/access-log', { credentials: 'include' })
@@ -17,6 +20,17 @@ export function AccessLogPanel({ onClose, embedded }: { onClose?: () => void; em
       .catch(() => setErr(true))
   }
   useEffect(() => { load(); const t = window.setInterval(load, 30_000); return () => window.clearInterval(t) }, [])
+
+  // 계정을 고르면 그 계정의 활동만 최신순으로 불러온다 -- 목록은 위 30초 폴링을 타지 않고 고를 때만.
+  useEffect(() => {
+    if (!selectedUser) { setUserActivity(null); return }
+    let cancelled = false
+    fetch(`/api/admin/access-log/user?email=${encodeURIComponent(selectedUser)}`, { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((rows: AccessRecent[]) => { if (!cancelled) { setUserActivity(rows); setUserActivityErr(false) } })
+      .catch(() => { if (!cancelled) setUserActivityErr(true) })
+    return () => { cancelled = true }
+  }, [selectedUser])
 
   const korea = data ? data.points.filter(p => p.countryCode === 'KR') : []
 
@@ -49,16 +63,44 @@ export function AccessLogPanel({ onClose, embedded }: { onClose?: () => void; em
         </section>
       </div>
 
+      <h3 className="access-recent-title">계정별 활동기록 <small>{data.users.length}개 계정</small></h3>
+      <div className="access-user-picker">
+        <select value={selectedUser} onChange={event => setSelectedUser(event.target.value)}>
+          <option value="">계정 선택…</option>
+          {data.users.map(u => <option key={u.email} value={u.email}>
+            {u.displayName || u.email} ({u.email}) · {u.hits.toLocaleString()}건 · 최근 {fmtTime(u.lastSeen)}
+          </option>)}
+        </select>
+      </div>
+      {selectedUser && <div className="access-recent-wrap">
+        {userActivityErr && <p className="budget-alert">활동기록을 불러오지 못했습니다.</p>}
+        {!userActivity && !userActivityErr && <p className="empty-state">불러오는 중…</p>}
+        {userActivity && <table className="access-recent">
+          <thead><tr><th>시각</th><th>IP</th><th>위치</th><th>경로</th><th>응답</th></tr></thead>
+          <tbody>
+            {userActivity.map((r, i) => <tr key={i}>
+              <td className="ar-ts">{fmtTime(r.ts)}</td>
+              <td className="ar-ip">{r.ip}</td>
+              <td>{[r.city, r.country].filter(Boolean).join(', ') || '—'}</td>
+              <td className="ar-path">{r.method} {r.path}</td>
+              <td className="ar-status">{r.status < 0 ? '·' : r.status}</td>
+            </tr>)}
+            {userActivity.length === 0 && <tr><td colSpan={5} className="empty-state">기록 없음</td></tr>}
+          </tbody>
+        </table>}
+      </div>}
+
       <h3 className="access-recent-title">최근 시도</h3>
       <div className="access-recent-wrap">
         <table className="access-recent">
           <thead><tr>
-            <th>시각</th><th>IP</th><th>위치</th><th>ISP</th><th>경로</th><th>응답</th><th>세션</th>
+            <th>시각</th><th>IP</th><th>계정</th><th>위치</th><th>ISP</th><th>경로</th><th>응답</th><th>세션</th>
           </tr></thead>
           <tbody>
             {data.recent.map((r, i) => <tr key={i} className={r.hadSession ? 'has-session' : ''}>
               <td className="ar-ts">{fmtTime(r.ts)}</td>
               <td className="ar-ip">{r.ip}</td>
+              <td className="ar-user">{r.userDisplayName || r.userEmail || '—'}</td>
               <td>{[r.city, r.country].filter(Boolean).join(', ') || '—'}</td>
               <td className="ar-isp">{r.isp || '—'}</td>
               <td className="ar-path">{r.method} {r.path}</td>

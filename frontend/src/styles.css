@@ -665,6 +665,9 @@
 .ar-path { max-width:260px; overflow:hidden; text-overflow:ellipsis; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .ar-status { text-align:center; color:#8a8695; }
 .ar-session { text-align:center; color:#e0466a; }
+.ar-user { font-weight:600; color:#4c3fb5; }
+.access-user-picker { margin-bottom:10px; }
+.access-user-picker select { width:100%; padding:9px 12px; border:1px solid #dcd7e4; border-radius:10px; font:inherit; font-size:13px; background:#fff; color:#413b4b; }
 
 /* ══ 스마트 디코더 (진단 › 인코더·디코더) ═════════════════════════════════ */
 .smart-decoder .payload-builder-label small { font-weight:500; color:#948fa0; }

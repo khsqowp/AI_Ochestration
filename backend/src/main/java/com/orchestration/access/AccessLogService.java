@@ -3,6 +3,7 @@ package com.orchestration.access;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -34,7 +35,7 @@ public class AccessLogService {
   public void record(Hit hit) {
     try {
       events.save(new AccessEvent(hit.ip(), hit.method(), hit.path(), hit.status(),
-          hit.userAgent(), hit.hadSession(), hit.source()));
+          hit.userAgent(), hit.hadSession(), hit.source(), hit.userEmail(), hit.userDisplayName()));
     } catch (Exception e) {
       log.debug("access event write skipped: {}", e.toString());
     }
@@ -46,7 +47,8 @@ public class AccessLogService {
   }
 
   public record Hit(String ip, String method, String path, int status, String userAgent, boolean hadSession,
-                    String source, String cfLat, String cfLon, String cfCity, String cfRegion, String cfCountry) {}
+                    String source, String userEmail, String userDisplayName,
+                    String cfLat, String cfLon, String cfCity, String cfRegion, String cfCountry) {}
 
   @Transactional(readOnly = true)
   public Summary summary() {
@@ -68,18 +70,36 @@ public class AccessLogService {
           agg.getHits(), agg.getSessionHits(), agg.getLastSeen()));
     }
 
-    List<Recent> recent = events.findAllByOrderByTsDesc(PageRequest.of(0, 120)).stream().map(e -> {
-      IpLocation loc = locByIp.get(e.getIp());
-      return new Recent(e.getTs(), e.getIp(), e.getMethod(), e.getPath(), e.getStatus(), e.isHadSession(),
-          e.getSource(), loc == null ? null : loc.getCity(), loc == null ? null : loc.getCountry(),
-          loc == null ? null : loc.getCountryCode(), loc == null ? null : loc.getIsp());
-    }).toList();
+    List<Recent> recent = events.findAllByOrderByTsDesc(PageRequest.of(0, 120)).stream()
+        .map(e -> toRecent(e, locByIp)).toList();
+
+    List<UserSummary> users = events.aggregateByUser().stream()
+        .map(agg -> new UserSummary(agg.getEmail(), agg.getDisplayName(), agg.getHits(), agg.getLastSeen()))
+        .sorted(Comparator.comparing(UserSummary::lastSeen).reversed())
+        .toList();
 
     long total = events.count();
     long last24h = events.countByTsAfter(Instant.now().minus(24, ChronoUnit.HOURS));
 
-    return new Summary(points, recent,
+    return new Summary(points, recent, users,
         new Stats(total, uniqueIps, countries.size(), points.size(), last24h));
+  }
+
+  /** 관리 › 접근기록에서 특정 계정을 골랐을 때 그 계정의 활동만 최신순으로. */
+  @Transactional(readOnly = true)
+  public List<Recent> activityByUser(String email) {
+    Map<String, IpLocation> locByIp = locations.findAll().stream()
+        .collect(Collectors.toMap(IpLocation::getIp, Function.identity(), (a, b) -> a));
+    return events.findByUserEmailOrderByTsDesc(email, PageRequest.of(0, 300)).stream()
+        .map(e -> toRecent(e, locByIp)).toList();
+  }
+
+  private Recent toRecent(AccessEvent e, Map<String, IpLocation> locByIp) {
+    IpLocation loc = locByIp.get(e.getIp());
+    return new Recent(e.getTs(), e.getIp(), e.getMethod(), e.getPath(), e.getStatus(), e.isHadSession(),
+        e.getSource(), e.getUserEmail(), e.getUserDisplayName(),
+        loc == null ? null : loc.getCity(), loc == null ? null : loc.getCountry(),
+        loc == null ? null : loc.getCountryCode(), loc == null ? null : loc.getIsp());
   }
 
   @Scheduled(cron = "0 30 4 * * *")
@@ -94,9 +114,13 @@ public class AccessLogService {
                       long hits, long sessionHits, Instant lastSeen) {}
 
   public record Recent(Instant ts, String ip, String method, String path, int status, boolean hadSession,
-                       String source, String city, String country, String countryCode, String isp) {}
+                       String source, String userEmail, String userDisplayName,
+                       String city, String country, String countryCode, String isp) {}
 
   public record Stats(long totalHits, long uniqueIps, long countries, long mappedIps, long last24h) {}
 
-  public record Summary(List<Point> points, List<Recent> recent, Stats stats) {}
+  /** 로그인 계정별 집계 -- 접근기록 화면의 "계정별로 보기" 드롭다운을 채운다. */
+  public record UserSummary(String email, String displayName, long hits, Instant lastSeen) {}
+
+  public record Summary(List<Point> points, List<Recent> recent, List<UserSummary> users, Stats stats) {}
 }
