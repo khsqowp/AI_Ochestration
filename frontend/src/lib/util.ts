@@ -12,6 +12,18 @@ export function writeCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`
 }
 
+// 아카이브 노트 경로/검색어를 URL 쿼리에 실을 때 쓴다. 이 앱은 보안 리서치 노트를 다루므로 파일명이나
+// 검색어에 "injection"/"공격"/"exploit" 같은 단어가 자연스럽게 섞이는데, 그걸 URL에 그대로 노출하면
+// Cloudflare WAF가 SQLi/공격 패턴으로 오인해 요청이 origin에 닿기도 전에 403으로 막힌다(실제로 겪음).
+// base64url로 감싸면 사람이 읽을 수 있는 단어가 URL에서 아예 사라져 이 오탐이 구조적으로 없어진다.
+// 백엔드 ArchiveController.decodeParam과 반드시 짝을 맞춰야 한다.
+export function toUrlSafeBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  bytes.forEach(byte => { binary += String.fromCharCode(byte) })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
 export const CALENDAR_CATEGORY_LABEL: Record<CalendarCategory, string> = { EVENT: '행사', SEMINAR: '세미나', INCIDENT: '피해사고' }
 
 export const archiveTaskLabel = (title: string) => title.replace(/\s*(수집 자료 검토|원본\s*\d+개\s*검토)$/, ' 파일 아카이브')

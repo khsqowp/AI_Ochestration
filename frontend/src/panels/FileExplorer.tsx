@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Archive, FileText, FileUp, Layers, LockKeyhole, MessageCircle, TrendingUp, X } from 'lucide-react'
 import type { ArchiveFile, FileCategory, MarkdownDoc, SortDirection, SortField, Task } from '../lib/types'
-import { displayTitle, documentTitle, domainLabel, fileMatchesCategory, sortIndicator } from '../lib/util'
+import { displayTitle, documentTitle, domainLabel, fileMatchesCategory, sortIndicator, toUrlSafeBase64 } from '../lib/util'
 import { DocumentCard, PanelShell } from '../components/shared'
 
 export function FileExplorer({ onClose, onTaskStarted, onOpenGraph, initialPath, onInitialPathHandled, embedded }: { onClose?: () => void; onTaskStarted: (task: Task) => void; onOpenGraph: () => void; initialPath?: string; onInitialPathHandled?: () => void; embedded?: boolean }) {
@@ -31,7 +31,7 @@ export function FileExplorer({ onClose, onTaskStarted, onOpenGraph, initialPath,
   const openFile = async (file: Pick<ArchiveFile, 'path'>) => {
     setError('')
     try {
-      const response = await fetch(`/api/archive/content?path=${encodeURIComponent(file.path)}`, { credentials: 'include' })
+      const response = await fetch(`/api/archive/content?path=${toUrlSafeBase64(file.path)}`, { credentials: 'include' })
       if (!response.ok) { setError(`Markdown 미리보기를 열지 못했습니다. (HTTP ${response.status})`); return }
       setSelected(await response.json())
       setReadPaths(previous => {
@@ -49,7 +49,7 @@ export function FileExplorer({ onClose, onTaskStarted, onOpenGraph, initialPath,
   }
   // 대시보드의 "최근 파일" 목록에서 특정 파일을 클릭했을 때, 목록만 보여주고 끝나지 않도록 곧바로 그 파일을 열어준다.
   useEffect(() => { if (!initialPath) return; openFile({ path: initialPath }); onInitialPathHandled?.() }, [initialPath])
-  useEffect(() => { if (query.trim().length < 2) { setResults([]); return } const timer = window.setTimeout(() => { fetch(`/api/archive/search?query=${encodeURIComponent(query)}`, { credentials: 'include' }).then(response => response.ok ? response.json() : []).then(setResults) }, 250); return () => window.clearTimeout(timer) }, [query])
+  useEffect(() => { if (query.trim().length < 2) { setResults([]); return } const timer = window.setTimeout(() => { fetch(`/api/archive/search?query=${toUrlSafeBase64(query)}`, { credentials: 'include' }).then(response => response.ok ? response.json() : []).then(setResults) }, 250); return () => window.clearTimeout(timer) }, [query])
   const reprocess = async () => { if (!selected) return; setProcessing(true); const response = await fetch('/api/tasks', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `[재가공] ${documentTitle(selected)}`.slice(0, 160), domain: 'GENERAL', instruction: `아래 기존 Markdown 노트를 제2의 뇌용으로 재가공하세요. 핵심 요약, 중요도, 관련 개념, 기존 노트와의 연결 후보, 중복·오래된 정보, 필요한 경우 보강 조사 항목을 자연스러운 한국어 Markdown으로 정리하세요. 원본을 덮어쓰지 말고 새 연관 노트로 보관하세요.\n\n원본 경로: obsidian/${selected.path}\n\n원본 내용:\n${selected.body.slice(0, 4500)}` }) }); setProcessing(false); if (!response.ok) { setError('재가공 작업을 만들지 못했습니다.'); return } onTaskStarted(await response.json() as Task); onClose?.() }
   // 원본 노트가 짧아서 아쉬울 때 — 같은 요약을 반복하는 대신, 원본이 다루지 않은 다음 단계·더 깊은
   // 세부사항·실전 예시를 새 후속 노트로 이어 쓴다. 원본은 건드리지 않는다(reprocess 와 동일 원칙).

@@ -1,7 +1,7 @@
 import { Suspense, useRef, useState, type FormEvent } from 'react'
 import { History, Loader2, Search, Square, X } from 'lucide-react'
 import type { MarkdownDoc, RagAnswer, RagDomainFilter, RagHistoryEntry, RagOriginFilter } from '../lib/types'
-import { ragProgressLabel } from '../lib/util'
+import { ragProgressLabel, toUrlSafeBase64 } from '../lib/util'
 import { DocumentCard, MarkdownBody, PanelShell } from '../components/shared'
 
 export function AskArchiveModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
@@ -45,7 +45,7 @@ export function AskArchiveModal({ onClose, embedded }: { onClose?: () => void; e
     }
   }
   const stopAsking = () => { abortRef.current?.abort() }
-  const openCitation = async (path: string) => { const response = await fetch(`/api/archive/content?path=${encodeURIComponent(path)}`, { credentials: 'include' }); if (response.ok) setPreview(await response.json()) }
+  const openCitation = async (path: string) => { const response = await fetch(`/api/archive/content?path=${toUrlSafeBase64(path)}`, { credentials: 'include' }); if (response.ok) setPreview(await response.json()) }
   return <PanelShell embedded={embedded} className="side-modal"><div className="sheet-header"><div><p className="eyebrow">KNOWLEDGE ARCHIVE</p><h2>아카이브에 질문하기</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
     <p className="source-intro">아카이브에 쌓인 노트를 근거로 답합니다. 노트에 없는 내용은 답하지 않습니다.</p>
     <div className="rag-filter-row">

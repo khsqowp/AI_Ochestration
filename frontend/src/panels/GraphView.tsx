@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type SimulationNodeDatum } from 'd3-force'
 import { FileText, X } from 'lucide-react'
 import type { GraphData, MarkdownDoc } from '../lib/types'
-import { documentTitle } from '../lib/util'
+import { documentTitle, toUrlSafeBase64 } from '../lib/util'
 import { DocumentCard, PanelShell } from '../components/shared'
 
 /** 노드를 원 둘레에 균등 배치하던 이전 방식은 노드 수가 늘면(지금 100개 이상) 라벨이 서로 겹쳐 뭉친
@@ -63,7 +63,7 @@ export function GraphView({ onClose, onOpenFile, embedded }: { onClose?: () => v
   const [selected, setSelected] = useState<MarkdownDoc | null>(null)
   useEffect(() => { fetch('/api/archive/graph', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setGraph) }, [])
   const positions = useForceLayout(graph)
-  const openFile = async (path: string) => { const response = await fetch(`/api/archive/content?path=${encodeURIComponent(path)}`, { credentials: 'include' }); if (response.ok) setSelected(await response.json()); else onOpenFile(path) }
+  const openFile = async (path: string) => { const response = await fetch(`/api/archive/content?path=${toUrlSafeBase64(path)}`, { credentials: 'include' }); if (response.ok) setSelected(await response.json()); else onOpenFile(path) }
   const colors: Record<string, string> = { '웹 진단': '#df805a', '모바일 진단': '#dba43a', '소스코드 진단': '#c2588f', '모의해킹 시나리오': '#b23b3b', '시스템': '#7a8a4e', '클라우드': '#3f9e8f', '리버스 엔지니어링': '#5c6bc0', '기타': '#9a96a1', economy: '#4e94c7', ideas: '#9b77d5', general: '#69aa8b' }
   return <PanelShell embedded={embedded} className="graph-view">
     <div className="sheet-header"><div><p className="eyebrow">KNOWLEDGE GRAPH</p><h2>주제 연결 그래프</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>

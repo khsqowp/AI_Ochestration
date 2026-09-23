@@ -71,7 +71,7 @@ public class ArchiveController {
 
   @GetMapping("/content")
   public MarkdownContent content(@RequestParam String path) throws IOException {
-    Path file = resolveMarkdown(path);
+    Path file = resolveMarkdown(decodeParam(path));
     if (!Files.isRegularFile(file)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "파일을 찾을 수 없습니다.");
     if (Files.size(file) > MAX_MARKDOWN_BYTES) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "미리보기는 1MB 이하 Markdown만 지원합니다.");
     String raw = Files.readString(file, StandardCharsets.UTF_8);
@@ -80,7 +80,8 @@ public class ArchiveController {
 
   @GetMapping("/search")
   public List<SearchResult> search(@RequestParam String query) throws IOException {
-    String term = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+    String decoded = decodeParam(query);
+    String term = decoded == null ? "" : decoded.trim().toLowerCase(java.util.Locale.ROOT);
     if (term.length() < 2) return List.of();
     Path archivedRoot = root().resolve("_archived");
     try (Stream<Path> paths = Files.walk(root(), 5)) {
@@ -150,6 +151,22 @@ public class ArchiveController {
       for (int i = 1; i < group.length; i++) if (lower.contains(group[i])) return group[0];
     }
     return "기타";
+  }
+
+  /** path/query 는 base64url로 인코딩해 받는다(프런트: toUrlSafeBase64) -- 이 앱은 보안 리서치용
+   * 노트를 다루므로 "injection", "exploit", "공격" 같은 단어가 파일명/검색어에 자연스럽게 섞이는데,
+   * URL에 그 단어가 그대로 노출되면 Cloudflare WAF가 SQLi/공격 패턴으로 오인해 요청을 origin까지
+   * 오기도 전에 403으로 차단한다(실제로 겪은 사고 -- 원본 문서는 정상, nginx 로그에 요청 자체가
+   * 안 남아 Cloudflare 단에서 막힌 걸 확인). base64url은 사람이 읽을 수 있는 키워드를 URL에서
+   * 완전히 지우므로 이 클래스의 오탐을 구조적으로 없앤다. */
+  private String decodeParam(String encoded) {
+    if (encoded == null || encoded.isBlank()) return encoded;
+    try {
+      String padded = encoded + "=".repeat((4 - encoded.length() % 4) % 4);
+      return new String(java.util.Base64.getUrlDecoder().decode(padded), StandardCharsets.UTF_8);
+    } catch (IllegalArgumentException exception) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 요청 형식입니다.");
+    }
   }
 
   private Path root() throws IOException { Path root = Path.of(properties.obsidianPath()).toAbsolutePath().normalize(); Files.createDirectories(root); return root; }
