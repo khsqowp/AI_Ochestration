@@ -8,6 +8,35 @@ interface Room { day: string; candidates: string[]; startedAt: string | null }
 const POLL_MS = 3000
 const WHEEL_COLORS = ['#7667dc', '#a99bf0']
 
+/** react-custom-roulette 자체 버그 우회: Wheel을 mustStartSpinning=true로 곧장 마운트하면,
+ * "돌기 시작" 이펙트가 아직 초기값([[0]])인 prizeMap을 읽어 prizeMap[prizeNumber]가
+ * undefined인 채로 인덱싱해 그대로 throw한다(당첨자가 0번 후보가 아닐 때마다 발생 -- 화면
+ * 전체가 빈 채로 죽는 원인이었다). false로 마운트해 Wheel이 자기 prizeMap을 먼저 채우게 한 뒤,
+ * 다음 렌더에서 true로 올리면 안전하다(라이브러리 데모도 항상 이 순서). key로 방마다 새로 마운트.
+ */
+function RouletteWheel({ candidates, prizeIndex, onWinner }: { candidates: string[]; prizeIndex: number; onWinner: () => void }) {
+  const [spin, setSpin] = useState(false)
+  useEffect(() => { setSpin(true) }, [])
+  return <Wheel
+    mustStartSpinning={spin}
+    prizeNumber={prizeIndex}
+    data={candidates.map(option => ({ option }))}
+    backgroundColors={WHEEL_COLORS}
+    textColors={['#ffffff']}
+    outerBorderColor="#4d43a0"
+    outerBorderWidth={4}
+    radiusLineColor="#ffffff"
+    radiusLineWidth={2}
+    // 'sans-serif'는 라이브러리 내장 웹세이프 폰트 목록에 있어 Google Fonts로 폰트를 fetch하러
+    // 가지 않는다(WebFontLoader가 실패/타임아웃하면 바퀴가 안 보이는 별개의 경로도 있어, 우리 앱
+    // 폰트인 Pretendard처럼 그 목록에 없는 이름은 여기 쓰면 안 된다).
+    fontFamily="sans-serif"
+    fontSize={16}
+    spinDuration={0.9}
+    onStopSpinning={onWinner}
+  />
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/lunch-roulette${path}`, { headers: { 'Content-Type': 'application/json' }, ...init })
   const raw = await response.text()
@@ -87,24 +116,7 @@ export function LunchRoulettePage() {
         </button>
       </> : <>
         <div className="lunch-roulette-wheel-wrap">
-          <Wheel
-            mustStartSpinning={started}
-            prizeNumber={prizeIndex}
-            data={room.candidates.map(option => ({ option }))}
-            backgroundColors={WHEEL_COLORS}
-            textColors={['#ffffff']}
-            outerBorderColor="#4d43a0"
-            outerBorderWidth={4}
-            radiusLineColor="#ffffff"
-            radiusLineWidth={2}
-            // 'sans-serif'는 라이브러리 내장 웹세이프 폰트 목록에 있어 Google Fonts로 폰트를
-            // fetch하러 가지 않는다(WebFontLoader가 실패/타임아웃하면 바퀴가 영영 안 보이는 버그가
-            // 있어, 우리 앱 폰트인 Pretendard처럼 그 목록에 없는 이름은 여기 쓰면 안 된다).
-            fontFamily="sans-serif"
-            fontSize={16}
-            spinDuration={0.9}
-            onStopSpinning={() => setWinner(room.candidates[prizeIndex])}
-          />
+          <RouletteWheel key={room.startedAt} candidates={room.candidates} prizeIndex={prizeIndex} onWinner={() => setWinner(room.candidates[prizeIndex])}/>
         </div>
         {winner && <p className="lunch-roulette-winner">오늘 점심은 <b>{winner}</b> 🎉</p>}
       </>}
