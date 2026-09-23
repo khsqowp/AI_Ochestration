@@ -732,7 +732,9 @@
 
 /* ══ 점심 룰렛 (공개 LUNCH 페이지) ═══════════════════════════════════════ */
 .lunch-roulette-page { min-height:calc(100dvh - 60px); display:flex; align-items:center; justify-content:center; padding:24px; }
-.lunch-roulette-shell { width:min(640px,100%); display:flex; flex-direction:column; gap:16px; }
+.lunch-roulette-shell { width:min(640px,100%); display:flex; flex-direction:column; gap:16px; transition:width .2s ease; }
+/* 구슬 레이스 화면은 캔버스가 1600x900 기준이라 후보 등록 폼보다 훨씬 넓어야 트랙이 보인다 */
+.lunch-roulette-shell--racing { width:min(1200px,96vw); }
 .lunch-roulette-head { display:flex; align-items:center; gap:10px; color:#37333d; }
 .lunch-roulette-head svg { color:#7667dc; }
 .lunch-roulette-head h1 { margin:0; font-size:24px; }
@@ -746,11 +748,16 @@
 .lunch-roulette-form button, .lunch-roulette-start { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #dfd9e7; border-radius:10px; background:#fff; color:#625c6b; padding:10px 16px; font:inherit; font-weight:750; cursor:pointer; }
 .lunch-roulette-start { background:#7060d2; border-color:#7060d2; color:#fff; }
 .lunch-roulette-form button:disabled, .lunch-roulette-start:disabled { opacity:.55; cursor:not-allowed; }
-/* react-custom-roulette의 RouletteContainer가 이미 width:80vw;max-width:445px로 자체
-   반응형이라 여기선 가운데 정렬만 맡는다. */
-.lunch-roulette-wheel-wrap { display:flex; justify-content:center; padding:16px; }
+.lunch-roulette-record-toggle { display:flex; align-items:center; gap:7px; font-size:12px; color:#8a8591; cursor:pointer; }
 .lunch-roulette-winner { margin:0; text-align:center; font-size:18px; color:#37333d; }
 .lunch-roulette-winner b { color:#7060d2; }
+
+/* lazygyu/roulette 엔진 포팅(marble-roulette/) 캔버스 컨테이너 -- 원본 16:9(1600x900) 비율을
+   유지하면서 모바일~4K 폭에 맞춰 통째로 스케일된다(내부는 캔버스 자체 해상도라 별개). */
+.marble-race-wrap { position:relative; width:100%; aspect-ratio:16/9; border-radius:14px; overflow:hidden; background:#000; }
+.marble-race-canvas { width:100%; height:100%; }
+.marble-race-canvas canvas { display:block; width:100%; height:100%; }
+.marble-race-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; margin:0; color:#cfc9db; font-size:13px; background:rgba(0,0,0,.35); }
 .rainbow-keyspace-hint { margin-left:auto; font-size:11px; font-weight:700; color:#5b4fc4; }
 
 /* ── 진단 탭: 바둑판 타일 그리드 ──────────────────────────────
