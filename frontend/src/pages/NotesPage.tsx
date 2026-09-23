@@ -1,7 +1,7 @@
-import { useRef, useState, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
-import { FileUp, X } from 'lucide-react'
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels'
+import { FileUp, Minus, Plus, X } from 'lucide-react'
 import { useAppState } from '../context/AppState'
 import { agents } from '../lib/util'
 import type { Agent, Task } from '../lib/types'
@@ -29,6 +29,28 @@ function AgentRoster() {
       <div className="sheet-section"><b>지식베이스</b><p>업무와 관련된 근거 패킷과 노트를 우선 참고합니다.</p></div>
     </aside>}
   </section>
+}
+
+/** 세로 레일의 패널마다 -/+ 버튼을 얹어 접고 펼 수 있게 하는 래퍼. "아카이브에 질문하기"처럼 좁게
+ * 받은 패널에 잠깐 여유를 몰아주고 싶을 때, 다른 패널을 완전히 닫는 대신 이 얇은 헤더 줄만 남기고
+ * 접어서 그 공간을 형제 패널들에게 넘겨준다(react-resizable-panels가 자동으로 재분배). */
+function RailSection({ title, id, order, defaultSize, minSize, className, children }: {
+  title: string; id: string; order: number; defaultSize: number; minSize: number; className: string; children: ReactNode
+}) {
+  const ref = useRef<ImperativePanelHandle>(null)
+  const [collapsed, setCollapsed] = useState(false)
+  const toggle = () => { if (ref.current?.isCollapsed()) ref.current.expand(); else ref.current?.collapse() }
+  return <Panel ref={ref} id={id} order={order} defaultSize={defaultSize} minSize={minSize} collapsible collapsedSize={7}
+      onCollapse={() => setCollapsed(true)} onExpand={() => setCollapsed(false)}
+      className={`${className} rail-section ${collapsed ? 'is-collapsed' : ''}`}>
+    <div className="rail-section-head">
+      <span>{title}</span>
+      <button type="button" className="rail-section-toggle" onClick={toggle} title={collapsed ? '펼치기' : '접기'}>
+        {collapsed ? <Plus size={13}/> : <Minus size={13}/>}
+      </button>
+    </div>
+    <div className="rail-section-body">{children}</div>
+  </Panel>
 }
 
 export function NotesPage() {
@@ -63,27 +85,27 @@ export function NotesPage() {
       <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
       <Panel id="rail" order={2} minSize={22}>
         <PanelGroup direction="vertical" autoSaveId="notes:rail" className="zone-split">
-          <Panel id="archive" order={1} defaultSize={30} minSize={12} className="zone zone-panel zone-scroll">
+          <RailSection id="archive" order={1} defaultSize={30} minSize={12} title="작업 · 보관 기록" className="zone zone-panel zone-scroll">
             <ArchivePanel embedded tasks={recentTasks} onOpenExplorer={() => setView('files')} onRetried={loadTasks}/>
-          </Panel>
+          </RailSection>
           {isAdmin && <>
             <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
-            <Panel id="ask" order={2} defaultSize={22} minSize={12} className="zone zone-panel zone-scroll">
+            <RailSection id="ask" order={2} defaultSize={22} minSize={12} title="아카이브에 질문하기" className="zone zone-panel zone-scroll">
               <AskArchiveModal embedded/>
-            </Panel>
+            </RailSection>
           </>}
           <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
-          <Panel id="progress" order={3} defaultSize={26} minSize={12} className="zone zone-panel zone-scroll">
+          <RailSection id="progress" order={3} defaultSize={26} minSize={12} title="전체 진행표" className="zone zone-panel zone-scroll">
             <ProgressSection/>
-          </Panel>
+          </RailSection>
           <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
-          <Panel id="misc" order={4} defaultSize={22} minSize={12} className="zone zone-scroll">
+          <RailSection id="misc" order={4} defaultSize={22} minSize={12} title="에이전트 · 프롬프트 빌더" className="zone zone-scroll">
             <AgentRoster/>
             <section className="zone-panel notes-prompt-zone">
               <h3>노트 프롬프트 빌더</h3>
               <NotePromptBuilder/>
             </section>
-          </Panel>
+          </RailSection>
         </PanelGroup>
       </Panel>
     </PanelGroup>

@@ -466,6 +466,18 @@
 .zone .progress-section, .zone .notes-agent-roster, .zone .dashboard-panel-section {
   background:none; border:0; border-radius:0; padding:0; }
 .zone-scroll .notes-agent-roster, .zone-scroll .notes-prompt-zone { flex:0 0 auto; }
+
+/* 노트 생성 우측 레일의 -/+ 접기 버튼 -- 특정 패널(주로 "아카이브에 질문하기")에 잠깐 공간을 몰아주고
+   싶을 때 다른 패널들을 완전히 닫지 않고 이 얇은 헤더 줄만 남기고 접는다. */
+.rail-section { display:flex; flex-direction:column; }
+.rail-section-head { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  font-size:12px; font-weight:750; color:#6b6577; margin-bottom:10px; }
+.rail-section-toggle { flex:0 0 auto; display:grid; place-items:center; width:22px; height:22px; border-radius:7px;
+  background:#f2f1f5; color:#706c78; }
+.rail-section-toggle:hover { background:#eeecfc; color:#6556c8; }
+.rail-section-body { flex:1 1 auto; min-height:0; }
+.rail-section.is-collapsed .rail-section-body { display:none; }
+.rail-section.is-collapsed .rail-section-head { margin-bottom:0; }
 .progress-section { display:flex; flex-direction:column; gap:16px; }
 .notes-agent-roster h3, .dashboard-panel-section h3, .zone-panel > h3, .notes-prompt-zone > h3 { margin:0 0 12px; font-size:14px; color:#4a4656; }
 
