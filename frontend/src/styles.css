@@ -433,12 +433,13 @@
   flex: 1 1 auto; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden;
 }
 .page.invest-page > .trading-dashboard-embedded { flex: 1 1 auto; min-height: 0; }
-.page.diag-page > .panel-embedded.file-explorer,
 .page.debate-page > .panel-embedded.file-explorer,
 .page.llm-page > .panel-embedded.dolphin-modal {
   flex: 1 1 auto; min-height: 0 !important; height: auto !important; overflow: hidden !important;
 }
 .page.llm-page .dolphin-embedded { height: 100% !important; }
+/* 진단 탭: 타일 그리드가 직접 자식(더 이상 embedded 패널 아님) -- 그리드 자체가 남은 높이를 채우고 내부 스크롤 */
+.page.diag-page > .diag-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
 .notes-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
 .notes-header h2 { margin:0; font-size:19px; color:#3f3b4a; }
@@ -749,3 +750,59 @@
 .lunch-roulette-winner { margin:0; text-align:center; font-size:18px; color:#37333d; }
 .lunch-roulette-winner b { color:#7060d2; }
 .rainbow-keyspace-hint { margin-left:auto; font-size:11px; font-weight:700; color:#5b4fc4; }
+
+/* ── 진단 탭: 바둑판 타일 그리드 ──────────────────────────────
+   모바일~4K 대응은 고정 컬럼 수가 아니라 auto-fill/minmax로 처리한다 -- 타일 폭 하한만
+   정해두면 화면이 넓어질수록 컬럼이 자연히 늘고, 좁아지면 자연히 줄어든다. */
+.diag-grid { display:flex; flex-direction:column; gap:22px; }
+.diag-section-title { display:flex; align-items:center; gap:7px; margin:0 0 10px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#8a8591; }
+.diag-section-title svg { color:#7667dc; flex:none; }
+.diag-tile-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(132px, 1fr)); gap:10px; }
+.diag-tile { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:18px 10px; border-radius:13px; background:#faf9fc; border:1px solid #eceaf0; color:#4b4654; font-size:12.5px; font-weight:650; text-align:center; transition:background .12s ease, border-color .12s ease, transform .12s ease; }
+.diag-tile:hover { background:#eeecfc; border-color:#ded9f1; transform:translateY(-1px); }
+.diag-tile svg { color:#7667dc; }
+
+/* 진단/치트시트 단일 도구 모달 */
+.tool-modal-body { min-height:0; }
+.diag-warning { margin:0; padding:10px 13px; border-radius:10px; background:#fff2e0; border:1px solid #eec48a; color:#8a5a10; font-size:11.5px; line-height:1.5; flex:0 0 auto; }
+.diag-tabs { flex:0 0 auto; flex-wrap:wrap; }
+.diag-block { margin-bottom:18px; }
+.diag-bullet-list, .diag-checklist { margin:0; padding:0; list-style:none; display:grid; gap:7px; }
+.diag-bullet-list li { padding-left:14px; position:relative; font-size:12.5px; line-height:1.55; color:#514a61; }
+.diag-bullet-list li:before { content:'—'; position:absolute; left:0; color:#a99fe0; }
+.diag-checklist li { display:flex; align-items:flex-start; gap:8px; font-size:12.5px; line-height:1.5; color:#514a61; }
+.diag-checklist input[type=checkbox] { margin-top:2px; flex:none; width:14px; height:14px; accent-color:#c7c2d6; }
+.diag-step-list { display:flex; flex-direction:column; gap:12px; margin-bottom:18px; }
+.diag-step-card { padding:14px; border:1px solid #e6e2f4; border-radius:12px; background:#fff; display:grid; gap:8px; }
+.diag-step-card > p { margin:0; font-size:12px; line-height:1.55; color:#6f6977; }
+.diag-step-card header { display:flex; align-items:center; gap:10px; }
+.diag-step-card header strong { display:block; font-size:13px; color:#3f3b47; }
+.diag-step-card header small { color:#918aa8; font-size:10.5px; font-weight:800; }
+.diag-step-num { flex:none; width:26px; height:26px; border-radius:8px; background:#eeecfc; color:#5d50ba; font-size:12px; font-weight:800; display:grid; place-items:center; }
+.diag-step-num-small { width:auto; padding:0 8px; border-radius:100px; font-size:10.5px; }
+.diag-step-question { display:flex; align-items:flex-start; gap:8px; }
+.diag-step-question pre { flex:1; min-width:0; margin:0; padding:10px 12px; border-radius:9px; background:#27242d; color:#f7f4fb; font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+.diag-step-question button { flex:none; display:flex; align-items:center; gap:4px; border:0; border-radius:7px; padding:7px 9px; background:#eeecfc; color:#5d50ba; font-size:11px; font-weight:750; }
+.diag-fixture-content { max-height:220px; overflow-y:auto; }
+.diag-step-next { margin:0; font-size:12px; color:#514a61; line-height:1.5; }
+.diag-chip-row { display:flex; flex-wrap:wrap; gap:6px; }
+.diag-chip { display:inline-flex; padding:3px 9px; border-radius:100px; background:#f1eff5; color:#5d50ba; font-size:10.5px; font-weight:750; }
+.diag-chip-danger { background:#fde6e6; color:#b23b3b; }
+.diag-chip-code { background:#27242d; color:#f7f4fb; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; }
+.diag-grader-list { display:grid; gap:8px; margin-bottom:18px; }
+.diag-grader-row { display:flex; align-items:center; gap:12px; padding:11px 13px; border-radius:11px; background:#faf9fc; border:1px solid #eceaf0; }
+.diag-grader-row > div { flex:1; min-width:0; display:grid; gap:2px; }
+.diag-grader-row b { font-size:12.5px; color:#3f3b47; }
+.diag-grader-row small { font-size:11px; color:#8a8591; }
+.diag-severity-tag { flex:none; font-size:10.5px; font-weight:800; color:#8a8591; }
+.diag-chip-severity-critical { background:#fde6e6; color:#a02f2f; }
+.diag-chip-severity-high { background:#fde6e6; color:#b23b3b; }
+.diag-chip-severity-medium { background:#fff2e0; color:#8a5a10; }
+.diag-chip-severity-low { background:#f1eff5; color:#5d50ba; }
+.diag-chip-severity-info { background:#eef2f6; color:#5a6b7a; }
+
+/* 4K 이상 초광폭 화면에서 도구 모달이 과도하게 넓어지지 않게 폭 상한만 둔다.
+   모바일~1700px 구간은 기존 inset:3vh 4vw 비율 스케일링을 그대로 따른다. */
+@media (min-width:1700px) {
+  .tool-modal, .diag-modal { inset:3vh auto 3vh auto; left:50%; transform:translateX(-50%); width:min(90vw, 1600px); }
+}
