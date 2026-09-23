@@ -801,6 +801,32 @@
 .diag-chip-severity-low { background:#f1eff5; color:#5d50ba; }
 .diag-chip-severity-info { background:#eef2f6; color:#5a6b7a; }
 
+.diag-howto p { margin:0 0 10px; font-size:12.5px; line-height:1.6; color:#514a61; }
+.diag-howto-steps { margin:0 0 10px; padding-left:20px; display:grid; gap:8px; }
+.diag-howto-steps li { font-size:12.5px; line-height:1.6; color:#514a61; }
+.diag-howto-steps li b { color:#3f3b47; }
+.diag-requires { margin:0; font-size:12px; color:#6f6977; }
+.diag-file-list { display:grid; gap:6px; }
+.diag-file-download { display:flex; align-items:center; gap:9px; padding:9px 12px; border-radius:9px; background:#eeecfc; color:#4e43a5; font-size:12px; font-weight:700; }
+.diag-file-download:hover { background:#e2ddf9; }
+.diag-file-download svg { flex:none; }
+.diag-file-download span { display:grid; gap:1px; }
+.diag-file-download small { font-weight:550; color:#6d63a8; }
+.diag-test-steps { padding-left:18px; }
+.diag-canary-line { margin:0; font-size:12px; color:#514a61; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.diag-reading-table { display:grid; gap:6px; }
+.diag-reading-row { display:grid; grid-template-columns:1.1fr 1.1fr auto; gap:10px; align-items:center; padding:9px 11px; border-radius:9px; background:#faf9fc; border:1px solid #eceaf0; }
+.diag-reading-pattern { font-size:12px; color:#3f3b47; font-weight:650; line-height:1.45; }
+.diag-reading-meaning { font-size:11.5px; color:#6f6977; line-height:1.45; }
+.diag-reading-verdict { flex:none; white-space:nowrap; }
+.diag-chip-pass { background:#e6f5ed; color:#2f7a52; }
+.diag-test-card { border-color:#e6e2f4; }
+
+@media (max-width:900px) {
+  .diag-reading-row { grid-template-columns:1fr; gap:4px; }
+  .diag-reading-verdict { justify-self:start; }
+}
+
 /* 4K 이상 초광폭 화면에서 도구 모달이 과도하게 넓어지지 않게 폭 상한만 둔다.
    모바일~1700px 구간은 기존 inset:3vh 4vw 비율 스케일링을 그대로 따른다. */
 @media (min-width:1700px) {
