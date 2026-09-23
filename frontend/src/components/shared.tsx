@@ -165,10 +165,13 @@ export function BotStatusPill({ tone, label }: { tone: BotTone; label: string })
 }
 
 /** 패널의 바깥 요소만 바꾸는 얇은 래퍼 — 헤더/내용은 각 패널이 그대로 그린다.
- * embedded=true 면 흐름 안 <div class="panel-embedded …">, 아니면 우측 고정 <aside …>. */
-export function PanelShell({ embedded, className, children }: { embedded?: boolean; className?: string; children: React.ReactNode }) {
+ * embedded=true 면 흐름 안 <div class="panel-embedded …">, 아니면 우측 고정 <aside …>.
+ * modalRef를 넘기면 useModalA11y의 포커스 트랩 + Escape 닫기가 이 <aside>를 컨테이너로 쓴다. */
+export function PanelShell({ embedded, className, children, modalRef }: {
+  embedded?: boolean; className?: string; children: React.ReactNode; modalRef?: React.RefObject<HTMLElement | null>
+}) {
   if (embedded) return <div className={`panel-embedded ${className ?? ''}`}>{children}</div>
-  return <aside className={className} role="dialog" aria-modal="true">{children}</aside>
+  return <aside className={className} role="dialog" aria-modal="true" tabIndex={-1} ref={modalRef}>{children}</aside>
 }
 
 /** 모달 패널을 페이지 본문으로도 쓸 수 있게 하는 래퍼. embedded=true 면 흐름 안 <div>,

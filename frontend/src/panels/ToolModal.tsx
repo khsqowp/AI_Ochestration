@@ -3,6 +3,7 @@ import { Clipboard, X } from 'lucide-react'
 import { CHEATSHEET_QUICK_STARTS, type CheatSheetTool } from '../cheatsheet-data'
 import { cheatSheetCommand } from '../lib/util'
 import { PanelShell } from '../components/shared'
+import { useModalA11y } from '../hooks/useModalA11y'
 import { XssPayloadBuilder } from '../payloads/xss'
 import { SqliPayloadBuilder } from '../payloads/sqli'
 import { SsrfPayloadBuilder } from '../payloads/ssrf'
@@ -23,6 +24,7 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
    카테고리 목록을 거치지 않고 바로 이 화면으로 연다 -- 이전 CheatSheetModal의 사이드바를
    그리드가 대신하므로, 여기는 우측 프리뷰였던 부분만 남긴다. */
 export function ToolModal({ tool, onClose }: { tool: CheatSheetTool; onClose: () => void }) {
+  const modalRef = useModalA11y(true, onClose)
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set())
   const [values, setValues] = useState<Record<string, string>>({})
   const [target, setTarget] = useState('')
@@ -34,7 +36,7 @@ export function ToolModal({ tool, onClose }: { tool: CheatSheetTool; onClose: ()
 
   const Builder = PAYLOAD_BUILDERS[tool.id]
 
-  return <PanelShell className="file-explorer tool-modal">
+  return <PanelShell className="file-explorer tool-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">CHEAT SHEET</p><h2>{tool.name}</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
     <div className="explorer-preview tool-modal-body">
       {Builder ? <div className="explorer-preview-body cheatsheet-options-body"><Builder/></div> : <>

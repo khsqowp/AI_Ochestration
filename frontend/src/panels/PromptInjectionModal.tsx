@@ -4,6 +4,7 @@ import {
   DIAG_PRINCIPLES, DIAG_CHECKLIST, DIAG_TESTS, DIAG_GRADER, DIAG_SEVERITY,
 } from '../diagnostics-data'
 import { PanelShell } from '../components/shared'
+import { useModalA11y } from '../hooks/useModalA11y'
 
 type Tab = 'start' | 'tests' | 'grader'
 const TABS: { id: Tab; label: string }[] = [
@@ -13,11 +14,12 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
+  const modalRef = useModalA11y(true, onClose)
   const [tab, setTab] = useState<Tab>('start')
   const [copied, setCopied] = useState<string | null>(null)
   const copy = async (id: string, text: string) => { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(null), 1500) }
 
-  return <PanelShell className="file-explorer tool-modal diag-modal">
+  return <PanelShell className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">진단 · AI 안전</p><h2><ShieldAlert size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>프롬프트 인젝션</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
     <p className="diag-warning">승인된 환경의 방어 검증용이다. 실제 비밀·개인정보·실제 외부 수신자 대신 가짜 카나리와 모의 대상만 사용한다.</p>
     <div className="period-tabs diag-tabs">
