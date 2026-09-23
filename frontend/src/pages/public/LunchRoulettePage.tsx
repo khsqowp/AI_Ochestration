@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Dices, Play, Plus } from 'lucide-react'
+import { Wheel } from 'react-custom-roulette'
+import { pickWinnerIndex } from '../../lunch-roulette'
 
 interface Room { day: string; candidates: string[]; startedAt: string | null }
 
 const POLL_MS = 3000
+const WHEEL_COLORS = ['#7667dc', '#a99bf0']
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/lunch-roulette${path}`, { headers: { 'Content-Type': 'application/json' }, ...init })
@@ -15,16 +18,17 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** 점심 룰렛 -- 로그인 없이 아무나 후보를 등록하고 시작 버튼을 누를 수 있는 사무실 화면용 페이지.
- * 물리 시뮬레이션은 각 브라우저가 동일 후보 순서로 로컬 재생(서버는 승자를 계산하지 않는다) --
- * 자세한 이유는 lunch-roulette/simulation.ts 상단 주석. */
+ * 승자는 서버가 아니라 각 클라이언트가 방(day+시작시각+후보 순서)에서 결정론적으로 계산한다
+ * (lunch-roulette.ts) -- 그래서 같은 방을 보는 모든 사람이 같은 회전 결과를 보되, 서버는 여전히
+ * "누가 후보인지"와 "언제 시작했는지"만 들고 있으면 된다. 바퀴는 react-custom-roulette(MIT, 365★)
+ * 그대로 사용 -- 예전 box2d-wasm 갈톤보드는 캔버스 폭을 거의 못 써서(중앙 좁은 통로만 차지) 실사용성이
+ * 없었다. */
 export function LunchRoulettePage() {
   const [room, setRoom] = useState<Room | null>(null)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [winner, setWinner] = useState<string | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const raceStartedForRef = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     try { setRoom(await api<Room>('/today')); setError('') } catch (e) { setError(e instanceof Error ? e.message : '불러오기 실패') }
@@ -39,41 +43,14 @@ export function LunchRoulettePage() {
     return () => window.clearInterval(timer)
   }, [room?.startedAt, load])
 
-  // 레이스 본체 -- startedAt이 생기면(내가 눌렀든 남이 눌렀든) 한 번만 시뮬레이션을 만들고 rAF로 돌린다.
-  useEffect(() => {
-    if (!room?.startedAt || room.candidates.length < 2) return
-    if (raceStartedForRef.current === room.startedAt) return
-    raceStartedForRef.current = room.startedAt
-    let cancelled = false
-    let frame = 0
-    const startedAtMs = new Date(room.startedAt).getTime()
+  const started = room?.startedAt != null
 
-    void (async () => {
-      const [{ LunchRace }, { drawRace }] = await Promise.all([import('../../lunch-roulette/simulation'), import('../../lunch-roulette/renderer')])
-      const race = await LunchRace.create(room.candidates)
-      if (cancelled) { race.destroy(); return }
-      const elapsedOnJoin = (Date.now() - startedAtMs) / 1000
-      if (elapsedOnJoin > 0) race.fastForward(elapsedOnJoin)
+  const prizeIndex = useMemo(() => {
+    if (!room?.startedAt || room.candidates.length < 2) return 0
+    return pickWinnerIndex(room.day, room.startedAt, room.candidates)
+  }, [room?.day, room?.startedAt, room?.candidates])
 
-      const tick = () => {
-        if (cancelled) return
-        race.step()
-        const snapshot = race.snapshot()
-        const canvas = canvasRef.current
-        if (canvas) {
-          const ctx = canvas.getContext('2d')
-          const width = canvas.clientWidth, height = canvas.clientHeight
-          if (ctx && (canvas.width !== width || canvas.height !== height)) { canvas.width = width; canvas.height = height }
-          if (ctx) drawRace(ctx, canvas.width, canvas.height, snapshot)
-        }
-        if (snapshot.winner) { setWinner(snapshot.winner); return }
-        frame = requestAnimationFrame(tick)
-      }
-      tick()
-    })()
-
-    return () => { cancelled = true; if (frame) cancelAnimationFrame(frame) }
-  }, [room?.startedAt, room?.candidates])
+  useEffect(() => { setWinner(null) }, [room?.startedAt])
 
   const addCandidate = async (event: FormEvent) => {
     event.preventDefault()
@@ -92,8 +69,6 @@ export function LunchRoulettePage() {
     finally { setBusy(false) }
   }
 
-  const started = room?.startedAt != null
-
   return <div className="lunch-roulette-page">
     <div className="lunch-roulette-shell">
       <header className="lunch-roulette-head"><Dices size={22}/><h1>점심 룰렛</h1></header>
@@ -111,7 +86,26 @@ export function LunchRoulettePage() {
           <Play size={16}/>{room.candidates.length < 2 ? '후보 2명 이상 등록 필요' : '룰렛 시작'}
         </button>
       </> : <>
-        <canvas ref={canvasRef} className="lunch-roulette-canvas"/>
+        <div className="lunch-roulette-wheel-wrap">
+          <Wheel
+            mustStartSpinning={started}
+            prizeNumber={prizeIndex}
+            data={room.candidates.map(option => ({ option }))}
+            backgroundColors={WHEEL_COLORS}
+            textColors={['#ffffff']}
+            outerBorderColor="#4d43a0"
+            outerBorderWidth={4}
+            radiusLineColor="#ffffff"
+            radiusLineWidth={2}
+            // 'sans-serif'는 라이브러리 내장 웹세이프 폰트 목록에 있어 Google Fonts로 폰트를
+            // fetch하러 가지 않는다(WebFontLoader가 실패/타임아웃하면 바퀴가 영영 안 보이는 버그가
+            // 있어, 우리 앱 폰트인 Pretendard처럼 그 목록에 없는 이름은 여기 쓰면 안 된다).
+            fontFamily="sans-serif"
+            fontSize={16}
+            spinDuration={0.9}
+            onStopSpinning={() => setWinner(room.candidates[prizeIndex])}
+          />
+        </div>
         {winner && <p className="lunch-roulette-winner">오늘 점심은 <b>{winner}</b> 🎉</p>}
       </>}
     </div>
