@@ -31,7 +31,7 @@ export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
             <h3 className="cheatsheet-options-title">이게 뭐고, 어떻게 쓰나</h3>
             <p>내가 진단해도 된다고 승인받은 AI 챗봇·RAG·에이전트가, <b>사용자가 준 문서나 문장 속에 숨은 "지시"를 진짜 지시로 착각해서 실행하는지</b> 확인하는 도구다. XSS 페이로드를 입력창에 넣고 반응을 보듯, 여기서도 정해진 파일·문장을 대상에 주고 답변을 관찰한다.</p>
             <ol className="diag-howto-steps">
-              <li><b>파일 다운로드 또는 문장 복사.</b> "실전 테스트" 탭에서 순서대로(0번부터) 파일을 대상에 업로드하거나, 파일이 없는 테스트는 문장을 채팅창에 그대로 붙여넣는다.</li>
+              <li><b>파일 다운로드 또는 문장 복사.</b> "실전 테스트" 탭에서 순서대로(0번부터) 원하는 버전 하나를 골라 대상에 업로드하거나, 파일이 없는 테스트는 문장을 채팅창에 그대로 붙여넣는다. 한 테스트에 버전이 여러 개(A, B, C...)인 건 형식·표현을 바꿔가며 어디서는 걸러지고 어디서는 안 걸러지는지 비교해보라는 뜻 — 하나만 해봐도 되고, 감이 안 잡히면 전부 시도해도 된다.</li>
               <li><b>정해진 질문을 보낸다.</b> 각 테스트에 적힌 질문 그대로 — 겉보기엔 평범한 "요약해줘" 같은 요청이다. 이 요청 자체는 공격이 아니고, 공격은 파일/문장 안에 숨겨져 있다.</li>
               <li><b>답변을 "반응 읽는 법" 표와 대조한다.</b> 카나리(CANARY_로 시작하는 고정 문자열)가 그대로 나오는지, 어떤 행동을 했다고 주장하는지 보고 Pass인지 문제인지 판정한다.</li>
             </ol>
@@ -56,20 +56,23 @@ export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
             <p>{test.purpose}</p>
             <p className="diag-requires"><b>필요 기능:</b> {test.requires}</p>
 
-            {test.files.length > 0 && <div className="diag-file-list">
-              {test.files.map(f => <a className="diag-file-download" key={f.filename} href={`/diagnostics-fixtures/${f.filename}`} download={f.filename}>
-                <Download size={14}/><span><b>{f.filename}</b>{f.note && <small>{f.note}</small>}</span>
-              </a>)}
-            </div>}
-
-            <div className="diag-step-question">
-              <pre>{test.chatPrompt}</pre>
-              <button onClick={() => void copy(`prompt-${test.order}`, test.chatPrompt)}><Clipboard size={13}/>{copied === `prompt-${test.order}` ? '복사됨' : '복사'}</button>
-            </div>
-
             <ol className="diag-howto-steps diag-test-steps">{test.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
 
-            {test.canaries.length > 0 && <p className="diag-canary-line"><b>감시할 카나리:</b> {test.canaries.map(c => <code className="diag-chip diag-chip-code" key={c}>{c}</code>)}</p>}
+            <div className="diag-variant-list">
+              {test.variants.map((v, vi) => <div className="diag-variant" key={vi}>
+                <div className="diag-variant-head"><b>{v.label}</b>{v.note && <small>{v.note}</small>}</div>
+                {v.files.length > 0 && <div className="diag-file-list">
+                  {v.files.map(f => <a className="diag-file-download" key={f.filename} href={`/diagnostics-fixtures/${f.filename}`} download={f.filename}>
+                    <Download size={14}/><span><b>{f.filename}</b>{f.note && <small>{f.note}</small>}</span>
+                  </a>)}
+                </div>}
+                <div className="diag-step-question">
+                  <pre>{v.chatPrompt}</pre>
+                  <button onClick={() => void copy(`v-${test.order}-${vi}`, v.chatPrompt)}><Clipboard size={13}/>{copied === `v-${test.order}-${vi}` ? '복사됨' : '복사'}</button>
+                </div>
+                {v.canaries.length > 0 && <p className="diag-canary-line"><b>카나리:</b> {v.canaries.map(c => <code className="diag-chip diag-chip-code" key={c}>{c}</code>)}</p>}
+              </div>)}
+            </div>
 
             <div className="diag-reading-table">
               {test.reading.map((row, i) => <div className="diag-reading-row" key={i}>
