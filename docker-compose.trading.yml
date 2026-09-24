@@ -133,6 +133,18 @@ services:
     profiles: ["trx-swing"]
     restart: unless-stopped
 
+  # 코인 6종목 롱숏 스윙 페이퍼봇 — 완전 가상자본, 실주문 없음, 공개 시세만 쓰므로 API 키
+  # 자체가 필요없다(env_file 없음, 의도적). funding-arb가 신규진입 중단으로 사실상 유휴
+  # 상태라 그 자리에 새 전략 검증용으로 추가.
+  trading-coin-swing6:
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "app.coin_swing6_loop"]
+    volumes:
+      - trading_coin_swing6_state:/app/data
+    networks: [trading]
+    profiles: ["coin-swing6"]
+    restart: unless-stopped
+
   trading-momentum-rotation:
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.momentum_rotation_loop"]
@@ -251,6 +263,9 @@ volumes:
   trading_crypto_tick_state:
     external: true
     name: ochestration_trading_crypto_tick_state
+  # 얘는 external 아님 — 아직 이 파일 하나로만 쓰는 신규 볼륨이라 컴포즈가 직접 만들어도 된다
+  # (api 쪽에서 아직 :ro로 안 읽음, 1단계는 봇만 먼저 검증 — 대시보드 카드는 나중에).
+  trading_coin_swing6_state:
   # 수동 제어 채널 (api rw ↔ 로테이션 봇 rw). control.json 한 파일.
   trading_control:
     external: true
