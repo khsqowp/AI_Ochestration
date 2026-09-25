@@ -733,8 +733,11 @@
 /* ══ 점심 룰렛 (공개 LUNCH 페이지) ═══════════════════════════════════════ */
 .lunch-roulette-page { min-height:calc(100dvh - 60px); display:flex; align-items:center; justify-content:center; padding:24px; }
 .lunch-roulette-shell { width:min(640px,100%); display:flex; flex-direction:column; gap:16px; transition:width .2s ease; }
-/* 구슬 레이스 화면은 캔버스가 1600x900 기준이라 후보 등록 폼보다 훨씬 넓어야 트랙이 보인다 */
-.lunch-roulette-shell--racing { width:min(1200px,96vw); }
+/* 구슬 레이스 화면은 캔버스가 1600x900 기준이라 후보 등록 폼보다 훨씬 넓어야 트랙이 보인다.
+   1200px 상한은 사무실 대형 모니터/TV에서 화면 대부분을 비워두는 수준으로 작아서 올렸다 —
+   가로는 뷰포트 96%까지, 세로는 16:9를 넘겨 화면 밖으로 잘리지 않게 뷰포트 높이 기준으로도
+   같이 캡을 건다(둘 중 더 작은 값). */
+.lunch-roulette-shell--racing { width:min(1900px, 96vw, calc((100dvh - 140px) * 16 / 9)); }
 .lunch-roulette-head { display:flex; align-items:center; gap:10px; color:#37333d; }
 .lunch-roulette-head svg { color:#7667dc; }
 .lunch-roulette-head h1 { margin:0; font-size:24px; }

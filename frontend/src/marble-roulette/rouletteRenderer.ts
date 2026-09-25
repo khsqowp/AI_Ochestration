@@ -26,7 +26,6 @@ export type RenderParameters = {
   theme: ColorTheme;
 };
 
-const MAX_DISPLAY_WIDTH = 1920;
 const WINNER_TEXT_OFFSET = 30;
 const RESULT_PANEL_MAX_WIDTH_RATIO = 0.9;
 const RESULT_PANEL_MAX_HEIGHT_RATIO = 0.8;
@@ -87,15 +86,19 @@ export class RouletteRenderer {
       const realSize = entries ? entries[0].contentRect : this._canvas.getBoundingClientRect();
       if (realSize.width <= 0 || realSize.height <= 0) return;
 
-      const width = Math.max(realSize.width / 2, 640);
-      const height = (width / realSize.width) * realSize.height;
+      // 예전엔 성능을 아끼려고 장면(scene) 캔버스를 표시 폭의 절반으로만 그린 뒤 drawImage로
+      // 늘려서 화면에 붙였다(+ devicePixelRatio 미반영) — 그 두 단계 업스케일이 흐릿함의
+      // 원인이었다. 이제 장면과 화면 캔버스를 표시 크기 x devicePixelRatio 그대로(다운스케일
+      // 없이) 맞춰서 1:1로 그린다. DPR은 2에서 캡 — 그 이상은 체감 차이 대비 비용만 커진다.
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.round(realSize.width * dpr);
+      const height = Math.round(realSize.height * dpr);
       this._sceneCanvas.width = width;
       this._sceneCanvas.height = height;
       this.sizeFactor = width / realSize.width;
 
-      const displayWidth = Math.min(realSize.width, MAX_DISPLAY_WIDTH);
-      this._canvas.width = displayWidth;
-      this._canvas.height = (displayWidth / realSize.width) * realSize.height;
+      this._canvas.width = width;
+      this._canvas.height = height;
     };
 
     const resizeObserver = new ResizeObserver(resizing);
