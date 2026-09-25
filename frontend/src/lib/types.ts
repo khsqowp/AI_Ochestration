@@ -87,6 +87,9 @@ export interface DebateTurn { id: string; turnIndex: number; role: string; speak
 export type SortField = 'title' | 'domain' | 'date'
 export type SortDirection = 'asc' | 'desc'
 
+export type CoinSwing6Position = { side: 'long' | 'short'; entryPrice: number; notionalUsdt: number; openedTs: string; unrealizedPnlUsdt: number }
+export type CoinSwing6State = { positions: Record<string, CoinSwing6Position>; tradeLog: TradingLogEntry[]; cumulativeRealizedPnlUsdt: number; equityUsdt: number; unrealizedPnlUsdt: number; inceptionTs: string | null; equityHistory: TradingEquityPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
+
 export type RealTradingTab = 'trading' | 'momentum-rotation-trading'
 export type PaperTradingTab = 'kr-trading' | 'us-trading'
 

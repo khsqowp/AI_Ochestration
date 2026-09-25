@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Globe2, Landmark, TrendingUp, X } from 'lucide-react'
 import type {
-  ChartPoint, MomentumRotationPosition, MomentumRotationState, PaperTradingTab,
-  RealTradingTab, StockRotationState, TradingPeriod, TradingState,
+  ChartPoint, CoinSwing6Position, CoinSwing6State, MomentumRotationState,
+  PaperTradingTab, RealTradingTab, StockRotationState, TradingPeriod, TradingState,
 } from '../lib/types'
 import {
   ROTATION_MARKETS, TRADING_PERIOD_DAYS, TRADING_PERIOD_LABEL, TRADING_PERIOD_ORDER,
@@ -289,8 +289,10 @@ function PositionTable({ title, head, rows, empty }: { title: string; head: stri
   </div>
 }
 
+type PositionBookEntry = { side: 'long' | 'short'; entryPrice: number; markPrice?: number; notionalUsdt: number; unrealizedPnlUsdt: number }
+
 // 거래소 포지션 탭 스타일 — 롱/숏 한 표에 방향 배지·ROE·미실현손익, ROE 내림차순 정렬.
-function PositionBook({ positions }: { positions: [string, MomentumRotationPosition][] }) {
+function PositionBook({ positions }: { positions: [string, PositionBookEntry][] }) {
   if (positions.length === 0) return <div className="posbook"><p className="empty-state">보유 중인 포지션이 없습니다.</p></div>
   const price = (v: number) => v >= 1000 ? v.toFixed(1) : v >= 1 ? v.toFixed(4) : v.toPrecision(3)
   const rows = positions
@@ -597,6 +599,77 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
         {(data.tradeLog ?? []).length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : (data.tradeLog ?? []).slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
       </div>
       <p className="usage-note">30초마다 자동 새로고침 · 잔고/포지션/낙폭은 바이낸스 API(totalMarginBalance, fetch_positions) 조회값입니다.</p>
+    </> : <p className="empty-state">상태를 불러오는 중…</p>}
+  </Wrap>
+}
+
+const COIN_SWING6_SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB']
+
+// 6종목 롱숏 EMA크로스 완전 페이퍼봇 — 레버리지/리밸런스/세션 개념 없음(종목당 슬롯 1개,
+// 신호 뜨면 진입해 고정 익절+5%/손절-3%까지 들고 있다가 청산, 계속 반복). "펀딩 아비" 탭 자리를
+// 이어받음(그 전략은 신규진입 중단으로 유휴 상태였음).
+export function CoinSwing6Dashboard({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
+  const [data, setData] = useState<CoinSwing6State | null>(null)
+  const [period, setPeriod] = useState<TradingPeriod>('week')
+  const load = useCallback(() => {
+    if (!document.hidden) fetch('/api/trading/coin-swing6/state', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(setData)
+  }, [])
+  useEffect(() => {
+    load()
+    const timer = window.setInterval(load, 30000)
+    return () => window.clearInterval(timer)
+  }, [load])
+  const fmt = (value: string) => new Date(value).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const fmtDate = (value: string) => new Date(value).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+  const positionEntries = Object.entries(data?.positions ?? {})
+  // PositionBook은 markPrice로 현재가를 보여주는데 이 봇 state엔 없음 — entryPrice와
+  // unrealizedPnlUsdt에서 역산한다(파이썬 쪽 pnl = notional * sign * (price/entry - 1) 그대로 역산).
+  const positions: [string, CoinSwing6Position & { markPrice: number }][] = positionEntries.map(([symbol, p]) => {
+    const sign = p.side === 'long' ? 1 : -1
+    const markPrice = p.notionalUsdt ? p.entryPrice * (1 + p.unrealizedPnlUsdt / (p.notionalUsdt * sign)) : p.entryPrice
+    return [symbol, { ...p, markPrice }]
+  })
+  const longs = positions.filter(([, p]) => p.side === 'long')
+  const shorts = positions.filter(([, p]) => p.side === 'short')
+  const equity = data?.equityUsdt ?? 0
+  const unrealized = data?.unrealizedPnlUsdt ?? 0
+  const totalPnl = (data?.cumulativeRealizedPnlUsdt ?? 0) + unrealized
+  const startingCapital = equity - totalPnl
+  const overallReturnPct = startingCapital > 0 ? (totalPnl / startingCapital) * 100 : 0
+  const pnlSeries: ChartPoint[] = (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt }))
+  const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
+  const periodReturnPct = startingCapital > 0 ? (periodPnl / startingCapital) * 100 : 0
+  const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
+  const symbolSeries: Record<string, ChartPoint[]> = Object.fromEntries(Object.entries(data?.positionHistory ?? {}).map(([symbol, points]) => [symbol, (points ?? []).map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))]))
+  return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="코인 6종목 스윙 대시보드">
+    <p className="source-intro">완전 가상자본(페이퍼) 봇입니다. 실주문 없음, 바이낸스 공개 시세만 조회합니다 — {COIN_SWING6_SYMBOLS.join('/')} 6종목을 각각 EMA9/21 크로스 + SMA200 추세필터로 감시하다, 신호가 뜨면(롱·숏 방향 무관) 종목당 슬롯 1개씩 진입해 고정 익절+5%/손절-3%까지 들고 있다가 청산하고 다음 신호를 기다립니다. 레버리지 없음(1x), 최대 6개 동시 보유.</p>
+    <div className="trading-status-card">
+      <BotStatusPill tone="live" label="가동 중 · 페이퍼(가상자본)"/>
+      <p>가상 자본(현재) <b className={totalPnl >= 0 ? 'positive' : 'negative'}>${equity.toFixed(2)}</b> · 전체 누적손익 <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> (미실현 {unrealized.toFixed(2)})</p>
+      <p>시작일: {data?.inceptionTs ? fmtDate(data.inceptionTs) : '아직 시작 전'}</p>
+    </div>
+    {data ? <>
+      <PeriodTabs period={period} onChange={setPeriod} historyDays={historySpanDays(pnlSeries)}/>
+      <div className="trading-metrics">
+        <div><b>${startingCapital.toFixed(2)}</b><span>시작 자본</span></div>
+        <div><b>${equity.toFixed(2)}</b><span>현재 자본</span></div>
+        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률</span></div>
+        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
+        <div><b>{positions.length}</b><span>보유 슬롯(최대 6)</span></div>
+        <div><b>{longs.length}</b><span>롱 포지션</span></div>
+        <div><b>{shorts.length}</b><span>숏 포지션</span></div>
+      </div>
+      {periodShort && <p className="usage-note">* 보유 equity 히스토리가 선택 기간보다 짧아, 기록이 시작된 시점부터의 값으로 표시됩니다(전체와 동일).</p>}
+      <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
+      <PositionBook positions={positions}/>
+      <b className="chart-section-title">종목별 미실현손익 추이</b>
+      <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
+      <div className="usage-table">
+        <b>최근 로그</b>
+        {(data.tradeLog ?? []).length === 0 ? <p className="empty-state">아직 기록이 없습니다.</p> : (data.tradeLog ?? []).slice(-15).reverse().map((entry, index) => <article key={index}><span>{fmt(entry.ts)}</span><small>{entry.message}</small></article>)}
+      </div>
+      <p className="usage-note">30초마다 자동 새로고침됩니다. 현재가는 표시용으로 진입가와 미실현손익에서 역산한 값입니다(체결/실시간 API 조회 아님).</p>
     </> : <p className="empty-state">상태를 불러오는 중…</p>}
   </Wrap>
 }

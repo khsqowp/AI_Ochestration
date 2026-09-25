@@ -1,7 +1,7 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { ErrorBoundary } from '../components/shared'
 import {
-  KrTradingDashboard, MomentumRotationDashboard, TradingDashboard, UsTradingDashboard,
+  CoinSwing6Dashboard, KrTradingDashboard, MomentumRotationDashboard, UsTradingDashboard,
 } from '../panels/trading'
 
 const BASE = '/dashboard/invest'
@@ -9,7 +9,7 @@ const TABS = [
   { to: `${BASE}/coin`, label: '코인 모멘텀', tag: 'live · 2x' },
   { to: `${BASE}/kr`, label: '국장 로테이션', tag: 'paper' },
   { to: `${BASE}/us`, label: '미장 로테이션', tag: 'paper' },
-  { to: `${BASE}/funding-arb`, label: '펀딩 아비', tag: 'deprecated' },
+  { to: `${BASE}/funding-arb`, label: '코인 6종목 스윙', tag: 'paper' },
 ]
 
 export function InvestPage() {
@@ -28,7 +28,7 @@ export function InvestPage() {
         <Route path="coin" element={<MomentumRotationDashboard embedded/>}/>
         <Route path="kr" element={<KrTradingDashboard embedded/>}/>
         <Route path="us" element={<UsTradingDashboard embedded/>}/>
-        <Route path="funding-arb" element={<TradingDashboard embedded/>}/>
+        <Route path="funding-arb" element={<CoinSwing6Dashboard embedded/>}/>
         <Route path="*" element={<Navigate to={`${BASE}/coin`} replace/>}/>
       </Routes>
     </ErrorBoundary>

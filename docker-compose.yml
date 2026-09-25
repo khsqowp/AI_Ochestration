@@ -51,6 +51,7 @@ services:
       US_TRADING_STATE_PATH: /workspace/trading-state-us/us_swing_state.json
       MOMENTUM_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-momentum-rotation/momentum_rotation_state.json
       TRX_TRADING_STATE_PATH: /workspace/trading-state-trx/trx_swing_state.json
+      COIN_SWING6_TRADING_STATE_PATH: /workspace/trading-state-coin-swing6/coin_swing6_state.json
       KR_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-kr-rotation/stock_rotation_state.json
       US_ROTATION_TRADING_STATE_PATH: /workspace/trading-state-us-rotation/stock_rotation_state.json
       TRADING_CONTROL_PATH: /workspace/trading-control/control.json
@@ -70,6 +71,7 @@ services:
       - trading_us_swing_state:/workspace/trading-state-us:ro
       - trading_momentum_rotation_state:/workspace/trading-state-momentum-rotation:ro
       - trading_trx_swing_state:/workspace/trading-state-trx:ro
+      - trading_coin_swing6_state:/workspace/trading-state-coin-swing6:ro
       - trading_kr_rotation_state:/workspace/trading-state-kr-rotation:ro
       - trading_us_rotation_state:/workspace/trading-state-us-rotation:ro
       - trading_control:/workspace/trading-control
@@ -149,6 +151,11 @@ volumes:
   trading_trx_swing_state:
     external: true
     name: ochestration_trading_trx_swing_state
+  # 이름이 관례(ochestration_trading_*)와 다른 이유는 docker-compose.trading.yml 주석 참고
+  # (컴포즈 자동생성 이름 그대로 참조 — 재생성하면 기존 페이퍼 기록 유실).
+  trading_coin_swing6_state:
+    external: true
+    name: ochestration-trading_trading_coin_swing6_state
   trading_tick_state:
     external: true
     name: ochestration_trading_tick_state
