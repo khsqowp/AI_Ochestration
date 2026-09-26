@@ -1,8 +1,9 @@
 import { useState, type ComponentType } from 'react'
-import { AppWindow, Binary, Database, ShieldAlert, SquareTerminal, Terminal, Zap } from 'lucide-react'
+import { AppWindow, Binary, Database, FolderSearch, ShieldAlert, SquareTerminal, Terminal, Zap } from 'lucide-react'
 import { CHEATSHEET_CATEGORIES, type CheatSheetTool } from '../cheatsheet-data'
 import { ToolModal } from '../panels/ToolModal'
 import { PromptInjectionModal } from '../panels/PromptInjectionModal'
+import { PathDiscoveryModal } from '../panels/PathDiscoveryModal'
 
 /* 진단 탭 -- 바둑판식 타일 그리드가 시작 화면이고, 타일을 누르면 그 항목 하나만 다루는
    모달이 곧장 열린다(카테고리 목록을 거치지 않음). 치트시트 카테고리(cheatsheet-data.ts)는
@@ -20,6 +21,7 @@ const CATEGORY_ICON: Record<string, ComponentType<{ size?: number }>> = {
 export function DiagnosticsPage() {
   const [tool, setTool] = useState<CheatSheetTool | null>(null)
   const [promptInjectionOpen, setPromptInjectionOpen] = useState(false)
+  const [pathDiscoveryOpen, setPathDiscoveryOpen] = useState(false)
 
   return <div className="page diag-page">
     <div className="diag-grid">
@@ -28,6 +30,9 @@ export function DiagnosticsPage() {
         <div className="diag-tile-grid">
           <button className="diag-tile" onClick={() => setPromptInjectionOpen(true)}>
             <ShieldAlert size={20}/><span>프롬프트 인젝션</span>
+          </button>
+          <button className="diag-tile" onClick={() => setPathDiscoveryOpen(true)}>
+            <FolderSearch size={20}/><span>경로/백업 파일 탐색</span>
           </button>
         </div>
       </section>
@@ -47,5 +52,6 @@ export function DiagnosticsPage() {
 
     {tool && <ToolModal tool={tool} onClose={() => setTool(null)}/>}
     {promptInjectionOpen && <PromptInjectionModal onClose={() => setPromptInjectionOpen(false)}/>}
+    {pathDiscoveryOpen && <PathDiscoveryModal onClose={() => setPathDiscoveryOpen(false)}/>}
   </div>
 }
