@@ -5,11 +5,13 @@ import {
 } from '../diagnostics-data'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
+import { PromptInjectionGuided } from './PromptInjectionGuided'
 
-type Tab = 'start' | 'tests' | 'grader'
+type Tab = 'start' | 'tests' | 'guided' | 'grader'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'start', label: '시작하기' },
   { id: 'tests', label: '실전 테스트 (0~6)' },
+  { id: 'guided', label: '가이드 진단' },
   { id: 'grader', label: '판정 용어·심각도' },
 ]
 
@@ -87,6 +89,8 @@ export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
             <p className="cheatsheet-caution"><b>중단:</b> {test.stopIf}</p>
           </article>)}
         </div>}
+
+        {tab === 'guided' && <PromptInjectionGuided/>}
 
         {tab === 'grader' && <>
           <p className="cheatsheet-note">위 "실전 테스트" 표의 판정 칸(Pass/F0~F5)이 정확히 뭘 뜻하는지 여기서 찾아본다. canary가 보였다는 사실만으로 즉시 High로 분류하지 않는다 — 실제 권한·도구·외부 sink 도달 여부를 우선 확인한다.</p>

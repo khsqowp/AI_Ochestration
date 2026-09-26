@@ -846,6 +846,60 @@
 .diag-chip-pass { background:#e6f5ed; color:#2f7a52; }
 .diag-test-card { border-color:#e6e2f4; }
 
+/* ── 가이드 진단(러너) ── 실전 테스트 탭의 정적 카드/표 스타일을 그대로 재사용하고,
+   진행형 러너에만 필요한 레이아웃(레일/큐/게이트/네비)만 추가한다. */
+button.diag-reading-row-btn { width:100%; text-align:left; font:inherit; cursor:pointer; border:1px solid #eceaf0; transition:border-color .12s ease, background .12s ease; }
+button.diag-reading-row-btn:hover { border-color:#c7c2d6; background:#f1eff5; }
+button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc; }
+.diag-guided-layout { display:grid; grid-template-columns:150px minmax(0,1fr) 240px; gap:14px; align-items:start; }
+@media (max-width:960px) { .diag-guided-layout { grid-template-columns:1fr; } .diag-guided-rail { order:2; } .diag-guided-queue { order:3; } }
+.diag-guided-rail { display:flex; flex-direction:column; gap:3px; position:sticky; top:0; }
+.diag-guided-rail-title { margin:0 0 8px; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:#8a8591; font-weight:800; }
+.diag-guided-rail-item { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:8px; background:none; border:1px solid transparent; font-size:11.5px; font-weight:700; color:#6f6977; text-align:left; }
+.diag-guided-rail-item:hover { background:#faf9fc; }
+.diag-guided-rail-item.active { background:#eeecfc; border-color:#ded9f1; color:#4e43a5; }
+.diag-guided-dot { width:8px; height:8px; border-radius:50%; flex:none; background:#e0dce8; }
+.diag-guided-dot.diag-chip-pass { background:#2f7a52; }
+.diag-guided-dot.diag-chip-severity-critical, .diag-guided-dot.diag-chip-severity-high { background:#b23b3b; }
+.diag-guided-dot.diag-chip-severity-medium { background:#c78a1f; }
+.diag-guided-dot.diag-chip-severity-low, .diag-guided-dot.diag-chip-severity-info { background:#9c96ac; }
+.diag-guided-reset { display:inline-flex; align-items:center; gap:5px; margin-top:10px; border:1px solid #eceaf0; border-radius:8px; padding:6px 10px; font-size:11px; font-weight:700; color:#6f6977; background:#fff; }
+.diag-guided-reset:hover { background:#faf9fc; }
+.diag-guided-reset:disabled { opacity:.45; }
+.diag-guided-main { min-width:0; }
+.diag-guided-na-note { font-size:12px; color:#6f6977; margin:12px 0 0; }
+.diag-guided-inline-link { border:0; background:none; color:#5d50ba; font-weight:700; text-decoration:underline; padding:0; font-size:12px; }
+.diag-guided-na-btn { margin-top:10px; border:1px dashed #d7d2e2; border-radius:8px; padding:7px 12px; font-size:11.5px; font-weight:700; color:#8a8591; background:none; }
+.diag-guided-na-btn:hover { background:#faf9fc; color:#6f6977; }
+.diag-gate { margin-top:16px; border:1px solid #f3d2c6; background:#fff2ec; border-radius:12px; padding:16px 18px; }
+.diag-gate h3 { margin:0 0 6px; font-size:14px; color:#8a3d1f; }
+.diag-gate > p { margin:0 0 12px; font-size:11.8px; color:#8a5a45; line-height:1.5; }
+.diag-gate-checks { display:flex; flex-direction:column; gap:7px; margin-bottom:12px; }
+.diag-gate-check-row { display:flex; align-items:flex-start; gap:8px; font-size:12.3px; color:#3f3b47; }
+.diag-gate-check-row input { margin-top:2px; }
+.diag-gate-notes { width:100%; min-height:52px; border:1px solid #e6d5c9; border-radius:8px; padding:8px 10px; font:inherit; font-size:12px; resize:vertical; background:#fff; }
+.diag-gate-sev-row { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 14px; }
+.diag-gate-sev-selected { outline:2px solid currentColor; }
+.diag-guided-nav { display:flex; justify-content:space-between; gap:8px; margin-top:14px; }
+.diag-guided-primary { border:0; border-radius:9px; padding:9px 16px; font-size:12.5px; font-weight:750; background:#7060d2; color:#fff; }
+.diag-guided-primary:hover { background:#5d50ba; }
+.diag-guided-queue { border-left:1px solid #eceaf0; padding-left:14px; }
+.diag-guided-queue-add { display:flex; gap:6px; margin-bottom:10px; }
+.diag-guided-queue-add input { flex:1; border:1px solid #dcd7e4; border-radius:7px; padding:6px 8px; font-size:11.5px; }
+.diag-guided-queue-add button { border:0; border-radius:7px; padding:6px 10px; font-size:11px; font-weight:700; background:#eeecfc; color:#5d50ba; }
+.diag-guided-queue-item { display:flex; align-items:flex-start; gap:7px; padding:6px 0; border-bottom:1px dashed #eceaf0; font-size:11.8px; color:#3f3b47; }
+.diag-guided-queue-item:last-child { border-bottom:none; }
+.diag-guided-queue-item.done span { text-decoration:line-through; color:#a29cae; }
+.diag-guided-queue-item input { margin-top:2px; }
+.diag-guided-queue-item span { flex:1; }
+.diag-guided-queue-item button { border:0; background:none; color:#a29cae; font-size:13px; line-height:1; }
+.diag-guided-empty { font-size:11.5px; color:#a29cae; margin:0 0 10px; }
+.diag-guided-finding { padding:8px 0; border-bottom:1px dashed #eceaf0; font-size:11.8px; }
+.diag-guided-finding:last-child { border-bottom:none; }
+.diag-guided-finding > div { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:2px; }
+.diag-guided-finding small { color:#8a8591; }
+.diag-guided-summary-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+
 @media (max-width:900px) {
   .diag-reading-row { grid-template-columns:1fr; gap:4px; }
   .diag-reading-verdict { justify-self:start; }
