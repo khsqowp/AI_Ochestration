@@ -5,39 +5,40 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
-/* "보안 코어" 3D 히어로 -- 유리 원반 위에 떠 있는 크롬 반지형 코어가 천천히 돌고, 그 주위를
- * 작은 유리 구슬들이 공전한다. 뒤쪽은 은은하게 숨쉬는 회로기판 텍스처. Three.js(실제 지오메트리
- * + PBR 재질 + 환경맵 반사 + 블룸)로 구성 -- LandingShader.tsx(순수 셰이더판)를 대체하는
- * 실사 3D 버전. 레이아웃(landing-ui)과는 완전히 분리돼있어 이 파일만 바뀐다. */
+/* 레퍼런스(Paranoid Security 랜딩 3D 애니메이션) 구도를 최대한 그대로 재현:
+ * 카메라는 거의 수직으로 내려다보는 각도, 화면 전체가 회로기판 바닥 -- 그 위에 크고 납작한
+ * 유리 원반이 놓여있고, 원반 위에는 회로 패턴이 더 선명하게 비치며 중심에서 퍼지는 동심원
+ * 링(ripple)이 있다. 원반 정중앙엔 카메라 조리개(iris) 모양의 크롬 블레이드 조립체 +
+ * 도트matrix 텍스처의 파란 발광 코어, 그 주변에 작은 유리구슬 몇 개가 얹혀있다. 이 전체
+ * 조립체(원반+블레이드+구슬+잔물결)가 하나의 강체로 천천히 제자리 회전한다 -- 개별 요소가
+ * 따로 다른 속도로 돌거나 공중에 떠서 공전하지 않는다(레퍼런스엔 그런 움직임 없음). */
 
-const NAVY = 0x05070f
-const CORE_BLUE = 0x5b8dff
+const BG = 0x07060f
 
-function buildCircuitTexture(): THREE.CanvasTexture {
-  const size = 1024
+function buildGroundTexture(): THREE.CanvasTexture {
+  const size = 512
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#05070f'
+  ctx.fillStyle = '#07060f'
   ctx.fillRect(0, 0, size, size)
 
-  const cell = 48
+  const cell = 32
   const cols = Math.ceil(size / cell)
   const rows = Math.ceil(size / cell)
-  ctx.strokeStyle = 'rgba(110, 140, 255, 0.55)'
-  ctx.fillStyle = 'rgba(140, 165, 255, 0.8)'
-  ctx.lineWidth = 1.6
-  ctx.shadowColor = 'rgba(90, 130, 255, 0.9)'
-  ctx.shadowBlur = 6
-
+  ctx.lineWidth = 1.4
   for (let gy = 0; gy < rows; gy++) {
     for (let gx = 0; gx < cols; gx++) {
-      if (Math.random() > 0.22) continue
+      if (Math.random() > 0.3) continue
+      const bright = Math.random() > 0.82
+      ctx.strokeStyle = bright ? 'rgba(150,165,255,0.85)' : 'rgba(90,100,200,0.4)'
+      ctx.shadowColor = bright ? 'rgba(130,150,255,0.9)' : 'rgba(80,95,220,0.5)'
+      ctx.shadowBlur = bright ? 7 : 3
       const x = gx * cell + cell / 2
       const y = gy * cell + cell / 2
       const horizontal = Math.random() > 0.5
-      const len = cell * (0.6 + Math.random() * 1.8)
+      const len = cell * (0.6 + Math.random() * 1.6)
       ctx.beginPath()
       if (horizontal) {
         ctx.moveTo(x, y)
@@ -49,9 +50,10 @@ function buildCircuitTexture(): THREE.CanvasTexture {
         if (Math.random() > 0.5) ctx.lineTo(x + (Math.random() > 0.5 ? cell : -cell), y + len)
       }
       ctx.stroke()
-      if (Math.random() > 0.7) {
+      if (Math.random() > 0.75) {
         ctx.beginPath()
-        ctx.arc(x, y, 2.4, 0, Math.PI * 2)
+        ctx.arc(x, y, 2.2, 0, Math.PI * 2)
+        ctx.fillStyle = ctx.strokeStyle
         ctx.fill()
       }
     }
@@ -60,35 +62,106 @@ function buildCircuitTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(7, 7)
   return tex
 }
 
-function buildIrisTexture(): THREE.CanvasTexture {
+// 원반 위에 비치는, 바닥보다 더 선명하고 밝은 회로 패턴 + 중심에서 퍼지는 동심원(ripple).
+function buildDiscTexture(): THREE.CanvasTexture {
+  const size = 1024
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const cx = size / 2, cy = size / 2, R = size / 2
+
+  const cell = 40
+  const cols = Math.ceil(size / cell)
+  const rows = Math.ceil(size / cell)
+  ctx.lineWidth = 1.6
+  ctx.strokeStyle = 'rgba(170,185,255,0.8)'
+  ctx.shadowColor = 'rgba(150,170,255,0.9)'
+  ctx.shadowBlur = 5
+  for (let gy = 0; gy < rows; gy++) {
+    for (let gx = 0; gx < cols; gx++) {
+      if (Math.random() > 0.28) continue
+      const x = gx * cell + cell / 2
+      const y = gy * cell + cell / 2
+      if (Math.hypot(x - cx, y - cy) > R * 0.98) continue
+      const horizontal = Math.random() > 0.5
+      const len = cell * (0.6 + Math.random() * 1.5)
+      ctx.beginPath()
+      if (horizontal) { ctx.moveTo(x, y); ctx.lineTo(x + len, y) }
+      else { ctx.moveTo(x, y); ctx.lineTo(x, y + len) }
+      ctx.stroke()
+    }
+  }
+  ctx.shadowBlur = 0
+
+  // 동심원 잔물결
+  for (let r = 60; r < R * 0.95; r += 46) {
+    const alpha = Math.max(0, 0.45 - r / (R * 2.2))
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(140,170,255,${alpha.toFixed(3)})`
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+  }
+
+  // 가장자리로 갈수록 투명해지는 원형 마스크
+  const fade = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R)
+  fade.addColorStop(0, 'rgba(7,6,15,0)')
+  fade.addColorStop(1, 'rgba(7,6,15,1)')
+  ctx.fillStyle = fade
+  ctx.fillRect(0, 0, size, size)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function buildIrisCoreTexture(): THREE.CanvasTexture {
   const size = 256
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   const cx = size / 2, cy = size / 2
-  const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, size / 2)
-  grad.addColorStop(0, '#eaf2ff')
-  grad.addColorStop(0.35, '#7fa6ff')
-  grad.addColorStop(0.7, '#25407e')
-  grad.addColorStop(1, '#05070f')
+  const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy, size / 2)
+  grad.addColorStop(0, '#f2f7ff')
+  grad.addColorStop(0.3, '#8fb0ff')
+  grad.addColorStop(0.65, '#2c4fb0')
+  grad.addColorStop(1, 'rgba(10,15,40,0)')
   ctx.fillStyle = grad
-  ctx.fillRect(0, 0, size, size)
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'
-  for (let i = 0; i < 48; i++) {
-    const a = (i / 48) * Math.PI * 2
-    ctx.beginPath()
-    ctx.moveTo(cx + Math.cos(a) * size * 0.18, cy + Math.sin(a) * size * 0.18)
-    ctx.lineTo(cx + Math.cos(a) * size * 0.46, cy + Math.sin(a) * size * 0.46)
-    ctx.lineWidth = 0.6
-    ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(cx, cy, size / 2, 0, Math.PI * 2)
+  ctx.fill()
+  // 도트 매트릭스 질감
+  ctx.fillStyle = 'rgba(6,10,30,0.5)'
+  const step = 6
+  for (let y = 0; y < size; y += step) {
+    for (let x = 0; x < size; x += step) {
+      if ((x / step + y / step) % 2 === 0) continue
+      const d = Math.hypot(x - cx, y - cy)
+      if (d > size / 2) continue
+      ctx.beginPath()
+      ctx.arc(x, y, 1, 0, Math.PI * 2)
+      ctx.fill()
+    }
   }
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
   return tex
+}
+
+// 카메라 조리개(iris)형 크롬 블레이드 -- 안쪽 구멍이 있는 부채꼴(환형 섹터)을 여러 장
+// 겹쳐 돌려가며 배치해 조리개 날개처럼 보이게 한다.
+function buildBladeGeometry(innerR: number, outerR: number, spanDeg: number): THREE.ExtrudeGeometry {
+  const span = THREE.MathUtils.degToRad(spanDeg)
+  const shape = new THREE.Shape()
+  shape.absarc(0, 0, outerR, 0, span, false)
+  shape.absarc(0, 0, innerR, span, 0, true)
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.01, bevelSegments: 2 })
 }
 
 export function LandingScene3D() {
@@ -113,93 +186,131 @@ export function LandingScene3D() {
     const dpr = Math.min(window.devicePixelRatio || 1, reduced ? 1 : 2)
     renderer.setPixelRatio(dpr)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.1
+    renderer.toneMappingExposure = 1.05
     renderer.outputColorSpace = THREE.SRGBColorSpace
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(NAVY)
-    scene.fog = new THREE.Fog(NAVY, 6, 15)
+    scene.background = new THREE.Color(BG)
+    scene.fog = new THREE.Fog(BG, 8, 16)
 
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50)
-    camera.position.set(0, 2.6, 6.4)
+    // 레퍼런스처럼 거의 수직으로 내려다보는 각도.
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 60)
+    camera.position.set(0, 6.6, 3.5)
     camera.lookAt(0, 0, 0)
 
     const pmrem = new THREE.PMREMGenerator(renderer)
     const envRt = pmrem.fromScene(new RoomEnvironment(), 0.04)
     scene.environment = envRt.texture
 
-    // 배경 회로기판 판 -- 카메라 훨씬 뒤, 은은하게 숨쉬듯 밝기만 변한다(트레이스 자체는 정적).
-    const circuitTex = buildCircuitTexture()
-    const bgPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(26, 26),
-      new THREE.MeshBasicMaterial({ map: circuitTex, transparent: true, opacity: 0.55 }),
+    // 바닥 전체 = 회로기판
+    const groundTex = buildGroundTexture()
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(40, 40),
+      new THREE.MeshBasicMaterial({ map: groundTex }),
     )
-    bgPlane.position.set(0, 0, -6)
-    scene.add(bgPlane)
+    ground.rotation.x = -Math.PI / 2
+    ground.position.y = -0.03
+    scene.add(ground)
 
-    const hub = new THREE.Group()
-    hub.rotation.x = THREE.MathUtils.degToRad(58)
-    scene.add(hub)
-
-    // 유리 원반
-    const disc = new THREE.Mesh(
-      new THREE.CircleGeometry(2.5, 96),
-      new THREE.MeshPhysicalMaterial({
-        color: 0x8fb3ff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0,
-        transmission: 0.95, thickness: 0.2, ior: 1.3, side: THREE.DoubleSide, depthWrite: false,
-      }),
-    )
-    hub.add(disc)
-    const discRim = new THREE.Mesh(
-      new THREE.RingGeometry(2.46, 2.5, 96),
-      new THREE.MeshBasicMaterial({ color: 0x6f96ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
-    )
-    hub.add(discRim)
-
-    // 동심원 크롬 링 3개, 서로 다른 속도로 회전
-    const ringMat = new THREE.MeshStandardMaterial({ color: 0xb9c6e6, metalness: 1, roughness: 0.22, envMapIntensity: 1.4 })
-    const rings: THREE.Mesh[] = []
-    ;[1.55, 1.15, 0.8].forEach((r, i) => {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.045, 16, 96), ringMat)
-      ring.position.z = 0.02 * i
-      hub.add(ring)
-      rings.push(ring)
+    // 화면 모서리에 보이는 어두운 칩(IC) 블록 몇 개
+    const chipMat = new THREE.MeshStandardMaterial({ color: 0x0c0c16, metalness: 0.3, roughness: 0.6 })
+    const chipEdgeMat = new THREE.MeshBasicMaterial({ color: 0x5f7dff })
+    const chipSpots: [number, number, number, number][] = [[-4.2, 0, -3.6, 0.5], [4.6, 0.3, -2.4, 0.35], [-4.8, 0, 1.8, 0.4], [4.2, 0, 3.2, 0.3]]
+    chipSpots.forEach(([x, , z, s]) => {
+      const chip = new THREE.Mesh(new THREE.BoxGeometry(s * 2.2, s * 0.35, s * 1.6), chipMat)
+      chip.position.set(x, s * 0.17, z)
+      chip.rotation.y = Math.random() * Math.PI
+      scene.add(chip)
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(s * 2.24, 0.02, s * 1.64), chipEdgeMat)
+      edge.position.set(x, 0.005, z)
+      edge.rotation.y = chip.rotation.y
+      scene.add(edge)
     })
 
-    // 중심 코어(홍채)
-    const iris = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.5, 0.5, 0.12, 64),
-      new THREE.MeshBasicMaterial({ map: buildIrisTexture() }),
-    )
-    iris.rotation.x = Math.PI / 2
-    hub.add(iris)
-    const core = new THREE.PointLight(CORE_BLUE, 6, 8, 2)
-    core.position.set(0, 0, 0.1)
-    hub.add(core)
+    // 회전하는 조립체 전체(원반 + 조리개 + 구슬 + 잔물결) -- 강체로 함께 회전.
+    const hub = new THREE.Group()
+    scene.add(hub)
 
-    // 공전하는 작은 유리/크롬 구슬
-    const orbiters: { mesh: THREE.Mesh; radius: number; speed: number; phase: number; tilt: number }[] = []
-    const orbiterGeo = new THREE.SphereGeometry(0.09, 24, 24)
-    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xdfe8ff, transmission: 0.9, roughness: 0.05, thickness: 0.3, ior: 1.4, envMapIntensity: 1.2 })
-    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xc7d2f0, metalness: 1, roughness: 0.15, envMapIntensity: 1.4 })
-    for (let i = 0; i < 6; i++) {
-      const mesh = new THREE.Mesh(orbiterGeo, i % 2 === 0 ? glassMat : chromeMat)
-      hub.add(mesh)
-      orbiters.push({ mesh, radius: 1.5 + Math.random() * 0.7, speed: 0.25 + Math.random() * 0.35, phase: Math.random() * Math.PI * 2, tilt: 0.15 + Math.random() * 0.1 })
+    const discR = 2.35
+    const discGlass = new THREE.Mesh(
+      new THREE.CircleGeometry(discR, 96),
+      new THREE.MeshPhysicalMaterial({
+        color: 0xbcd4ff, transparent: true, opacity: 0.16, roughness: 0.12, metalness: 0,
+        transmission: 0.92, thickness: 0.15, ior: 1.3, side: THREE.DoubleSide, depthWrite: false,
+      }),
+    )
+    discGlass.rotation.x = -Math.PI / 2
+    hub.add(discGlass)
+
+    const discTex = buildDiscTexture()
+    const discGraphic = new THREE.Mesh(
+      new THREE.CircleGeometry(discR - 0.02, 96),
+      new THREE.MeshBasicMaterial({ map: discTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+    )
+    discGraphic.rotation.x = -Math.PI / 2
+    discGraphic.position.y = 0.005
+    hub.add(discGraphic)
+
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(discR, 0.015, 8, 128),
+      new THREE.MeshBasicMaterial({ color: 0x9fe3ea }),
+    )
+    rim.rotation.x = Math.PI / 2
+    rim.position.y = 0.01
+    hub.add(rim)
+
+    // 조리개(iris) 블레이드 -- 환형 섹터 4장을 겹쳐 팬(pinwheel) 형태로.
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0xc3cee8, metalness: 1, roughness: 0.18, envMapIntensity: 1.5 })
+    const bladeGeo = buildBladeGeometry(0.14, 0.62, 82)
+    for (let i = 0; i < 4; i++) {
+      const blade = new THREE.Mesh(bladeGeo, bladeMat)
+      blade.rotation.x = -Math.PI / 2
+      blade.rotation.z = THREE.MathUtils.degToRad(i * 90 + 8)
+      blade.position.y = 0.02 + i * 0.002
+      hub.add(blade)
+    }
+    // 블레이드 사이 어두운 쐐기(레퍼런스의 검은 베젤 면)
+    const wedgeMat = new THREE.MeshStandardMaterial({ color: 0x090910, metalness: 0.4, roughness: 0.5 })
+    for (let i = 0; i < 2; i++) {
+      const wedge = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.16), wedgeMat)
+      const a = THREE.MathUtils.degToRad(i * 180 + 45)
+      wedge.position.set(Math.cos(a) * 0.42, 0.03, Math.sin(a) * 0.42)
+      wedge.rotation.y = -a
+      hub.add(wedge)
     }
 
+    // 중심 발광 코어
+    const core = new THREE.Mesh(
+      new THREE.CircleGeometry(0.24, 48),
+      new THREE.MeshBasicMaterial({ map: buildIrisCoreTexture(), transparent: true }),
+    )
+    core.rotation.x = -Math.PI / 2
+    core.position.y = 0.04
+    hub.add(core)
+    const coreLight = new THREE.PointLight(0x5b8dff, 5, 4, 2)
+    coreLight.position.set(0, 0.3, 0)
+    hub.add(coreLight)
+
+    // 원반 위에 얹힌 작은 유리구슬 몇 개(조립체와 함께 회전, 따로 공전하지 않음)
+    const marbleMat = new THREE.MeshPhysicalMaterial({ color: 0xe4edff, transmission: 0.9, roughness: 0.05, thickness: 0.3, ior: 1.4, envMapIntensity: 1.3 })
+    const marbleGeo = new THREE.SphereGeometry(0.08, 24, 24)
+    const marbleSpots: [number, number][] = [[0.8, 200], [0.95, 250], [0.75, 305], [0.62, 35]]
+    marbleSpots.forEach(([r, deg]) => {
+      const a = THREE.MathUtils.degToRad(deg)
+      const marble = new THREE.Mesh(marbleGeo, marbleMat)
+      marble.position.set(Math.cos(a) * r, 0.08, Math.sin(a) * r)
+      hub.add(marble)
+    })
+
     // 조명
-    scene.add(new THREE.AmbientLight(0x304066, 0.6))
-    const key = new THREE.DirectionalLight(0xaebfff, 1.4)
-    key.position.set(3, 5, 4)
+    scene.add(new THREE.AmbientLight(0x2a3060, 0.55))
+    const key = new THREE.DirectionalLight(0xaebfff, 1.2)
+    key.position.set(2, 6, 2)
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0x3355aa, 0.8)
-    rim.position.set(-4, -2, -3)
-    scene.add(rim)
 
     const composer = new EffectComposer(renderer)
     composer.addPass(new RenderPass(scene, camera))
-    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.85, 0.6, 0.15)
+    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.65, 0.55, 0.2)
     composer.addPass(bloom)
 
     const resize = () => {
@@ -215,8 +326,8 @@ export function LandingScene3D() {
     const targetTilt = { x: 0, y: 0 }
     const curTilt = { x: 0, y: 0 }
     const onMove = (e: PointerEvent) => {
-      targetTilt.x = (e.clientY / window.innerHeight - 0.5) * 0.25
-      targetTilt.y = (e.clientX / window.innerWidth - 0.5) * 0.35
+      targetTilt.x = (e.clientY / window.innerHeight - 0.5) * 0.12
+      targetTilt.y = (e.clientX / window.innerWidth - 0.5) * 0.18
     }
     window.addEventListener('pointermove', onMove, { passive: true })
 
@@ -229,16 +340,11 @@ export function LandingScene3D() {
       if (!reduced) {
         curTilt.x += (targetTilt.x - curTilt.x) * 0.05
         curTilt.y += (targetTilt.y - curTilt.y) * 0.05
-        hub.rotation.x = THREE.MathUtils.degToRad(58) + curTilt.x
+        hub.rotation.y = elapsed * 0.1
+        hub.rotation.x = curTilt.x
         hub.rotation.z = curTilt.y
-        hub.rotation.y = elapsed * 0.12
-        rings.forEach((ring, i) => { ring.rotation.z = elapsed * (0.18 + i * 0.09) * (i % 2 === 0 ? 1 : -1) })
-        orbiters.forEach(o => {
-          const a = elapsed * o.speed + o.phase
-          o.mesh.position.set(Math.cos(a) * o.radius, Math.sin(a) * o.radius * o.tilt, Math.sin(a) * o.radius * 0.3)
-        })
-        core.intensity = 5 + Math.sin(elapsed * 2.2) * 1.4
-        ;(bgPlane.material as THREE.MeshBasicMaterial).opacity = 0.45 + Math.sin(elapsed * 0.6) * 0.1
+        coreLight.intensity = 4.4 + Math.sin(elapsed * 2.0) * 1.2
+        ;(discGraphic.material as THREE.MeshBasicMaterial).opacity = 0.85 + Math.sin(elapsed * 0.7) * 0.15
       }
       composer.render()
     }
@@ -256,7 +362,8 @@ export function LandingScene3D() {
           mats.forEach(m => m.dispose())
         }
       })
-      circuitTex.dispose()
+      groundTex.dispose()
+      discTex.dispose()
       envRt.texture.dispose()
       pmrem.dispose()
       renderer.dispose()
