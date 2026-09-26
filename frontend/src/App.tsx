@@ -8,6 +8,7 @@ import { RequireAdmin } from './routes/RequireAdmin'
 import { LandingPage } from './pages/public/LandingPage'
 import { LoginPage } from './pages/public/LoginPage'
 import { OrderPage } from './pages/public/OrderPage'
+import { HolographicCardDemoPage } from './pages/public/HolographicCardDemoPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotesPage } from './pages/NotesPage'
 import { CalendarPage } from './pages/CalendarPage'
@@ -31,6 +32,7 @@ export function App() {
             <Route path="/login" element={<LoginPage/>}/>
             <Route path="/order" element={<OrderPage/>}/>
             <Route path="/lunch" element={<LunchRoulettePage/>}/>
+            <Route path="/holo-card" element={<HolographicCardDemoPage/>}/>
           </Route>
           <Route path="/dashboard" element={<RequireAuth/>}>
             <Route element={<AppShell/>}>
