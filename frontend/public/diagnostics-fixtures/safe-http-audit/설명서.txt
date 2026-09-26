@@ -1,0 +1,46 @@
+safe_http_audit / safe_http_audit.py 사용 설명서
+================================================
+
+역할
+----
+읽기 전용 HTTP 설정 점검 5종 + 서브도메인/vhost 격리 점검 2종.
+GET/HEAD/OPTIONS만 사용, 리다이렉트 안 따라감, 쿠키/세션 없음, 상태
+변경 요청 전혀 없음 -- 가장 가벼운 축의 점검.
+
+같이 온 safe_rule_bundle.py + safe_http_checks/ 폴더(manifest.json +
+룰 5개)가 있어야 동작함(같은 폴더에 그대로 둘 것). 룰 파일은 SHA-256
+해시로 검증되어 임의로 바꿔치기하면 실행이 거부됨(fail-closed).
+
+기본 사용법
+----------
+python safe_http_audit.py http://target.example --check security_headers
+python safe_http_audit.py http://target.example --check directory_listing
+python safe_http_audit.py http://target.example --check allowed-methods
+python safe_http_audit.py https://target.example.com --check subdomain_discovery
+python safe_http_audit.py http://target.example.com --check virtual_host_isolation
+
+--check 옵션
+-----------
+error_page_disclosure     에러 페이지에서 스택트레이스/버전정보 노출 확인
+http_methods (allowed-methods) 허용된 HTTP 메서드 확인(TRACE 등 위험 메서드)
+directory_listing         디렉터리 목록화 노출 확인(본문 시그니처까지 확인, 오탐 방지)
+server_header             Server 헤더의 버전 노출 확인
+security_headers          CSP/X-Frame-Options/X-Content-Type-Options/Referrer-Policy 누락 확인
+subdomain_discovery        흔한 서브도메인 라벨(admin/dev/staging 등)로 존재 여부 확인 -- 도메인 대상만, IP 불가
+virtual_host_isolation     같은 IP에 물린 서브도메인의 vhost 분리 여부 확인 -- http 전용, 도메인 대상만
+
+--max-candidates N (기본 20)
+    subdomain_discovery/virtual_host_isolation에서 시도할 라벨 수 상한(1~25).
+
+출력
+----
+JSON 하나로: findings(문제로 판단된 것), observations(참고 정보),
+raw(실제 요청/응답 원본), summary(개수).
+
+주의
+----
+- directory_listing은 상태코드 200만으로 확정하지 않음 -- 본문에
+  "index of /" 류 시그니처가 있어야 finding으로 잡음.
+- subdomain_discovery/virtual_host_isolation은 IP가 아니라 도메인
+  이름 대상에서만 동작함(내부 DNS 라벨 붙이기 방식이라 IP엔 의미 없음).
+- 소유하거나 승인받은 대상에서만 사용할 것.

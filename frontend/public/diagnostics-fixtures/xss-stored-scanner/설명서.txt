@@ -1,0 +1,113 @@
+xss_stored_scanner / xss_stored_scanner.py 사용 설명서
+================================================
+
+역할
+----
+Stored XSS 전용. 여러 페이지를 돌아다니며 크롤링하지 않음 —
+"입력 페이지 1개(주입) + 확인 페이지 1개(검사)" 딱 이 조합만 테스트.
+동작 순서: (1) 마커를 담은 값들을 --params 등으로 배치 주입 →
+(2) --check-url 페이지를 딱 1번 GET해서 그 안에 마커가 그대로/변형되어
+나타나는지 검사. 서버에 페이지 여러 개 왔다갔다하며 트래픽 유발하는
+방식은 의도적으로 배제함.
+
+Reflected XSS(요청 응답 자체에 바로 반사)는 xss_reflected_scanner.py 사용.
+DOM 기반 XSS는 범위 밖 — 헤드리스 브라우저 계측 필요 영역.
+
+마커 형식
+--------
+{파라미터명}_XSS_TEST_{랜덤6자리hex} 바로 뒤에 특수문자 <>'"/` 를 붙임.
+예: bio 파라미터 → bio_XSS_TEST_a1b2c3<>'"/`
+core는 항상 평문으로 전송/검색되고, 특수문자 부분만 --bypass-variants로
+인코딩을 바꿔가며 테스트 가능. 실제 실행 페이로드는 절대 안 쏨 —
+컨텍스트/생존 특수문자만 보고 위험도(HIGH/MEDIUM/LOW) 판단.
+
+기본 사용법
+----------
+python xss_stored_scanner.py https://target.example/profile --method post-form ^
+    --params nickname,bio --check-url https://target.example/profile_view
+python xss_stored_scanner.py https://target.example/api/update --method post-json ^
+    --params memo --check-url https://target.example/profile --cookies "session=abcd1234"
+python xss_stored_scanner.py https://target.example/comment --params body ^
+    --check-url https://target.example/post/123 --bypass-variants all
+
+대화형 모드
+----------
+인자 없이 실행하면(더블클릭 포함) 번호 입력식 메뉴가 뜸 — 필수 값 입력
+후 옵션 번호를 골라 값 설정/토글, 0=실행. 목록은 아래 옵션 설명과 항상
+동일하게 자동 생성됨. 터미널 특성상 마우스 클릭은 지원 안 됨.
+
+옵션 설명
+--------
+url (필수, 위치인자)
+    주입(제출) URL. 값이 여기로 들어가서 서버에 저장됨.
+
+--check-url (필수)
+    저장된 마커를 확인할 단 하나의 페이지. 목록/파일 아님, URL 한 개만.
+    이 도구는 여기 말고 다른 페이지는 절대 조회하지 않음.
+
+--method get|post-form|post-json (기본 post-form)
+    주입 요청의 인코딩 방식. Stored는 보통 POST라 기본값을 post-form으로 함.
+
+--params "a,b,c"
+    퍼징할 쿼리/폼/JSON 파라미터명.
+
+--cookie-params "a,b"
+    퍼징할 쿠키 이름.
+
+--header-params "a,b"
+    퍼징할 HTTP 헤더 이름.
+
+--params / --cookie-params / --header-params 중 최소 하나는 필수.
+
+--base-params "k=v&k2=v2"
+    주입 요청에서 테스트 대상이 아닌 나머지 필수 파라미터 고정값.
+
+--base-json '{"k":"v"}'
+    post-json에서 테스트 대상이 아닌 나머지 필드 고정값.
+
+--cookies "k=v; k2=v2"
+    주입 요청과 확인(check-url) 요청 둘 다에 실리는 기본 쿠키
+    (로그인 세션 등 인증용 — 저장된 값이 세션에 묶여 있으면 필수).
+
+--headers "Name: value" (반복 가능)
+    주입 요청에 실리는 기본 헤더.
+
+--bypass-variants [목록 또는 all]
+    기본은 raw만 테스트. html-entity-decimal / html-entity-hex /
+    html-entity-named / url-double-encode / base64 인코딩으로 특수문자
+    부분을 바꿔가며 추가 테스트 (xss_reflected_scanner.py와 동일 방식).
+    탐지는 인코딩과 무관하게 항상 check-url 응답에서 core 문자열을 검색.
+
+--batch-size N (기본 10, 20 초과 시 --force 필요)
+    한 주입 요청에 동시에 넣을 파라미터(슬롯) 수. 같은 파라미터의
+    variant는 자동으로 별도 요청 분리 (충돌 방지, 자동 처리됨).
+
+--min-interval / --timeout
+    기본 0.5초 / 10초. (서버 보호용 rate limit, 주입/확인 요청 모두 적용)
+
+--output console|json, --output-file 경로
+    리포트 형식/저장.
+
+--force
+    batch-size 20 초과, 전체 슬롯 수 2000 초과 시 필요.
+
+-v, --verbose
+    상세 로그.
+
+출력 읽는 법
+-----------
+- Injection requests / Check requests(항상 1) / Stored reflections found
+  요약이 리포트 하단에 표시됨.
+- HIGH/MEDIUM/LOW, context, intact, chars 판정 기준은 xss_reflected_scanner
+  와 동일 (컨텍스트 및 특수문자 생존 여부 기반 휴리스틱).
+
+주의
+----
+- 테스트 대상에 대한 권한이 있는지 반드시 확인 후 사용.
+- 실제 게시글/댓글/프로필 등에 테스트 값을 남기게 되므로 테스트 후
+  정리(삭제)가 필요할 수 있음 — 이 도구는 자동으로 지우지 않음.
+- 저장된 값이 --check-url이 아닌 다른 페이지(예: 관리자 목록, 다른 유저
+  화면)에만 나타나는 구조라면 이 도구로는 못 잡음 — check-url을 정확히
+  지정해야 함 (설계상 다중 페이지 크롤링은 하지 않음).
+- HIGH로 표시돼도 "확정 취약점"이 아니라 "유력 후보" — 최종 검증은
+  이 도구 밖에서 수동으로.

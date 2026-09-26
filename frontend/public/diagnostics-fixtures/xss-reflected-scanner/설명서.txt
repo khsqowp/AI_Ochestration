@@ -1,0 +1,119 @@
+xss_reflected_scanner / xss_reflected_scanner.py 사용 설명서
+================================================
+
+역할
+----
+Reflected XSS 전용. 대상 URL 딱 하나에만 요청 보내고, 그 응답 안에서
+마커가 어떻게 반사되는지만 검사한다. 다른 페이지로 안 넘어감 (트래픽 절약).
+
+Stored XSS(입력 → 다른 페이지에 저장돼서 나타남)는 xss_stored_scanner.py 사용.
+DOM 기반 XSS(innerHTML, document.write 등 클라이언트 sink)는 범위 밖 —
+응답 텍스트가 아니라 헤드리스 브라우저의 JS sink 계측이 필요한 영역.
+
+마커 형식
+--------
+{파라미터명}_XSS_TEST_{랜덤6자리hex} 바로 뒤에 특수문자 <>'"/` 를 붙임.
+예: jsessionid 파라미터 → jsessionid_XSS_TEST_a1b2c3<>'"/`
+core(이름+XSS_TEST+랜덤)는 항상 그대로 평문 전송/검색되고, 뒤에 붙는
+특수문자 부분만 --bypass-variants로 인코딩을 바꿔가며 테스트 가능.
+
+절대 실제 실행 페이로드(alert() 등)는 쏘지 않음 — 컨텍스트(HTML text/
+속성/JS/URL/JSON)와 특수문자 생존 여부만 보고 위험도(HIGH/MEDIUM/LOW)를
+매김. 최종 확정은 항상 수동/Burp 확인 필요.
+
+기본 사용법
+----------
+python xss_reflected_scanner.py https://target.example/search --params q,category,sort
+python xss_reflected_scanner.py https://target.example/login --method post-form --params username,memo
+python xss_reflected_scanner.py https://target.example/api/update --method post-json --params name,memo
+python xss_reflected_scanner.py https://target.example/ --cookie-params nickname,lang
+python xss_reflected_scanner.py https://target.example/search --params q --bypass-variants all
+
+대화형 모드
+----------
+인자 없이 실행하면(더블클릭 포함) 번호 입력식 메뉴가 뜸 — 필수 값 입력
+후 옵션 번호를 골라 값 설정/토글, 0=실행. 목록은 아래 옵션 설명과 항상
+동일하게 자동 생성됨. 터미널 특성상 마우스 클릭은 지원 안 됨.
+
+옵션 설명
+--------
+url (필수, 위치인자)
+    대상 URL. 이 URL의 응답만 검사함 — 다른 페이지 안 감.
+
+--method get|post-form|post-json (기본 get)
+    --params가 어디로 들어갈지 결정 (쿼리스트링 / form body / JSON body).
+
+--params "a,b,c"
+    퍼징할 쿼리/폼/JSON 파라미터명.
+
+--cookie-params "a,b"
+    퍼징할 쿠키 이름 (Cookie 헤더 내 특정 키만 마커로 치환).
+
+--header-params "a,b"
+    퍼징할 HTTP 헤더 이름 (예: X-Forwarded-For).
+
+--params / --cookie-params / --header-params 중 최소 하나는 필수.
+
+--base-params "k=v&k2=v2"
+    GET/form에서 테스트 대상이 아닌 나머지 필수 파라미터 고정값.
+
+--base-json '{"k":"v"}'
+    post-json에서 테스트 대상이 아닌 나머지 필드 고정값 (JSON 객체 문자열).
+
+--cookies "k=v; k2=v2"
+    모든 요청에 항상 실리는 기본 쿠키 (로그인 세션 등 인증용).
+
+--headers "Name: value" (반복 가능)
+    모든 요청에 항상 실리는 기본 헤더 (예: Authorization).
+
+--bypass-variants [목록 또는 all]
+    기본은 raw(인코딩 없음)만 테스트. 지정 시 특수문자 부분을 아래 방식
+    으로도 인코딩해서 추가 테스트:
+      html-entity-decimal  &#60;&#62;&#39;&#34;&#47;&#96;
+      html-entity-hex      &#x3c;&#x3e;&#x27;&#x22;&#x2f;&#x60;
+      html-entity-named    &lt;&gt;&#x27;&quot;&#x2F;&#96;
+      url-double-encode    %253C%253E... (퍼센트 기호 자체를 한 번 더 인코딩
+                            — WAF/프록시가 두 번 디코딩하는 버그 탐지용)
+      base64                특수문자 부분을 base64로 인코딩 (앱이 base64
+                            디코드 후 그대로 출력하는지 테스트)
+    탐지는 인코딩 방식과 무관하게 항상 "응답에 core 문자열이 그대로
+    나타나는가"로 확인 — 어떤 경로로 디코딩되어 돌아오든 잡아냄.
+
+--batch-size N (기본 10, 20 초과 시 --force 필요)
+    한 요청에 동시에 넣을 파라미터(슬롯) 수. 같은 파라미터의 서로 다른
+    variant는 자동으로 별도 요청으로 분리됨 (충돌 방지, 자동 처리됨).
+
+--workers N
+    다른 도구들과 CLI 통일성을 위해 남겨둔 옵션. 이 도구는 항상 순차
+    실행(rate-limit 적용)이라 실제로는 병렬처리 안 함 — 무시해도 됨.
+
+--min-interval / --timeout
+    기본 0.5초 / 10초. (서버 보호용 rate limit)
+
+--output console|json, --output-file 경로
+    리포트 형식/저장.
+
+--force
+    batch-size 20 초과, 전체 슬롯 수 2000 초과 시 필요.
+
+-v, --verbose
+    상세 로그 (실제 전송 URL, 배치별 반사 수 등).
+
+출력 읽는 법
+-----------
+- HIGH: 위험 컨텍스트에서 결정적 특수문자가 그대로(unescaped) 살아남음
+  → 실제 익스플로잇 가능성 높음, 수동/Burp로 최종 확인 권장
+- MEDIUM: 일부 특수문자만 생존했거나 컨텍스트가 불명확함
+- LOW: 마커는 반사됐지만 위험 특수문자는 전부 이스케이프됨
+- context: html-text / attribute-quoted / attribute-unquoted /
+  javascript-string / javascript-raw / url-attribute / json
+  (휴리스틱 기반 — 100% 정확하지 않을 수 있음, 특히 unquoted/url 라벨)
+- intact: 특수문자 6개(<>'"/`) 전부가 core 바로 뒤에 인코딩 없이
+  살아남았는지 (가장 강력한 신호)
+- chars: 실제로 살아남은 특수문자만 순서대로 표시
+
+주의
+----
+- 테스트 대상에 대한 권한이 있는지 반드시 확인 후 사용.
+- HIGH로 표시돼도 "확정 취약점"이 아니라 "유력 후보" — 실제 alert() 실행
+  등 최종 검증은 이 도구 밖에서 수동으로.

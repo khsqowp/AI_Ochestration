@@ -1,0 +1,76 @@
+jwt_analyzer / jwt_analyzer.py 사용 설명서
+================================================
+
+역할
+----
+JWT(header.payload.signature)를 디코딩해서 구조/보안 문제를 자동 분석.
++ 약한 HMAC 시크릿 무차별 대입(로컬 연산, 네트워크 전송 없음)
++ alg=none PoC 토큰 생성
++ RS/ES/PS -> HS 알고리즘 컨퓨전 PoC 토큰 생성 (서버 공개키 필요)
+
+이 도구는 분석/생성만 함. 생성된 변조 토큰을 실제 서버에 테스트하는 것은
+사용자 본인의 행위이며, 권한 있는 대상에게만 사용할 것.
+
+기본 사용법
+----------
+python jwt_analyzer.py <토큰>
+python jwt_analyzer.py <토큰> --crack-secret
+python jwt_analyzer.py --file token.txt
+
+대화형 모드
+----------
+인자 없이 실행하면(더블클릭 포함) 번호 입력식 메뉴가 뜸 — 필수 값 입력
+후 옵션 번호를 골라 값 설정/토글, 0=실행. 목록은 아래 옵션 설명과 항상
+동일하게 자동 생성됨. 터미널 특성상 마우스 클릭은 지원 안 됨.
+
+옵션 설명
+--------
+token (위치인자, --file과 택1)
+    분석할 JWT 문자열.
+
+--file 경로
+    토큰을 인자 대신 파일에서 읽음.
+
+--crack-secret
+    alg이 HS256/HS384/HS512일 때만 동작. 워드리스트의 각 단어를
+    HMAC 시크릿으로 넣어 서명을 재계산 → 일치하면 시크릿 발견.
+    순수 로컬 연산(hmac 모듈)이라 네트워크 요청 없음.
+
+--wordlist 경로 또는 짧은이름 (기본: SecLists scraped-JWT-secrets.txt)
+    시크릿 후보 단어 목록. 짧은 이름은
+    E:\temp\tools\SecLists-master\Passwords\ 아래에서 자동 탐색
+    (Common-Credentials 하위 폴더도 확인).
+
+--limit N (기본 500,000)
+    시도할 최대 단어 수. 로컬 CPU 연산이라 서버 부담과 무관하지만
+    실행 시간 제한용으로 캡을 둠.
+
+--gen-none
+    header의 alg을 "none"으로 바꾸고 서명을 제거한 변형 토큰 출력.
+    서버가 alg=none을 검증 없이 받아들이는지 테스트할 때 사용.
+
+--confusion-pubkey 경로
+    RS256/ES256 등 비대칭 서명 토큰에 대해, 지정한 공개키(PEM) 파일의
+    "바이트 그대로"를 HMAC 시크릿으로 써서 재서명한 변형 토큰 생성.
+    서버 JWT 라이브러리가 alg 헤더를 신뢰해서 검증 키를 결정하는
+    (즉 공개키를 HMAC 키로 오인하는) 취약점이 있으면 통과됨.
+
+--confusion-alg HS256|HS384|HS512 (기본 HS256)
+    --confusion-pubkey로 생성할 때 사용할 HMAC 알고리즘.
+
+-v, --verbose
+    상세 로그.
+
+출력 항목
+--------
+- [Header] / [Payload]: 디코딩된 JSON
+- [Findings]: 구조적 문제 목록
+  - VULNERABLE: alg=none
+  - WARNING: exp 없음/과도한 유효기간, 서명 없음, kid/jku/x5u 인젝션 가능성
+  - INFO: 참고 정보 (알고리즘 종류, iat 없음 등)
+- [Secret brute force] / [PoC variant]: 옵션 사용 시에만 출력
+
+주의
+----
+kid/jku/x5u 경고는 "가능성"을 알리는 것이지 확정 취약점이 아님 —
+실제 서버 구현을 확인해야 함.

@@ -1,0 +1,97 @@
+default_content_scanner / default_content_scanner.py 사용 설명서
+================================================
+
+역할
+----
+Apache Tomcat, Apache httpd, nginx, IIS, JBoss 등 흔한 서버/패키지가
+설치 시 남기는 기본 파일·디렉터리·샘플/테스트 파일(예: Tomcat
+examples/manager, nginx conf/, .git/HEAD, phpinfo.php 등)을 자동 탐색.
+추가로 발견된 파일의 백업본(.bak, ~, .old 등)도 찾아주고,
+경로탐색(Path Traversal/LFI) 취약점도 퍼징으로 점검 가능.
+전부 site_depth_crawler와 동일한 방식(동시 요청 수 캡 + 호스트별 최소
+간격)으로 서버에 무리 안 가게 제한됨 (끌 수 없음).
+
+기본 사용법
+----------
+python default_content_scanner.py https://target.example
+python default_content_scanner.py https://target.example --tech tomcat,nginx
+python default_content_scanner.py https://target.example --mutate
+python default_content_scanner.py https://target.example --traversal --param file
+python default_content_scanner.py "https://target.example/dl?f=FUZZ" --traversal --url-template
+
+3가지 모드
+----------
+1) 지문(fingerprint) 모드 (기본, 항상 실행됨 — --no-fingerprint로 끔)
+   --tech에 지정된 기술의 SecLists 기본 경로 목록 + 내장 generic 목록을
+   대상 루트에 대해 GET 요청. 404가 아닌 응답만 콘솔에 강조 출력.
+
+2) 백업 변형(mutate) 모드 (--mutate)
+   1번에서 발견된(404 아닌) 모든 경로에 대해 .bak/~/.old/.zip 등
+   백업 확장자 변형본을 추가로 탐색.
+
+3) 경로탐색(traversal) 모드 (--traversal)
+   PayloadsAllTheThings의 Directory Traversal 페이로드로 지정한
+   파라미터 또는 URL의 FUZZ 위치를 퍼징. 응답 본문에서 /etc/passwd나
+   win.ini 시그니처가 발견되면 매치로 표시.
+
+대화형 모드
+----------
+인자 없이 실행하면(더블클릭 포함) 번호 입력식 메뉴가 뜸 — 필수 값 입력
+후 옵션 번호를 골라 값 설정/토글, 0=실행. 목록은 아래 옵션 설명과 항상
+동일하게 자동 생성됨. 터미널 특성상 마우스 클릭은 지원 안 됨.
+
+옵션 설명
+--------
+url (필수, 위치인자)
+    대상 기본 URL. --url-template 사용 시 "FUZZ" 마커를 포함한 전체 URL.
+
+--tech 목록 (기본 tomcat,apache,nginx)
+    쉼표로 구분. 사용 가능: tomcat, apache, nginx, iis, jboss, db-backups
+
+--no-generic
+    내장 generic 목록(.env, .git/HEAD, docker-compose.yml 등) 제외.
+
+--no-fingerprint
+    지문 모드 자체를 끔 (--traversal만 쓰고 싶을 때).
+
+--mutate
+    지문 모드에서 발견된 경로들의 백업 변형본도 탐색.
+
+--traversal
+    경로탐색 퍼징 활성화. --param 또는 --url-template 둘 중 하나 필수.
+
+--param 이름
+    이 쿼리 파라미터에 페이로드를 주입 (base url에 ?이름=페이로드로 추가).
+
+--url-template
+    url 인자를 템플릿으로 취급, 안의 리터럴 "FUZZ" 문자열을 페이로드로 치환.
+
+--target-os unix|windows|both (기본 both)
+    /etc/passwd 계열 vs win.ini 계열 중 어떤 타겟 파일을 노릴지.
+
+--traversal-limit N (기본 300, 안전상한 2000)
+    시도할 최대 페이로드 수.
+
+--workers / --min-interval / --timeout / --retries
+    site_depth_crawler와 동일 (기본 3 / 0.5초 / 10초 / 1회).
+
+--max-requests N (기본 1000, 안전상한 3000)
+    전체 모드 합산 요청 수 하드 캡.
+
+--ignore-robots
+    robots.txt 무시 (기본은 준수).
+
+--output console|json, --output-file 경로
+    리포트 형식/저장.
+
+--force
+    안전상한(traversal-limit 2000, max-requests 3000) 초과 시 필요.
+
+-v, --verbose
+    상세 로그.
+
+주의
+----
+- 스캔 대상에 대한 권한이 있는지 반드시 확인 후 사용.
+- traversal 모드는 실제 파일을 읽으려는 시도이므로 더 민감함 — 권한
+  범위를 벗어난 대상에는 사용하지 말 것.

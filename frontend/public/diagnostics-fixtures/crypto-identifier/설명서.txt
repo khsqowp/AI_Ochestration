@@ -1,0 +1,73 @@
+crypto_identifier / crypto_identifier.py 사용 설명서
+================================================
+
+역할
+----
+정체불명의(암호화/인코딩된 듯한) 문자열을 넣으면:
+1. base64/base64url/hex/base32/URL인코딩/ROT13 조합을 최대 3단계까지
+   자동으로 풀어보고, 사람이 읽을 수 있는 결과가 나오면 전부 보여줌.
+2. 길이/문자셋/접두사로 해시·crypt 포맷을 추정 (md5/sha1/sha256/sha512,
+   bcrypt, md5crypt, sha256crypt, sha512crypt, phpass, Django PBKDF2,
+   LDAP SSHA 등 — hashid 도구와 같은 방식의 휴리스틱).
+3. 빠른 무솔트 해시(md5/sha1/sha224/sha256/sha384/sha512)는 파이썬으로
+   직접 워드리스트 대입 크래킹 수행.
+4. bcrypt/crypt류처럼 느리거나 GPU가 유리한 포맷은 hashcat/john 실행
+   명령어를 만들어서 "출력만" 함 — 오래 걸릴 수 있어 자동 실행은 안 함.
+   실행 파일 위치: E:\temp\tools\hashcat\hashcat-7.1.2\hashcat.exe
+                  E:\temp\tools\john\john-1.9.0-jumbo-1-win64\run\john.exe
+
+참고: 진짜 "레인보우테이블"(사전연산 해시→평문 매핑 파일)은 다운로드된 게
+없음. 대신 hashcat/john + SecLists 워드리스트로 하는 사전대입 공격이
+현실적인 대체 수단 (무솔트 빠른 해시엔 오히려 더 실용적).
+
+기본 사용법
+----------
+python crypto_identifier.py "aGVsbG8gd29ybGQ="
+python crypto_identifier.py "5d41402abc4b2a76b9719d911017c592" --crack
+python crypto_identifier.py '$2b$12$...'
+python crypto_identifier.py --file value.txt
+
+대화형 모드
+----------
+인자 없이 실행하면(더블클릭 포함) 번호 입력식 메뉴가 뜸 — 필수 값 입력
+후 옵션 번호를 골라 값 설정/토글, 0=실행. 목록은 아래 옵션 설명과 항상
+동일하게 자동 생성됨. 터미널 특성상 마우스 클릭은 지원 안 됨.
+
+옵션 설명
+--------
+value (위치인자, --file과 택1)
+    분석할 문자열.
+
+--file 경로
+    값을 인자 대신 파일에서 읽음.
+
+--crack
+    해시로 추정된 값 중 "로컬에서 크랙 가능한" 무솔트 빠른 해시
+    (md5/sha1/sha224/sha256/sha384/sha512)에 대해 워드리스트 대입을 실행.
+    bcrypt 등 느린 포맷은 이 옵션과 무관하게 항상 hashcat/john 명령만 출력.
+
+--wordlist 경로 또는 짧은이름 (기본: SecLists 10k-most-common.txt)
+    대입 크래킹용 단어 목록. 짧은 이름은
+    E:\temp\tools\SecLists-master\Passwords\ 아래에서 자동 탐색.
+
+--limit N (기본 500,000)
+    --crack 시 시도할 최대 단어 수.
+
+-v, --verbose
+    상세 로그.
+
+출력 항목
+--------
+- [Decode chains]: 성공한 디코딩 경로들 (예: base64 -> rot13)
+- [Hash format guesses]: 추정 포맷과 confidence(likely/possible),
+  대응하는 hashcat -m 번호 / john --format
+- [Local crack: ...]: --crack 사용 시 빠른 해시 결과
+- [포맷명: GPU/전용 크래커 권장]: 느린 포맷일 때 복사해서 쓸 수 있는
+  실제 hashcat/john 명령어 (해시가 파일 기반인 john은 직접 해시를
+  텍스트 파일로 저장 후 경로를 바꿔줘야 함)
+
+주의
+----
+- MD5와 NTLM은 길이/문자셋이 동일해서 구분 불가 — 두 후보 모두 표시.
+- 해시 포맷 추정은 휴리스틱이라 100% 정확하지 않음(특히 possible 등급).
+- 크래킹 대상 해시가 정당하게 접근 권한이 있는 것인지 확인 후 사용.
