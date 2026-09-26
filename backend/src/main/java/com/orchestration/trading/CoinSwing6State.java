@@ -19,6 +19,7 @@ public record CoinSwing6State(
     @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt,
     @JsonAlias("inception_ts") String inceptionTs,
     @JsonAlias("equity_history") List<EquityPoint> equityHistory,
+    @JsonAlias("equity_history_daily") List<DailyPoint> equityHistoryDaily,
     @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory) {
 
   @JsonIgnoreProperties(ignoreUnknown = true)
@@ -35,7 +36,10 @@ public record CoinSwing6State(
 
   public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt) {}
 
+  // momentum-rotation과 동일한 일별 롤업 형태 — {"ts","value"}로 통일.
+  public record DailyPoint(String ts, double value) {}
+
   public static CoinSwing6State empty() {
-    return new CoinSwing6State(Map.of(), List.of(), 0, 0, 0, null, List.of(), Map.of());
+    return new CoinSwing6State(Map.of(), List.of(), 0, 0, 0, null, List.of(), List.of(), Map.of());
   }
 }

@@ -30,6 +30,7 @@ public record MomentumRotationState(
     @JsonAlias("next_rebalance_ts") String nextRebalanceTs,
     @JsonAlias("rebalance_every_days") Integer rebalanceEveryDays,
     @JsonAlias("equity_history") List<EquityPoint> equityHistory,
+    @JsonAlias("equity_history_daily") List<DailyPoint> equityHistoryDaily,
     @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory,
     // 프런트가 방금 보낸 즉시매도/진입 명령의 nonce 와 대조해 "봇이 실제로 처리했는지"를 폴링으로
     // 확인하는 용도 — momentum_rotation_loop.py 의 handle_control() 이 처리한 마지막 nonce.
@@ -74,8 +75,13 @@ public record MomentumRotationState(
 
   public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt) {}
 
+  // equity_history(고밀도, 보존기간 제한)와 별도로 날짜당 1개씩 사실상 무제한 보존되는 요약
+  // 시계열 — 봇마다 value의 의미(usdt/krw)는 다르지만 저장 형태는 전부 {"ts","value"}로
+  // 통일해 프런트가 봇별 필드명을 몰라도 그대로 병합해 쓸 수 있게 한다.
+  public record DailyPoint(String ts, double value) {}
+
   public static MomentumRotationState empty() {
     return new MomentumRotationState(
-        Map.of(), List.of(), "paper", 0, 0, 0, 0, 0, 0, 0, false, null, null, null, null, null, List.of(), Map.of(), null);
+        Map.of(), List.of(), "paper", 0, 0, 0, 0, 0, 0, 0, false, null, null, null, null, null, List.of(), List.of(), Map.of(), null);
   }
 }

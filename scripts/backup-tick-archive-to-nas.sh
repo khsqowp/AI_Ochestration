@@ -64,10 +64,26 @@ backup_tick_archive() {
   # 백업이 이번 사이클에 실제로 성공했을 때만 정리한다 — NAS 마운트가 며칠 끊겨있었다면
   # 그동안 밀린 데이터는 다음 성공한 백업이 rsync로 전부 따라잡을때까지 로컬에 계속 남는다
   # (retention 지나도 백업 미확인 상태면 안 지운다).
-  local deleted
-  deleted=$(find "$SRC_TICK_DIR" -type f -name "*.jsonl" -mtime "+${RETENTION_DAYS}" -print -delete | wc -l | tr -d ' ')
+  #
+  # find -mtime 는 "파일의 마지막 쓰기 시각" 기준인데, 하루치 파일은 자정(UTC) 근처까지 계속
+  # append되다가 마지막 쓰기가 다음날(KST 09:00 무렵)에 찍힌다 — 그래서 "7일 지난 파일"이 실제
+  # 달력 기준 7일보다 하루 가까이 늦게 지워지고, 여기에 find -mtime +N 특유의 내림 처리까지
+  # 겹쳐 이틀 가까이 밀린다(2026-09-26 실측 확인: 41GB, 9일치가 그대로 쌓여있었음 — retention이
+  # "느슨하게 도는" 게 아니라 사실상 거의 안 지워지고 있었음). 폴더명(YYYY/MM/DD) 자체를 날짜로
+  # 파싱해서 "오늘 기준 N일 전보다 이전 날짜"인 폴더만 통째로 지우는 방식으로 바꿔 이 오차를 없앤다.
+  local cutoff_epoch deleted=0
+  cutoff_epoch=$(date -v-"${RETENTION_DAYS}"d +%s)
+  while IFS= read -r day_dir; do
+    local dir_epoch yyyy mm dd
+    dd="$(basename "$day_dir")"; mm="$(basename "$(dirname "$day_dir")")"; yyyy="$(basename "$(dirname "$(dirname "$day_dir")")")"
+    dir_epoch=$(date -j -f "%Y-%m-%d" "${yyyy}-${mm}-${dd}" +%s 2>/dev/null) || continue
+    if [ "$dir_epoch" -lt "$cutoff_epoch" ]; then
+      rm -rf "$day_dir"
+      deleted=$((deleted + 1))
+    fi
+  done < <(find "$SRC_TICK_DIR" -mindepth 3 -maxdepth 3 -type d)
   find "$SRC_TICK_DIR" -mindepth 1 -type d -empty -delete
-  log "[tick] 로컬 정리: ${RETENTION_DAYS}일 지난 파일 ${deleted}개 삭제"
+  log "[tick] 로컬 정리: ${RETENTION_DAYS}일 지난 날짜폴더 ${deleted}개 삭제"
 }
 
 backup_db_dumps() {

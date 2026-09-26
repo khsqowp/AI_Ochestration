@@ -30,6 +30,7 @@ public record StockRotationState(
     Broker broker,
     @JsonAlias("trade_log") List<LogEntry> tradeLog,
     @JsonAlias("equity_history") List<EquityPoint> equityHistory,
+    @JsonAlias("equity_history_daily") List<DailyPoint> equityHistoryDaily,
     @JsonAlias("position_history") Map<String, List<PositionPoint>> positionHistory,
     // 프런트가 방금 보낸 즉시매도/진입 명령의 nonce 와 대조해 "봇이 실제로 처리했는지"를 폴링으로
     // 확인하는 용도 — stock_rotation_loop.py 의 handle_control() 이 처리한 마지막 nonce.
@@ -68,9 +69,12 @@ public record StockRotationState(
 
   public record PositionPoint(String ts, double price, @JsonAlias("unrealized_pnl") double unrealizedPnl) {}
 
+  // momentum-rotation과 동일한 일별 롤업 형태 — {"ts","value"}로 통일.
+  public record DailyPoint(String ts, double value) {}
+
   public static StockRotationState empty() {
     return new StockRotationState(
         Map.of(), 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), null, null, false,
-        null, List.of(), List.of(), Map.of(), null, 0, null, null);
+        null, List.of(), List.of(), List.of(), Map.of(), null, 0, null, null);
   }
 }

@@ -6,7 +6,7 @@ import type {
 } from '../lib/types'
 import {
   ROTATION_MARKETS, TRADING_PERIOD_DAYS, TRADING_PERIOD_LABEL, TRADING_PERIOD_ORDER,
-  clampChartDomain, filterChartPoints, historySpanDays, periodPnlFromSeries,
+  clampChartDomain, filterChartPoints, historySpanDays, mergeHistorySeries, periodPnlFromSeries,
 } from '../lib/util'
 import { BotStatusPill, ErrorBoundary, type BotTone } from '../components/shared'
 
@@ -447,7 +447,10 @@ function StockRotationDashboard({ market, onClose, embedded }: { market: 'kr' | 
   const entryValue = data?.broker?.positionsEntry ?? data?.entryValue ?? 0
   const currentValue = data?.broker?.positionsEval ?? data?.deployedValue ?? 0
   const returnPct = data?.returnPct ?? (budget > 0 ? (totalPnl / budget) * 100 : 0)
-  const pnlSeries: ChartPoint[] = (data?.equityHistory ?? []).map(p => ({ ts: p.ts, value: p.totalPnl }))
+  const pnlSeries: ChartPoint[] = mergeHistorySeries(
+    (data?.equityHistory ?? []).map(p => ({ ts: p.ts, value: p.totalPnl })),
+    data?.equityHistoryDaily ?? [],
+  )
   const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
   const periodReturnPct = budget > 0 ? (periodPnl / budget) * 100 : 0
   const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
@@ -550,7 +553,10 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
   const sessionPnl = data?.broker?.sessionPnlUsdt ?? 0
   const sessionReturnPct = data?.broker?.sessionReturnPct ?? 0
   const sessionStartTs = data?.broker?.sessionStartTs ?? null
-  const pnlSeries: ChartPoint[] = (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt }))
+  const pnlSeries: ChartPoint[] = mergeHistorySeries(
+    (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt })),
+    data?.equityHistoryDaily ?? [],
+  )
   const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
   const periodReturnPct = startingCapital > 0 ? (periodPnl / startingCapital) * 100 : 0
   const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
@@ -636,7 +642,10 @@ export function CoinSwing6Dashboard({ onClose, embedded }: { onClose?: () => voi
   const totalPnl = (data?.cumulativeRealizedPnlUsdt ?? 0) + unrealized
   const startingCapital = equity - totalPnl
   const overallReturnPct = startingCapital > 0 ? (totalPnl / startingCapital) * 100 : 0
-  const pnlSeries: ChartPoint[] = (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt }))
+  const pnlSeries: ChartPoint[] = mergeHistorySeries(
+    (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt })),
+    data?.equityHistoryDaily ?? [],
+  )
   const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
   const periodReturnPct = startingCapital > 0 ? (periodPnl / startingCapital) * 100 : 0
   const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)

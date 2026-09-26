@@ -142,6 +142,17 @@ export function historySpanDays(points: { ts: string }[]): number | undefined {
 
 /** 여러 봇의 equity_history 필드명이 제각각(totalPnlUsdt/Krw/Usd)이라, 각 봇 쪽에서 {ts, value}로
  * 정규화한 뒤 이 두 헬퍼(기간 필터링, 라인차트 렌더링)를 공유해서 쓴다. */
+/** fine(고밀도, 보존기간 제한) + daily(날짜당 1개, 사실상 무제한) 두 시계열을 하나로 합친다.
+ * fine 배열이 시작되는 시점 이전의 daily 포인트만 앞에 붙여서, fine 배열의 보존기간을 넘어서는
+ * "월간/전체" 조회에서도 실제 장기 추세가 보이게 한다(겹치는 구간은 더 정밀한 fine 쪽을 쓴다). */
+export function mergeHistorySeries(fine: ChartPoint[], daily: ChartPoint[]): ChartPoint[] {
+  if (daily.length === 0) return fine
+  if (fine.length === 0) return daily
+  const fineStart = new Date(fine[0].ts).getTime()
+  const dailyPrefix = daily.filter(point => new Date(point.ts).getTime() < fineStart)
+  return [...dailyPrefix, ...fine]
+}
+
 export function filterChartPoints(points: ChartPoint[], period: TradingPeriod): ChartPoint[] {
   const days = TRADING_PERIOD_DAYS[period]
   if (days === null) return points
