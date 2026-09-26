@@ -353,6 +353,8 @@
 .landing.landing-3d { position:relative; padding:0; background:#07070d; overflow:hidden; place-items:stretch; }
 .landing-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
 .landing-canvas.landing-canvas-fallback { background:radial-gradient(120% 90% at 30% 20%, #1a1630 0, #07070d 60%); }
+.landing-canvas-host { position:absolute; inset:0; width:100%; height:100%; }
+.landing-canvas-host.landing-canvas-fallback { background:radial-gradient(120% 90% at 30% 20%, #1a1630 0, #07070d 60%); }
 .landing-veil { position:absolute; inset:0; pointer-events:none;
   background:radial-gradient(130% 90% at 50% 120%, rgba(118,103,220,.16) 0, transparent 55%),
              linear-gradient(180deg, rgba(7,7,13,.35) 0, transparent 22%, transparent 66%, rgba(7,7,13,.55) 100%); }
