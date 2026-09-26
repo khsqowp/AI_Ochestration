@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Bot } from 'lucide-react'
-import { LandingScene3D } from './LandingScene3D'
+import { HolographicCard } from '../../components/HolographicCard'
 import { LandingWeather } from './LandingWeather'
 
 export function LandingPage() {
@@ -25,7 +25,7 @@ export function LandingPage() {
   const date = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
 
   return <div className="landing landing-3d">
-    <LandingScene3D/>
+    <div className="landing-canvas-host"><HolographicCard/></div>
     <div className="landing-veil" aria-hidden="true"/>
     <div className="landing-ui">
       <div className="landing-mark">
