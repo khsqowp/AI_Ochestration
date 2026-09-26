@@ -744,9 +744,15 @@
 .lunch-roulette-error { margin:0; padding:10px 12px; border-radius:8px; background:#fdecec; color:#963f3f; font-size:13px; }
 .lunch-roulette-loading, .lunch-roulette-empty { color:#8a8591; font-size:13px; }
 .lunch-roulette-candidates { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:8px; }
-.lunch-roulette-candidates li { padding:8px 13px; border:1px solid #e7e3ea; border-radius:20px; background:#fff; color:#413b4b; font-size:13px; font-weight:600; }
+.lunch-roulette-candidates li { display:flex; align-items:center; gap:8px; padding:6px 8px 6px 13px; border:1px solid #e7e3ea; border-radius:20px; background:#fff; color:#413b4b; font-size:13px; font-weight:600; }
+.lunch-roulette-weight { color:#7060d2; }
+.lunch-roulette-weight-controls { display:flex; gap:2px; }
+.lunch-roulette-weight-controls button { display:flex; align-items:center; justify-content:center; width:20px; height:20px; padding:0; border:none; border-radius:50%; background:#f1eef8; color:#625c6b; cursor:pointer; }
+.lunch-roulette-weight-controls button:disabled { opacity:.5; cursor:not-allowed; }
+.lunch-roulette-weight-controls button:hover:not(:disabled) { background:#e2ddf3; }
 .lunch-roulette-empty { list-style:none; border:none !important; background:none !important; padding:0 !important; }
 .lunch-roulette-form { display:flex; gap:8px; }
+.lunch-roulette-hint { margin:0; font-size:12px; color:#8a8591; }
 .lunch-roulette-form input { flex:1; padding:11px 13px; border:1px solid #dcd7e4; border-radius:10px; font:inherit; font-size:13px; }
 .lunch-roulette-form button, .lunch-roulette-start { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #dfd9e7; border-radius:10px; background:#fff; color:#625c6b; padding:10px 16px; font:inherit; font-weight:750; cursor:pointer; }
 .lunch-roulette-start { background:#7060d2; border-color:#7060d2; color:#fff; }

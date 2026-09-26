@@ -47,6 +47,17 @@ public class LunchRoulette {
 
   void addCandidate(String name) { candidates.add(name); }
 
+  /** 같은 이름을 여러 번 등록해 "표(마블) 개수"로 당첨 확률을 가중치처럼 조절한다(예: 짜장면*3
+   * = 짜장면 마블 3개) -- 마블 레이스 엔진은 배열을 그대로 받아 항목당 마블 하나를 스폰하므로
+   * 이름이 중복돼도 동작은 그대로다(marble-roulette 쪽 코드는 안 건드림). 마지막 등록분부터
+   * 하나씩 지운다 -- 어느 걸 지워도 같은 메뉴라 순서 의미가 없다. */
+  boolean removeOneCandidate(String name) {
+    for (int i = candidates.size() - 1; i >= 0; i--) {
+      if (candidates.get(i).equals(name)) { candidates.remove(i); return true; }
+    }
+    return false;
+  }
+
   /** 멱등 -- 이미 시작된 방에 여러 클라이언트가 동시에 "시작" 눌러도 최초 시작 시각을 그대로 유지한다.
    * 이 시각을 기준으로 각 클라이언트가 경과시간만큼 시뮬레이션을 빨리감기해 늦게 들어온 사람도 같은
    * 장면을 본다. */

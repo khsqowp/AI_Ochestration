@@ -22,12 +22,18 @@ public class LunchRouletteController {
   public Response today() { return Response.from(service.today()); }
 
   @PostMapping("/today/candidates")
-  public Response addCandidate(@RequestBody CandidateRequest request) { return Response.from(service.addCandidate(request.name())); }
+  public Response addCandidate(@RequestBody CandidateRequest request) {
+    int count = request.count() == null ? 1 : request.count();
+    return Response.from(service.addCandidate(request.name(), count));
+  }
+
+  @PostMapping("/today/candidates/remove")
+  public Response removeCandidate(@RequestBody CandidateRequest request) { return Response.from(service.removeCandidate(request.name())); }
 
   @PostMapping("/today/start")
   public Response start() { return Response.from(service.start()); }
 
-  record CandidateRequest(String name) {}
+  record CandidateRequest(String name, Integer count) {}
 
   record Response(LocalDate day, List<String> candidates, Instant startedAt) {
     static Response from(LunchRoulette roulette) { return new Response(roulette.getDay(), roulette.getCandidates(), roulette.getStartedAt()); }

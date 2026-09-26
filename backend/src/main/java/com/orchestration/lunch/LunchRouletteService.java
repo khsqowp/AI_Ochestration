@@ -24,13 +24,25 @@ public class LunchRouletteService {
   }
 
   @Transactional
-  public LunchRoulette addCandidate(String rawName) {
+  public LunchRoulette addCandidate(String rawName, int count) {
     LunchRoulette roulette = today();
     if (roulette.getStartedAt() != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 시작된 룰렛에는 후보를 추가할 수 없습니다.");
+    if (count < 1) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "개수는 1 이상이어야 합니다.");
     String name = clean(rawName);
-    if (roulette.getCandidates().size() >= MAX_CANDIDATES) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "후보는 최대 " + MAX_CANDIDATES + "명까지입니다.");
-    if (roulette.getCandidates().contains(name)) throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 이름입니다.");
-    roulette.addCandidate(name);
+    // 같은 이름을 여러 번 등록하는 게 곧 가중치라 중복 자체는 막지 않는다("test1*2" = test1을
+    // 2번 등록) -- 전체 개수 상한만 지킨다.
+    if (roulette.getCandidates().size() + count > MAX_CANDIDATES) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "후보는 최대 " + MAX_CANDIDATES + "명까지입니다.");
+    for (int i = 0; i < count; i++) roulette.addCandidate(name);
+    return hydrate(repository.save(roulette));
+  }
+
+  /** 등록된 표 하나를 뗀다(가중치 낮추기) -- 마지막 한 표가 지워지면 메뉴 자체가 목록에서 사라진다. */
+  @Transactional
+  public LunchRoulette removeCandidate(String rawName) {
+    LunchRoulette roulette = today();
+    if (roulette.getStartedAt() != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 시작된 룰렛은 후보를 변경할 수 없습니다.");
+    String name = clean(rawName);
+    if (!roulette.removeOneCandidate(name)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "등록되지 않은 이름입니다.");
     return hydrate(repository.save(roulette));
   }
 

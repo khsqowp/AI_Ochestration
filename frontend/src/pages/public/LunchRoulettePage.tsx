@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Dices, Play, Plus } from 'lucide-react'
+import { Dices, Minus, Play, Plus } from 'lucide-react'
 import { MarbleRace } from '../../marble-roulette/MarbleRace'
 
 interface Room { day: string; candidates: string[]; startedAt: string | null }
 
 const POLL_MS = 3000
+
+/** "짜장면*3" -> {name:"짜장면", count:3}. *n이 없으면 count 1(마블 1개). 가중치 문법 —
+ * 같은 메뉴를 n개 더 등록해서 당첨 확률을 표 개수만큼 올린다. */
+function parseCandidateInput(raw: string): { name: string; count: number } | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const match = trimmed.match(/^(.*)\*\s*(\d+)$/)
+  if (!match) return { name: trimmed, count: 1 }
+  const name = match[1].trim()
+  const count = Number(match[2])
+  if (!name || count < 1) return null
+  return { name, count }
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/lunch-roulette${path}`, { headers: { 'Content-Type': 'application/json' }, ...init })
@@ -49,6 +62,18 @@ export function LunchRoulettePage() {
 
   const started = room?.startedAt != null
 
+  // 후보 배열은 서버가 "표" 단위(가중치)로 중복을 그대로 들고 있다(예: ["짜장면","짜장면"])
+  // -- 화면에는 등록 순서를 유지하면서 메뉴별로 묶어 "짜장면 ×2"로 보여준다.
+  const grouped = useMemo(() => {
+    const order: string[] = []
+    const counts = new Map<string, number>()
+    for (const name of room?.candidates ?? []) {
+      if (!counts.has(name)) order.push(name)
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+    return order.map(name => ({ name, count: counts.get(name)! }))
+  }, [room?.candidates])
+
   // 모든 클라이언트가 같은 값을 얻는 방 식별자 -- MarbleRace가 이 값으로 물리 시뮬레이션을
   // 재현한다(marble-roulette/rng.ts).
   const roomKey = useMemo(() => {
@@ -60,10 +85,25 @@ export function LunchRoulettePage() {
 
   const addCandidate = async (event: FormEvent) => {
     event.preventDefault()
-    if (!name.trim() || busy) return
+    if (busy) return
+    const parsed = parseCandidateInput(name)
+    if (!parsed) { setError('이름을 입력하세요. "메뉴*개수" 형식으로 개수도 지정할 수 있습니다.'); return }
     setBusy(true)
-    try { setRoom(await api<Room>('/today/candidates', { method: 'POST', body: JSON.stringify({ name }) })); setName(''); setError('') }
-    catch (e) { setError(e instanceof Error ? e.message : '후보를 추가하지 못했습니다.') }
+    try {
+      setRoom(await api<Room>('/today/candidates', { method: 'POST', body: JSON.stringify(parsed) }))
+      setName(''); setError('')
+    } catch (e) { setError(e instanceof Error ? e.message : '후보를 추가하지 못했습니다.') }
+    finally { setBusy(false) }
+  }
+
+  const bumpCandidate = async (candidateName: string, delta: 1 | -1) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const path = delta > 0 ? '/today/candidates' : '/today/candidates/remove'
+      setRoom(await api<Room>(path, { method: 'POST', body: JSON.stringify({ name: candidateName, count: 1 }) }))
+      setError('')
+    } catch (e) { setError(e instanceof Error ? e.message : '표를 변경하지 못했습니다.') }
     finally { setBusy(false) }
   }
 
@@ -81,13 +121,20 @@ export function LunchRoulettePage() {
       {error && <p className="lunch-roulette-error">{error}</p>}
       {!room ? <p className="lunch-roulette-loading">불러오는 중…</p> : !started ? <>
         <ul className="lunch-roulette-candidates">
-          {room.candidates.length === 0 && <li className="lunch-roulette-empty">아직 등록된 후보가 없습니다.</li>}
-          {room.candidates.map(c => <li key={c}>{c}</li>)}
+          {grouped.length === 0 && <li className="lunch-roulette-empty">아직 등록된 후보가 없습니다.</li>}
+          {grouped.map(({ name: c, count }) => <li key={c}>
+            <span>{c}{count > 1 && <b className="lunch-roulette-weight"> ×{count}</b>}</span>
+            <span className="lunch-roulette-weight-controls">
+              <button type="button" aria-label={`${c} 표 빼기`} disabled={busy} onClick={() => void bumpCandidate(c, -1)}><Minus size={12}/></button>
+              <button type="button" aria-label={`${c} 표 더하기`} disabled={busy} onClick={() => void bumpCandidate(c, 1)}><Plus size={12}/></button>
+            </span>
+          </li>)}
         </ul>
         <form className="lunch-roulette-form" onSubmit={event => void addCandidate(event)}>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="오늘 후보(식당 이름)" maxLength={20} disabled={busy}/>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="오늘 후보(예: 국밥집, 짜장면*3)" maxLength={24} disabled={busy}/>
           <button type="submit" disabled={busy || !name.trim()}><Plus size={16}/>추가</button>
         </form>
+        <p className="lunch-roulette-hint">"메뉴*개수"로 표를 한 번에 여러 장 등록할 수 있습니다(예: 짜장면*3) — 표가 많을수록 당첨 확률이 올라갑니다. 등록 후에도 ±로 조정 가능.</p>
         <label className="lunch-roulette-record-toggle">
           <input type="checkbox" checked={record} onChange={e => setRecord(e.target.checked)}/>
           경주 영상 녹화(끝나면 내 브라우저에 mp4로 저장)
