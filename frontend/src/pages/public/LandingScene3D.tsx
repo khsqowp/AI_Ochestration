@@ -186,16 +186,17 @@ export function LandingScene3D() {
     const dpr = Math.min(window.devicePixelRatio || 1, reduced ? 1 : 2)
     renderer.setPixelRatio(dpr)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.05
+    renderer.toneMappingExposure = 0.95
     renderer.outputColorSpace = THREE.SRGBColorSpace
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(BG)
     scene.fog = new THREE.Fog(BG, 8, 16)
 
-    // 레퍼런스처럼 거의 수직으로 내려다보는 각도.
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 60)
-    camera.position.set(0, 6.6, 3.5)
+    // 레퍼런스처럼 거의 수직으로 내려다보는 각도. 여유 있게 살짝 더 멀리/넓게 잡아
+    // 원반+림이 프레임에 확실히 다 들어오도록 함.
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 60)
+    camera.position.set(0, 8.4, 4.4)
     camera.lookAt(0, 0, 0)
 
     const pmrem = new THREE.PMREMGenerator(renderer)
@@ -231,12 +232,15 @@ export function LandingScene3D() {
     const hub = new THREE.Group()
     scene.add(hub)
 
+    // 유리 베이스 -- 실물 유리 굴절(transmission) 대신 균일한 반투명 재질을 씀.
+    // transmission 재질은 카메라 각도에 따라 프레넬 효과로 한쪽 가장자리만 밝고
+    // 나머지는 거의 안 보이는 초승달 모양이 되는 문제가 있어(실측으로 확인됨) 제외.
     const discR = 2.35
     const discGlass = new THREE.Mesh(
       new THREE.CircleGeometry(discR, 96),
-      new THREE.MeshPhysicalMaterial({
-        color: 0xbcd4ff, transparent: true, opacity: 0.16, roughness: 0.12, metalness: 0,
-        transmission: 0.92, thickness: 0.15, ior: 1.3, side: THREE.DoubleSide, depthWrite: false,
+      new THREE.MeshStandardMaterial({
+        color: 0x9fc4ff, transparent: true, opacity: 0.1, roughness: 0.35, metalness: 0,
+        side: THREE.DoubleSide, depthWrite: false,
       }),
     )
     discGlass.rotation.x = -Math.PI / 2
@@ -245,7 +249,7 @@ export function LandingScene3D() {
     const discTex = buildDiscTexture()
     const discGraphic = new THREE.Mesh(
       new THREE.CircleGeometry(discR - 0.02, 96),
-      new THREE.MeshBasicMaterial({ map: discTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ map: discTex, transparent: true, depthWrite: false }),
     )
     discGraphic.rotation.x = -Math.PI / 2
     discGraphic.position.y = 0.005
@@ -260,7 +264,7 @@ export function LandingScene3D() {
     hub.add(rim)
 
     // 조리개(iris) 블레이드 -- 환형 섹터 4장을 겹쳐 팬(pinwheel) 형태로.
-    const bladeMat = new THREE.MeshStandardMaterial({ color: 0xc3cee8, metalness: 1, roughness: 0.18, envMapIntensity: 1.5 })
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0xc3cee8, metalness: 0.9, roughness: 0.25, envMapIntensity: 0.8 })
     const bladeGeo = buildBladeGeometry(0.14, 0.62, 82)
     for (let i = 0; i < 4; i++) {
       const blade = new THREE.Mesh(bladeGeo, bladeMat)
@@ -287,12 +291,13 @@ export function LandingScene3D() {
     core.rotation.x = -Math.PI / 2
     core.position.y = 0.04
     hub.add(core)
-    const coreLight = new THREE.PointLight(0x5b8dff, 5, 4, 2)
+    const coreLight = new THREE.PointLight(0x5b8dff, 2.2, 3, 2)
     coreLight.position.set(0, 0.3, 0)
     hub.add(coreLight)
 
     // 원반 위에 얹힌 작은 유리구슬 몇 개(조립체와 함께 회전, 따로 공전하지 않음)
-    const marbleMat = new THREE.MeshPhysicalMaterial({ color: 0xe4edff, transmission: 0.9, roughness: 0.05, thickness: 0.3, ior: 1.4, envMapIntensity: 1.3 })
+    // -- 여기도 transmission 대신 크롬에 가까운 반사 재질로(프레넬 초승달 문제 회피).
+    const marbleMat = new THREE.MeshStandardMaterial({ color: 0xe4edff, metalness: 0.6, roughness: 0.3, envMapIntensity: 0.6 })
     const marbleGeo = new THREE.SphereGeometry(0.08, 24, 24)
     const marbleSpots: [number, number][] = [[0.8, 200], [0.95, 250], [0.75, 305], [0.62, 35]]
     marbleSpots.forEach(([r, deg]) => {
@@ -304,17 +309,19 @@ export function LandingScene3D() {
 
     // 조명
     scene.add(new THREE.AmbientLight(0x2a3060, 0.55))
-    const key = new THREE.DirectionalLight(0xaebfff, 1.2)
+    const key = new THREE.DirectionalLight(0xaebfff, 0.6)
     key.position.set(2, 6, 2)
     scene.add(key)
 
     const composer = new EffectComposer(renderer)
     composer.addPass(new RenderPass(scene, camera))
-    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.65, 0.55, 0.2)
+    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.22, 0.35, 0.86)
     composer.addPass(bloom)
 
     const resize = () => {
-      const w = container.clientWidth, h = container.clientHeight
+      // 마운트 직후 컨테이너가 아직 레이아웃되지 않아 0을 반환하는 경우 방어.
+      const w = container.clientWidth || window.innerWidth
+      const h = container.clientHeight || window.innerHeight
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       renderer.setSize(w, h)
@@ -343,8 +350,8 @@ export function LandingScene3D() {
         hub.rotation.y = elapsed * 0.1
         hub.rotation.x = curTilt.x
         hub.rotation.z = curTilt.y
-        coreLight.intensity = 4.4 + Math.sin(elapsed * 2.0) * 1.2
-        ;(discGraphic.material as THREE.MeshBasicMaterial).opacity = 0.85 + Math.sin(elapsed * 0.7) * 0.15
+        coreLight.intensity = 2.0 + Math.sin(elapsed * 2.0) * 0.5
+        ;(discGraphic.material as THREE.MeshBasicMaterial).opacity = 0.7 + Math.sin(elapsed * 0.7) * 0.1
       }
       composer.render()
     }
