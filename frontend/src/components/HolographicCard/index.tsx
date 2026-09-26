@@ -23,8 +23,8 @@ export function HolographicCard() {
 
   return (
     <div className="holo-card">
-      <canvas ref={canvasRef} className="holo-card-canvas" aria-label="vgpu. Holographic. Light, computed. Edition 001. WebGPU. A graphite card with a visible triangle outline; hover or drag to reveal its holographic engraving."/>
-      <p className="holo-card-caption">{error ? 'This example requires a WebGPU-capable browser.' : 'MOVE TO REVEAL'}</p>
+      <canvas ref={canvasRef} className="holo-card-canvas" aria-label="ochestration. Holographic. Light, computed. Edition 001. LAB. A graphite card with a visible triangle outline; hover or drag to reveal its holographic engraving."/>
+      <p className="holo-card-caption">{error ? 'This example requires a LAB-capable browser.' : 'MOVE TO REVEAL'}</p>
     </div>
   )
 }
