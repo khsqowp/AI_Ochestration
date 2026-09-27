@@ -57,6 +57,29 @@ export const CHEATSHEET_QUICK_STARTS: Record<string, CheatSheetQuickStart[]> = {
   tcpdump: [
     { id: 'bounded-http-capture', label: '제한된 HTTP 캡처', description: '지정 인터페이스의 HTTP 통신을 100개 패킷까지만 저장한다.', command: 'sudo tcpdump -i <INTERFACE> -nn -c 100 -w web-check.pcap port 80', expected: 'web-check.pcap에 제한된 패킷 캡처가 저장된다.', caution: '패킷에는 세션·개인정보가 포함될 수 있다. 허가된 구간에서 최소 수집 원칙을 적용한다.' },
   ],
+  'burp-suite': [
+    {
+      id: 'turbo-intruder-wordlist', label: 'Turbo Intruder — 워드리스트 대입', description: '표준 Intruder보다 훨씬 빠르게(동시 커넥션·파이프라이닝) 디렉터리·파라미터 브루트포스를 돌릴 때 쓰는 기본 스크립트. Intruder 탭에서 우클릭 → Extensions → Turbo Intruder 로 연 뒤 이 코드로 교체한다.',
+      command: `def queueRequests(target, wordlists):
+    engine = RequestEngine(endpoint=target.endpoint,
+                           concurrentConnections=5,
+                           requestsPerConnection=100,
+                           pipeline=False
+                           )
+
+    for word in open(r'<워드리스트 경로>'):
+        time.sleep(0.3)  # 너무 빠르면 대상이 요청을 놓치거나 차단할 수 있음(안정적이면 주석 처리 가능)
+        engine.queue(target.req, word.rstrip())
+
+
+def handleResponse(req, interesting):
+    # req.status, req.wordcount, req.length, req.response 사용 가능
+    if req.status != 101:
+        table.add(req)`,
+      expected: '결과표에 상태 코드·길이별로 응답이 쌓인다. 필터/정렬로 기본 응답과 다른(200·301·302, 길이 차이) 항목만 골라 확인한다.',
+      caution: '동시 연결 수·요청 속도를 대상 환경에 맞게 낮춘다 — 허가 범위 밖에서 과도한 트래픽은 DoS로 간주될 수 있다. time.sleep을 쓰려면 스크립트 최상단에 import time이 있어야 한다.',
+    },
+  ],
 }
 
 export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
@@ -144,6 +167,19 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'no404', flag: '-no404', label: '404 페이지 자동 감지 끄기', description: '커스텀 404 페이지 때문에 오탐이 발생할 때 사용합니다.' },
           { id: 'nolookup', flag: '-nolookup', label: '역방향 DNS 조회 생략', description: '호스트명 조회 과정을 건너뛰어 속도를 높입니다.' },
           { id: 'nocache', flag: '-nocache', label: '캐시 미사용', description: '이전 점검 결과 캐시를 쓰지 않고 새로 점검합니다.' },
+        ],
+      },
+      {
+        id: 'burp-suite', name: 'Burp Suite', base: '', joiner: '\n',
+        note: 'GUI 도구라 명령줄 대신 자주 쓰는 공격 모드·기능을 정리했습니다. Turbo Intruder 스크립트 템플릿은 아래 "목적별 권장 명령"에 있습니다.',
+        options: [
+          { id: 'sniper', flag: 'Sniper', label: 'Intruder — Sniper', description: '페이로드 위치 1곳에 워드리스트 하나를 순차 대입합니다(단일 파라미터 퍼징 기본값).' },
+          { id: 'battering-ram', flag: 'Battering ram', label: 'Intruder — Battering ram', description: '같은 페이로드를 여러 위치에 동시에 대입합니다(예: 여러 파라미터에 같은 XSS 페이로드).' },
+          { id: 'pitchfork', flag: 'Pitchfork', label: 'Intruder — Pitchfork', description: '여러 위치에 각각 다른 워드리스트를 같은 순번으로 짝지어 대입합니다(예: user:pass 쌍 파일).' },
+          { id: 'cluster-bomb', flag: 'Cluster bomb', label: 'Intruder — Cluster bomb', description: '여러 위치에 여러 워드리스트를 모든 조합으로 대입합니다(예: 사용자명×비밀번호 전수 조합).' },
+          { id: 'turbo-intruder-open', flag: 'Intruder 우클릭 → Extensions → Turbo Intruder', label: 'Turbo Intruder 실행 경로', description: '표준 Intruder보다 훨씬 빠르게 대량 요청을 보낼 때 사용합니다(스크립트는 아래 권장 명령 참고).' },
+          { id: 'match-replace', flag: 'Proxy → Match and Replace', label: '요청/응답 자동 치환', description: '특정 헤더·값을 모든 요청/응답에서 자동으로 바꿔 세션 유지·우회 테스트를 반복 설정 없이 수행합니다.' },
+          { id: 'collaborator', flag: 'Burp Collaborator', label: 'OOB 상호작용 탐지', description: 'SSRF·블라인드 XXE·커맨드 인젝션처럼 응답에 직접 드러나지 않는 취약점을 외부 콜백으로 탐지합니다.' },
         ],
       },
       {
