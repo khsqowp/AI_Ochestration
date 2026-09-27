@@ -141,7 +141,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       } catch { /* 개발 중 임시 연결 실패는 무시 */ }
     }
     void check()
-    const timer = window.setInterval(check, 5000)
+    // 5초 → 30초: 로그인만 하면 페이지 무관하게 영구히 도는 폴링이라 트래픽 기여가 큼.
+    // 새 배포 감지가 30초 늦어져도 문제없는 용도라 굳이 5초로 촘촘할 필요 없음.
+    const timer = window.setInterval(check, 30000)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -174,7 +176,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setTaskTracks(prev => Object.fromEntries(pairs.map(([id, events]) => [id, events ?? prev[id] ?? []])))
     }
     void refreshTracks()
-    const timer = window.setInterval(() => void refreshTracks(), 2000)
+    // 2초 → 8초: 사이드바 목록/미니 트랙 갱신용이라 초 단위 정밀도 불필요 — 지금 보고 있는
+    // 태스크의 실시간 이벤트 스트림은 위 activeTask 전용 poller(1.8초)가 별도로 담당한다.
+    const timer = window.setInterval(() => void refreshTracks(), 8000)
     return () => window.clearInterval(timer)
   }, [])
 
