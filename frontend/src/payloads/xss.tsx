@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import {
-  DISCLAIMER, Note, Pick, TextInput, Readout,
+  DISCLAIMER, NoteWithCopy, Pick, TextInput, Readout,
   jsStringConcat, hexEscape, unicodeEscape, base64Encode,
   htmlEntityDecimal, htmlEntityHex, urlEncodeAll,
 } from './shared'
+import xssScoutScript from './xssScoutScript.txt?raw'
 
 /* ── 1. 삽입 위치(컨텍스트) ────────────────────────────────────────
    각 컨텍스트는 벡터 앞에 붙일 breakout 접두사와, 벡터가 아니라
@@ -189,7 +190,7 @@ export function XssPayloadBuilder() {
   const showVector = !ctx.rawCode
 
   return <div className="payload-builder">
-    <Note>{DISCLAIMER}</Note>
+    <NoteWithCopy copyText={xssScoutScript} copyLabel="스카우트 스크립트 복사">{DISCLAIMER}</NoteWithCopy>
 
     <Pick label="1. 삽입 위치 (컨텍스트)" value={ctxId} onChange={setCtxId}
       options={CONTEXTS.map(c => ({ id: c.id, label: c.label }))}/>

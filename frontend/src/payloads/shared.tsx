@@ -91,6 +91,22 @@ export function Note({ children }: { children: ReactNode }) {
   return <p className="cheatsheet-note">{children}</p>
 }
 
+/** Note 옆에 "다른 텍스트를 클립보드로 복사" 버튼을 붙인 변형. 복사 대상(copyText)은
+ * 화면에 보이지 않고 버튼 클릭 시에만 클립보드에 들어간다. */
+export function NoteWithCopy({ children, copyText, copyLabel = '복사' }: {
+  children: ReactNode; copyText: string; copyLabel?: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    await navigator.clipboard.writeText(copyText)
+    setCopied(true); window.setTimeout(() => setCopied(false), 1500)
+  }
+  return <div className="cheatsheet-note-row">
+    <p className="cheatsheet-note">{children}</p>
+    <button className="cheatsheet-copy" onClick={copy}><Clipboard size={14}/>{copied ? '복사됨' : copyLabel}</button>
+  </div>
+}
+
 /** 결과 코드 블록 + 복사 버튼. 여러 개를 쌓아 렌더할 수 있다. */
 export function Readout({ title, value, wrap }: { title?: string; value: string; wrap?: 'anywhere' | 'pre' }) {
   const [copied, setCopied] = useState(false)
