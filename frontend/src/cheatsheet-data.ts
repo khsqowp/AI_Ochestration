@@ -42,6 +42,7 @@ export const CHEATSHEET_QUICK_STARTS: Record<string, CheatSheetQuickStart[]> = {
   nmap: [
     { id: 'service-inventory', label: '서비스 인벤토리', description: '상위 100개 포트에서 서비스와 버전을 낮은 부하로 확인한다.', command: 'nmap -sV --top-ports 100 --open -oN service-inventory.txt <TARGET>', expected: '열린 포트, 서비스명, 추정 버전이 service-inventory.txt에 저장된다.', caution: '승인된 IP·도메인만 입력하고, 운영 환경의 허용 시간·속도를 먼저 확인한다.' },
     { id: 'web-surface', label: '웹 서비스 확인', description: '이미 확인된 80·443 포트의 제목과 보안 헤더를 확인한다.', command: 'nmap -p 80,443 -sV --script http-title,http-headers -oN web-surface.txt <TARGET>', expected: 'HTTP 제목과 헤더가 web-surface.txt에 기록된다.', caution: '포트 발견 전 전체 스캔을 반복하지 말고, 범위에 포함된 웹 서비스에만 사용한다.' },
+    { id: 'tls-cipher-check', label: 'TLS/SSL 취약 버전·cipher 확인', description: 'SSL이 적용된 포트에서 지원하는 TLS 버전과 cipher suite 등급을 확인한다.', command: 'nmap -p [SSL 적용 포트] --script ssl-enum-ciphers -oN tls-check.txt <TARGET>', expected: '지원하는 TLS 버전·cipher suite 목록과 등급이 tls-check.txt에 기록된다.', caution: 'TLSv1.2 이하 지원 또는 B 이하 등급 cipher suite가 있으면 취약으로 판단한다. nmap으로 등급 판정이 애매하면 Burp Suite SSL Scanner, sslyze/sslscan, 또는 ssllabs.com 결과로 교차 확인한다.' },
   ],
   curl: [
     { id: 'capture-response', label: '응답·헤더 분리 저장', description: '화면이 아닌 실제 HTTP 응답을 본문과 헤더로 나눠 보관한다.', command: 'curl -sS -D response-headers.txt -o response-body.html -w "HTTP %{http_code} | %{time_total}s\\n" <URL>', expected: '상태 코드와 응답 시간이 화면에, 헤더·본문이 별도 파일에 남는다.', caution: '인증 쿠키나 Authorization 헤더를 명령·저장 파일·공유 로그에 남기지 않는다.' },
@@ -102,6 +103,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
       {
         id: 'csrf-payloads', name: 'CSRF PoC', base: '', options: [],
         note: 'GET/POST form/JSON 방식별 자동제출 PoC HTML 을 생성합니다.',
+      },
+      {
+        id: 'clickjacking-poc', name: 'Clickjacking PoC', base: '', options: [],
+        note: '대상 URL을 iframe으로 감싼 PoC HTML을 생성합니다. 로컬에서 열었을 때 대상 페이지가 그대로 로드되면 클릭재킹에 취약합니다.',
       },
     ],
   },

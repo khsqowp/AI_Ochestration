@@ -10,6 +10,7 @@ import { SsrfPayloadBuilder } from '../payloads/ssrf'
 import { CsrfPayloadBuilder } from '../payloads/csrf'
 import { SmartDecoderBuilder } from '../payloads/decoder'
 import { RainbowTableBuilder } from '../payloads/rainbow'
+import { ClickjackingPoCBuilder } from '../payloads/clickjacking'
 
 const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'xss-payloads': XssPayloadBuilder,
@@ -18,6 +19,7 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'csrf-payloads': CsrfPayloadBuilder,
   'smart-decoder': SmartDecoderBuilder,
   'rainbow-crack': RainbowTableBuilder,
+  'clickjacking-poc': ClickjackingPoCBuilder,
 }
 
 /* 치트시트 도구 하나를 곧장 보여주는 모달. 타일 그리드(DiagnosticsPage)에서 도구를 클릭하면
