@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The capture endpoint has zero authentication by design -- external services need to be able to
@@ -50,6 +51,23 @@ public class WebhookService {
 
   List<WebhookRequest> listRequests(UUID token) {
     return requests.findTop200ByBinIdOrderByReceivedAtDesc(token);
+  }
+
+  /** @return false if the request doesn't exist or belongs to a different bin -- callers must not
+   * be able to delete another bin's capture by guessing/reusing a request id. */
+  boolean deleteRequest(UUID token, UUID requestId) {
+    return requests.findById(requestId)
+        .filter(r -> r.getBinId().equals(token))
+        .map(r -> { requests.delete(r); return true; })
+        .orElse(false);
+  }
+
+  /** Custom derived deleteBy... queries don't get an implicit transaction the way
+   * CrudRepository's own delete(entity)/deleteAll(iterable) do -- without this, Hibernate throws
+   * TransactionRequiredException at call time. */
+  @Transactional
+  void clearRequests(UUID token) {
+    requests.deleteByBinId(token);
   }
 
   /** @return false if the bin doesn't exist or already expired -- caller responds 404 without storing anything. */

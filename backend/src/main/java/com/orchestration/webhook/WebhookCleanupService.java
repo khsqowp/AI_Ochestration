@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Sweeps expired bins (and their captured requests) daily -- the capture endpoint has zero auth,

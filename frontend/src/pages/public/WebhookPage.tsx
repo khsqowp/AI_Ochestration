@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Clipboard, RefreshCw, Webhook } from 'lucide-react'
+import { Clipboard, RefreshCw, Trash2, Webhook } from 'lucide-react'
 
 interface Bin { token: string; createdAt: string; expiresAt: string }
 interface CapturedRequest {
@@ -64,6 +64,18 @@ export function WebhookPage() {
     return () => window.clearInterval(timer)
   }, [token, load])
 
+  const deleteOne = async (id: string) => {
+    setRequests(rs => rs.filter(r => r.id !== id)) // optimistic — 폴링이 곧 서버 상태로 다시 맞춘다
+    try { await fetch(`/api/webhook/bins/${token}/requests/${id}`, { method: 'DELETE' }) } catch { void load() }
+  }
+
+  const deleteAll = async () => {
+    if (!token || requests.length === 0) return
+    if (!window.confirm(`캡처된 요청 ${requests.length}건을 전부 삭제할까요?`)) return
+    setRequests([])
+    try { await fetch(`/api/webhook/bins/${token}/requests`, { method: 'DELETE' }) } catch { void load() }
+  }
+
   if (!token) {
     return <div className="page webhook-page">
       <div className="webhook-head"><Webhook size={22}/><h1>웹훅 캐처</h1></div>
@@ -94,7 +106,10 @@ export function WebhookPage() {
 
     <div className="webhook-list-head">
       <span>캡처된 요청 ({requests.length})</span>
-      <button className="webhook-refresh" onClick={() => void load()}><RefreshCw size={14}/></button>
+      <div className="webhook-list-actions">
+        {requests.length > 0 && <button className="webhook-clear-all" onClick={() => void deleteAll()}><Trash2 size={13}/>전체 삭제</button>}
+        <button className="webhook-refresh" onClick={() => void load()}><RefreshCw size={14}/></button>
+      </div>
     </div>
 
     {requests.length === 0 && <p className="webhook-empty">아직 들어온 요청이 없다. 위 URL로 요청을 보내보면 여기 나타난다.</p>}
@@ -103,11 +118,14 @@ export function WebhookPage() {
       {requests.map(r => {
         const expanded = expandedId === r.id
         return <article className="webhook-request-card" key={r.id}>
-          <button className="webhook-request-head" onClick={() => setExpandedId(expanded ? null : r.id)}>
-            <span className={`webhook-method webhook-method-${r.method.toLowerCase()}`}>{r.method}</span>
-            <span className="webhook-path">{r.path}{r.queryString ? `?${r.queryString}` : ''}</span>
-            <span className="webhook-time">{new Date(r.receivedAt).toLocaleTimeString('ko-KR')}</span>
-          </button>
+          <div className="webhook-request-row">
+            <button className="webhook-request-head" onClick={() => setExpandedId(expanded ? null : r.id)}>
+              <span className={`webhook-method webhook-method-${r.method.toLowerCase()}`}>{r.method}</span>
+              <span className="webhook-path">{r.path}{r.queryString ? `?${r.queryString}` : ''}</span>
+              <span className="webhook-time">{new Date(r.receivedAt).toLocaleTimeString('ko-KR')}</span>
+            </button>
+            <button className="webhook-request-delete" title="이 요청 삭제" onClick={() => void deleteOne(r.id)}><Trash2 size={13}/></button>
+          </div>
           {expanded && <div className="webhook-request-body">
             <dl>
               <dt>시간</dt><dd>{new Date(r.receivedAt).toLocaleString('ko-KR')}</dd>

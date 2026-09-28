@@ -12,4 +12,6 @@ interface WebhookRequestRepository extends JpaRepository<WebhookRequest, UUID> {
   long countByBinId(UUID binId);
 
   void deleteByBinIdIn(List<UUID> binIds);
+
+  void deleteByBinId(UUID binId);
 }

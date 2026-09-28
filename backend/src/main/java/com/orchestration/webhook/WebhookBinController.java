@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,6 +47,20 @@ public class WebhookBinController {
   public List<RequestResponse> requests(@PathVariable UUID token) {
     if (service.findBin(token).isEmpty()) throw notFound();
     return service.listRequests(token).stream().map(r -> RequestResponse.from(r, objectMapper)).toList();
+  }
+
+  @DeleteMapping("/{token}/requests/{requestId}")
+  public void deleteOne(@PathVariable UUID token, @PathVariable UUID requestId) {
+    if (service.findBin(token).isEmpty()) throw notFound();
+    if (!service.deleteRequest(token, requestId)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "캡처된 요청을 찾을 수 없습니다.");
+    }
+  }
+
+  @DeleteMapping("/{token}/requests")
+  public void deleteAll(@PathVariable UUID token) {
+    if (service.findBin(token).isEmpty()) throw notFound();
+    service.clearRequests(token);
   }
 
   private static ResponseStatusException notFound() {
