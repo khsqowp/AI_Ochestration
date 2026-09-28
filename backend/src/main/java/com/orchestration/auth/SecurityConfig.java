@@ -81,6 +81,10 @@ class SecurityConfig {
         // 점심 룰렛 — 공개 페이지, 계정 없이 아무나 후보 등록·시작(/api/orders/mine과 동일 신뢰모델)
         .requestMatchers("/api/lunch-roulette/**").permitAll()
 
+        // 웹훅 캐처(webhook.site류) — 외부 서비스가 로그인 없이 콜백을 쏘는 게 핵심 기능이라 완전
+        // 공개. 랜덤 UUID 토큰 자체가 유일한 접근 통제(/api/orders/mine과 동일 신뢰모델).
+        .requestMatchers("/api/webhook/**").permitAll()
+
         // 랜딩 페이지 날씨 — 서울 고정, 방문자별로 다를 게 없어 서버가 한 번 받아서 캐싱해 공개로 내려준다
         .requestMatchers(HttpMethod.GET, "/api/public/weather").permitAll()
 

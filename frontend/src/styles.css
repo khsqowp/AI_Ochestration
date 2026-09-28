@@ -592,6 +592,36 @@
 .order-ident input[inputmode="numeric"] { min-width:110px; letter-spacing:.3em; font-variant-numeric:tabular-nums; }
 .order-btn { padding:9px 18px; border:0; border-radius:9px; background:#7667dc; color:#fff; font-weight:700; font-size:13px; cursor:pointer; }
 .order-btn:disabled { opacity:.45; cursor:not-allowed; }
+
+.webhook-page { max-width:900px; margin:0 auto; padding:32px 24px 64px; display:flex; flex-direction:column; gap:14px; }
+.webhook-head { display:flex; align-items:center; gap:10px; color:#3f3b47; }
+.webhook-head h1 { margin:0; font-size:24px; }
+.webhook-intro { color:#7a7686; font-size:13px; max-width:64ch; line-height:1.6; }
+.webhook-create-btn { align-self:flex-start; padding:10px 20px; border:0; border-radius:9px; background:#7667dc; color:#fff; font-weight:700; font-size:13px; cursor:pointer; }
+.webhook-create-btn:disabled { opacity:.45; cursor:not-allowed; }
+.webhook-error { color:#c0392b; font-size:13px; }
+.webhook-url-bar { display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:9px; background:#27242d; }
+.webhook-url-bar code { flex:1; min-width:0; overflow-x:auto; white-space:nowrap; color:#f7f4fb; font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace; }
+.webhook-url-bar button { flex:none; display:flex; align-items:center; gap:6px; padding:8px 12px; border:0; border-radius:8px; background:#eeecfc; color:#5d50ba; font-size:12px; font-weight:750; cursor:pointer; }
+.webhook-meta { color:#9a96a1; font-size:11.5px; }
+.webhook-list-head { display:flex; align-items:center; justify-content:space-between; margin-top:8px; font-size:13px; font-weight:700; color:#4b4654; }
+.webhook-refresh { border:0; background:transparent; color:#7667dc; cursor:pointer; display:flex; align-items:center; }
+.webhook-empty { color:#9a96a1; font-size:13px; padding:20px 0; }
+.webhook-request-list { display:flex; flex-direction:column; gap:8px; }
+.webhook-request-card { border:1px solid #eceaf0; border-radius:10px; overflow:hidden; }
+.webhook-request-head { display:flex; align-items:center; gap:10px; width:100%; padding:10px 12px; border:0; background:#fff; cursor:pointer; text-align:left; font-size:12.5px; }
+.webhook-request-head:hover { background:#f7f6fa; }
+.webhook-method { flex:none; padding:2px 8px; border-radius:5px; background:#efedf3; color:#5d50ba; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:700; }
+.webhook-method-post { background:#e8f3ec; color:#2f7a4f; }
+.webhook-method-delete { background:#fbeaea; color:#b6392f; }
+.webhook-path { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#3f3b47; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.webhook-time { flex:none; color:#9a96a1; font-variant-numeric:tabular-nums; }
+.webhook-request-body { padding:12px 14px; border-top:1px solid #eceaf0; background:#faf9fc; display:flex; flex-direction:column; gap:8px; }
+.webhook-request-body dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:0; font-size:12px; }
+.webhook-request-body dt { color:#9a96a1; }
+.webhook-request-body dd { margin:0; color:#3f3b47; word-break:break-all; }
+.webhook-request-body b { font-size:11px; color:#7a7686; text-transform:uppercase; letter-spacing:.06em; }
+.webhook-pre { margin:0; padding:10px 12px; border-radius:8px; background:#27242d; color:#f7f4fb; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; word-break:break-all; max-height:280px; overflow-y:auto; }
 .order-btn.ghost { background:#f1eefb; color:#5b4fc4; display:inline-flex; align-items:center; gap:6px; }
 .order-msg { font-size:13px; font-weight:600; margin:0; }
 .order-msg.ok { color:#2f9e5e; }

@@ -32,6 +32,7 @@ export function LandingPage() {
         <Bot size={18}/> <span>Orchestration Lab</span>
         <Link to="/order" className="landing-order-link">ORDER</Link>
         <Link to="/lunch" className="landing-order-link">LUNCH</Link>
+        <Link to="/webhook" className="landing-order-link">WEBHOOK</Link>
       </div>
       <div className="landing-foot">
         <div className="landing-clock">
