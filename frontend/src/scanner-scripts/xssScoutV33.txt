@@ -1,0 +1,5215 @@
+(async () => {
+  /*
+   * XSS Scout v3.3 add-on: passive DOM, controlled-form-marker, request-shape,
+   * and navigation observer.
+   * It records only metadata and masked previews. It does not inject a
+   * payload, navigate, alter request headers, or modify application state.
+   * Reload the page to remove the temporary observers.
+   */
+  const __XSS_SCOUT_DOM__ = (() => {
+    const MAX_EVENTS = 250;
+    const events = [];
+    const requestShapes = [];
+    const formMarkers = new Set();
+    const xhrMeta = new WeakMap();
+    const restores = [];
+    const hookStatus = Object.create(null);
+    const startedAt = Date.now();
+
+    const mask = value => {
+      const text = String(value ?? '');
+      if (!text) return '';
+      return `[masked:${text.length}]`;
+    };
+
+    const sourceValues = () => {
+      const values = new Set();
+      try {
+        const u = new URL(location.href);
+        for (const value of u.searchParams.values()) if (value) values.add(value);
+        if (u.hash.length > 1) values.add(decodeURIComponent(u.hash.slice(1)));
+      } catch { /* malformed location values are ignored */ }
+      for (const marker of formMarkers) values.add(marker);
+      return [...values].filter(value => value.length >= 3 && value.length <= 4096);
+    };
+
+    const routeLabel = value => {
+      try {
+        const u = new URL(value, location.href);
+        const names = [...new Set(u.searchParams.keys())];
+        return `${u.origin}${u.pathname}${names.length ? `?${names.map(name => `${encodeURIComponent(name)}=[redacted]`).join('&')}` : ''}`;
+      } catch { return '[unparseable-url]'; }
+    };
+
+    const bodyShape = body => {
+      if (body === undefined || body === null || body === '') return 'NONE';
+      if (body instanceof FormData) return `FORM_DATA(keys:${[...body.keys()].map(String).slice(0, 20).join(',')})`;
+      if (body instanceof URLSearchParams) return `URL_ENCODED(keys:${[...body.keys()].map(String).slice(0, 20).join(',')})`;
+      if (typeof body !== 'string') return `NON_TEXT(${body.constructor?.name || typeof body})`;
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed && typeof parsed === 'object') return `JSON(keys:${Object.keys(parsed).slice(0, 20).join(',')})`;
+      } catch { /* not JSON */ }
+      if (/^[^=&]+=[^&]*(?:&|$)/.test(body)) {
+        try { return `URL_ENCODED(keys:${[...new URLSearchParams(body).keys()].slice(0, 20).join(',')})`; } catch { /* fall through */ }
+      }
+      return `TEXT(length:${body.length})`;
+    };
+
+    const addRequestShape = (transport, method, value, body) => {
+      if (requestShapes.length >= MAX_EVENTS) return;
+      let sameOrigin = false;
+      try { sameOrigin = new URL(value, location.href).origin === location.origin; } catch { /* handled by route label */ }
+      if (!sameOrigin) return;
+      requestShapes.push({
+        Time: new Date().toISOString(), Transport: transport,
+        Method: String(method || 'GET').toUpperCase(), URL: routeLabel(value),
+        BodyShape: bodyShape(body),
+      });
+    };
+
+    const sourceMatch = value => {
+      const text = String(value ?? '');
+      const matched = sourceValues().some(source => text.includes(source));
+      return {
+        matched,
+        scoutMarker: /xss(?:scout|test)/i.test(text),
+      };
+    };
+
+    const add = (kind, detail = {}) => {
+      if (events.length >= MAX_EVENTS) return;
+      const probe = sourceMatch(detail.value);
+      events.push({
+        Time: new Date().toISOString(),
+        Kind: kind,
+        Target: detail.target || '',
+        Attribute: detail.attribute || '',
+        Value: mask(detail.value),
+        SourceMatch: probe.matched,
+        ScoutMarker: probe.scoutMarker,
+        Origin: detail.origin || '',
+        CrossOrigin: Boolean(detail.crossOrigin),
+      });
+    };
+
+    const patchMethod = (object, name, handler, label = name) => {
+      const original = object?.[name];
+      if (typeof original !== 'function') {
+        hookStatus[label] = 'UNAVAILABLE';
+        return false;
+      }
+      try {
+        object[name] = function (...args) {
+          try { handler.call(this, args); } catch { /* observation must never break page code */ }
+          return original.apply(this, args);
+        };
+        restores.push(() => { object[name] = original; });
+        hookStatus[label] = 'ACTIVE';
+        return true;
+      } catch {
+        hookStatus[label] = 'UNAVAILABLE';
+        return false;
+      }
+    };
+
+    const patchSetter = (prototype, name, kind, label = name) => {
+      try {
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+        if (!descriptor?.set || !descriptor.configurable) {
+          hookStatus[label] = 'UNAVAILABLE';
+          return false;
+        }
+        Object.defineProperty(prototype, name, {
+          configurable: true,
+          enumerable: descriptor.enumerable,
+          get: descriptor.get,
+          set(value) {
+            add(kind, { target: this?.tagName || prototype.constructor?.name || '', value });
+            return descriptor.set.call(this, value);
+          },
+        });
+        restores.push(() => Object.defineProperty(prototype, name, descriptor));
+        hookStatus[label] = 'ACTIVE';
+        return true;
+      } catch {
+        hookStatus[label] = 'UNAVAILABLE';
+        return false;
+      }
+    };
+
+    patchSetter(Element.prototype, 'innerHTML', 'HTML_SINK_INNER_HTML', 'Element.innerHTML');
+    patchSetter(Element.prototype, 'outerHTML', 'HTML_SINK_OUTER_HTML', 'Element.outerHTML');
+    if (typeof ShadowRoot !== 'undefined') {
+      patchSetter(ShadowRoot.prototype, 'innerHTML', 'HTML_SINK_SHADOW_ROOT_INNER_HTML', 'ShadowRoot.innerHTML');
+    }
+    patchMethod(Element.prototype, 'insertAdjacentHTML', function (args) {
+      add('HTML_SINK_INSERT_ADJACENT_HTML', { target: this?.tagName || '', value: args[1] });
+    }, 'Element.insertAdjacentHTML');
+    patchMethod(Element.prototype, 'setAttribute', function (args) {
+      const attribute = String(args[0] || '').toLowerCase();
+      if (attribute.startsWith('on') || ['srcdoc', 'href', 'src', 'action', 'formaction'].includes(attribute)) {
+        add('ATTRIBUTE_OR_URL_SINK', { target: this?.tagName || '', attribute, value: args[1] });
+      }
+    }, 'Element.setAttribute');
+    patchMethod(Document.prototype, 'write', function (args) {
+      add('HTML_SINK_DOCUMENT_WRITE', { target: 'DOCUMENT', value: args.join('') });
+    }, 'Document.write');
+    patchMethod(Document.prototype, 'writeln', function (args) {
+      add('HTML_SINK_DOCUMENT_WRITELN', { target: 'DOCUMENT', value: args.join('') });
+    }, 'Document.writeln');
+    patchMethod(globalThis.DOMParser?.prototype, 'parseFromString', function (args) {
+      add('HTML_SINK_DOMPARSER', { target: 'DOMPARSER', value: args[0] });
+    }, 'DOMParser.parseFromString');
+    patchMethod(globalThis.Range?.prototype, 'createContextualFragment', function (args) {
+      add('HTML_SINK_CONTEXTUAL_FRAGMENT', { target: 'RANGE', value: args[0] });
+    }, 'Range.createContextualFragment');
+    patchMethod(Element.prototype, 'setHTMLUnsafe', function (args) {
+      add('HTML_SINK_SET_HTML_UNSAFE', { target: this?.tagName || '', value: args[0] });
+    }, 'Element.setHTMLUnsafe');
+    if (typeof ShadowRoot !== 'undefined') {
+      patchMethod(ShadowRoot.prototype, 'setHTMLUnsafe', function (args) {
+        add('HTML_SINK_SET_HTML_UNSAFE', { target: 'SHADOW_ROOT', value: args[0] });
+      }, 'ShadowRoot.setHTMLUnsafe');
+    }
+    patchMethod(window, 'open', function (args) {
+      const value = args[0];
+      let crossOrigin = false;
+      try { crossOrigin = value ? new URL(value, location.href).origin !== location.origin : false; } catch { /* invalid URL */ }
+      add('WINDOW_OPEN', { target: 'WINDOW', value, crossOrigin });
+    }, 'window.open');
+    patchMethod(window, 'setTimeout', function (args) {
+      if (typeof args[0] === 'string') add('STRING_TIMER_SINK', { target: 'WINDOW', value: args[0] });
+    }, 'window.setTimeout');
+    patchMethod(window, 'setInterval', function (args) {
+      if (typeof args[0] === 'string') add('STRING_TIMER_SINK', { target: 'WINDOW', value: args[0] });
+    }, 'window.setInterval');
+
+    window.addEventListener('message', event => {
+      const value = typeof event.data === 'string' ? event.data : JSON.stringify(Object.keys(event.data || {}));
+      add('POSTMESSAGE_RECEIVED', {
+        target: 'WINDOW', value, origin: event.origin,
+        crossOrigin: Boolean(event.origin && event.origin !== location.origin),
+      });
+    }, true);
+
+    const registerControlledMarker = event => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+      if (target instanceof HTMLInputElement && target.type === 'password') return;
+      const value = String(target.value || '');
+      const markers = value.match(/\bXSSSCOUT_[A-Z0-9_-]{3,128}\b/gi) || [];
+      for (const marker of markers) formMarkers.add(marker);
+      if (markers.length) add('FORM_CONTROLLED_MARKER', { target: target.tagName, attribute: target.name || target.id || '', value });
+    };
+    document.addEventListener('input', registerControlledMarker, true);
+    document.addEventListener('change', registerControlledMarker, true);
+    document.addEventListener('submit', event => {
+      event.target?.querySelectorAll?.('input, textarea, select').forEach(control => registerControlledMarker({ target: control }));
+    }, true);
+    document.querySelectorAll('input, textarea, select').forEach(control => registerControlledMarker({ target: control }));
+
+    patchMethod(window, 'fetch', function (args) {
+      const [input, init = {}] = args;
+      const method = init.method || (input instanceof Request ? input.method : 'GET');
+      const url = input instanceof Request ? input.url : input;
+      addRequestShape('FETCH', method, url, init.body);
+    }, 'window.fetch');
+    patchMethod(XMLHttpRequest.prototype, 'open', function (args) {
+      xhrMeta.set(this, { method: args[0], url: args[1] });
+    }, 'XMLHttpRequest.open');
+    patchMethod(XMLHttpRequest.prototype, 'send', function (args) {
+      const meta = xhrMeta.get(this) || {};
+      addRequestShape('XHR', meta.method || 'GET', meta.url || location.href, args[0]);
+    }, 'XMLHttpRequest.send');
+
+    const classify = event => {
+      const htmlSink = event.Kind.startsWith('HTML_SINK');
+      if (htmlSink && event.SourceMatch && event.ScoutMarker) return 'HIGH';
+      if (htmlSink && event.SourceMatch) return 'MEDIUM';
+      if (htmlSink || event.Kind === 'STRING_TIMER_SINK') return 'LOW';
+      if (event.Kind === 'WINDOW_OPEN' && event.CrossOrigin) return 'LOW';
+      return 'INFO';
+    };
+
+    return {
+      version: '3.3', startedAt, events, requestShapes, hookStatus,
+      summary() {
+        const rows = events.map(event => ({ ...event, Signal: classify(event) }));
+        return {
+          total: rows.length,
+          high: rows.filter(row => row.Signal === 'HIGH'),
+          medium: rows.filter(row => row.Signal === 'MEDIUM'),
+          low: rows.filter(row => row.Signal === 'LOW'),
+          info: rows.filter(row => row.Signal === 'INFO'),
+          rows,
+          requestShapes: [...requestShapes],
+          stateChangingRequestShapes: requestShapes.filter(row => !['GET', 'HEAD', 'OPTIONS'].includes(row.Method)),
+          controlledInputMarkerCount: formMarkers.size,
+          hookStatus: { ...hookStatus },
+          activeHookCount: Object.values(hookStatus).filter(status => status === 'ACTIVE').length,
+          unavailableHooks: Object.entries(hookStatus).filter(([, status]) => status !== 'ACTIVE').map(([hook]) => hook),
+        };
+      },
+      stop() { restores.splice(0).reverse().forEach(restore => restore()); },
+    };
+  })();
+
+  // ============================================================
+  // XSS SCOUT v2.8
+  //
+  // GENERALIZED GET REPLAY + RESPONSE STATE
+  // + RESYNC CHARACTER-LEVEL TRANSFORMATION ANALYSIS
+  //
+  // 핵심:
+  //   1. CURRENT / NAVIGATION / RESOURCE(fetch/XHR) Discovery
+  //   2. query parameter 이름 기반 제외 없음
+  //   3. UNKNOWN RESOURCE → GET Baseline Probe
+  //   4. parameter 하나씩 mutation
+  //   5. HTTP / Content-Type / Length 변화 분석
+  //   6. marker reflection 탐지
+  //   7. SPECIAL 문자 단위 변환 분석
+  //   8. 중간 문자가 제거/변환돼도 다음 문자에서 resync
+  //
+  // 사이트/서비스/Endpoint별 blacklist 없음
+  // ============================================================
+
+
+  // ============================================================
+  // CONFIG
+  // ============================================================
+
+  const CONFIG = {
+
+    SPECIAL:
+      `<>;:'"\``,
+
+    TIMEOUT:
+      10000,
+
+    LENGTH_DIFF_THRESHOLD:
+      500,
+
+    LENGTH_DIFF_RATIO_THRESHOLD:
+      0.10,
+
+    TEST_SAME_ORIGIN:
+      true,
+
+    // Active mutations never leave the current origin by default.
+    // Set true only for an explicitly authorized multi-origin test scope.
+    TEST_CROSS_ORIGIN:
+      false,
+
+    STATIC_EXT:
+      /\.(?:js|css|png|jpe?g|gif|svg|webp|ico|woff2?|woff|ttf|eot|map|mp4|webm|mp3|pdf)$/i,
+
+    SKIP_CONTENT_TYPE:
+      /^(?:text\/css|image\/|font\/|audio\/|video\/|application\/font|application\/octet-stream)/i,
+
+    METHOD_REJECT_STATUS:
+      new Set([
+        405,
+        501
+      ]),
+
+    TRANSFORM_LOOKAHEAD:
+      300,
+
+    RESYNC_LOOKAHEAD:
+      80
+  };
+
+
+  // ============================================================
+  // PARAMETER
+  // ============================================================
+
+  function getParameters(url) {
+
+    const params = [];
+
+    for (
+      const [name]
+      of url.searchParams.entries()
+    ) {
+
+      if (!name) {
+        continue;
+      }
+
+      params.push(name);
+    }
+
+    return [
+      ...new Set(params)
+    ];
+  }
+
+
+  function getOriginalValues(
+    url,
+    parameter
+  ) {
+
+    return url.searchParams.getAll(
+      parameter
+    );
+  }
+
+
+  // ============================================================
+  // HTTP STATUS CLASS
+  // ============================================================
+
+  function classifyStatus(status) {
+
+    if (
+      status >= 200 &&
+      status < 300
+    ) {
+      return 'SUCCESS';
+    }
+
+    if (
+      status >= 300 &&
+      status < 400
+    ) {
+      return 'REDIRECT';
+    }
+
+    if (
+      status >= 400 &&
+      status < 500
+    ) {
+      return 'CLIENT_ERROR';
+    }
+
+    if (
+      status >= 500 &&
+      status < 600
+    ) {
+      return 'SERVER_ERROR';
+    }
+
+    return 'OTHER';
+  }
+
+
+  function isErrorClass(statusClass) {
+
+    return (
+      statusClass === 'CLIENT_ERROR' ||
+      statusClass === 'SERVER_ERROR'
+    );
+  }
+
+
+  // ============================================================
+  // CONTENT TYPE
+  // ============================================================
+
+  function normalizeContentType(contentType) {
+
+    return String(
+      contentType || ''
+    )
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+  }
+
+
+  function getContentTypeTransition(
+    baselineType,
+    testedType
+  ) {
+
+    const from =
+      normalizeContentType(
+        baselineType
+      );
+
+    const to =
+      normalizeContentType(
+        testedType
+      );
+
+    if (
+      from === to
+    ) {
+      return 'STABLE';
+    }
+
+    return `${from || '(none)'} → ${to || '(none)'}`;
+  }
+
+
+  // ============================================================
+  // FETCH
+  // ============================================================
+
+  async function fetchGET(url) {
+
+    const controller =
+      new AbortController();
+
+    const timer =
+      setTimeout(
+        () => controller.abort(),
+        CONFIG.TIMEOUT
+      );
+
+    try {
+
+      return await fetch(
+        url,
+        {
+          method:
+            'GET',
+
+          credentials:
+            'include',
+
+          cache:
+            'no-store',
+
+          redirect:
+            'follow',
+
+          signal:
+            controller.signal
+        }
+      );
+
+    } finally {
+
+      clearTimeout(timer);
+    }
+  }
+
+
+  // ============================================================
+  // RESPONSE
+  // ============================================================
+
+  async function readResponse(response) {
+
+    const contentType =
+      response.headers.get(
+        'content-type'
+      ) || '';
+
+    const body =
+      await response.text();
+
+    return {
+
+      status:
+        response.status,
+
+      statusClass:
+        classifyStatus(
+          response.status
+        ),
+
+      ok:
+        response.ok,
+
+      redirected:
+        response.redirected,
+
+      finalURL:
+        response.url,
+
+      contentType,
+
+      normalizedContentType:
+        normalizeContentType(
+          contentType
+        ),
+
+      body,
+
+      length:
+        body.length
+    };
+  }
+
+
+  // ============================================================
+  // CONTEXT
+  // ============================================================
+
+  function getContext(
+    body,
+    marker,
+    before = 150,
+    after = 300
+  ) {
+
+    const index =
+      body.indexOf(marker);
+
+    if (
+      index === -1
+    ) {
+      return '(NOT FOUND)';
+    }
+
+    return body
+      .substring(
+
+        Math.max(
+          0,
+          index - before
+        ),
+
+        Math.min(
+          body.length,
+          index +
+          marker.length +
+          after
+        )
+      )
+
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t');
+  }
+
+
+  // ============================================================
+  // REFLECTION POSITIONS
+  // ============================================================
+
+  function findMarkerPositions(
+    body,
+    marker
+  ) {
+
+    const positions = [];
+
+    let offset = 0;
+
+    while (true) {
+
+      const index =
+        body.indexOf(
+          marker,
+          offset
+        );
+
+      if (
+        index === -1
+      ) {
+        break;
+      }
+
+      positions.push(index);
+
+      offset =
+        index +
+        marker.length;
+    }
+
+    return positions;
+  }
+
+
+  // ============================================================
+  // CHARACTER ENCODINGS
+  // ============================================================
+
+  const CHAR_ENCODINGS = {
+
+    '<': {
+
+      HTML_ENTITY: [
+        '&lt;',
+        '&#60;',
+        '&#060;',
+        '&#x3c;',
+        '&#x03c;'
+      ],
+
+      JSON_ESCAPE: [
+        '\\u003c',
+        '\\u003C'
+      ],
+
+      JS_ESCAPE: [
+        '\\x3c',
+        '\\x3C'
+      ],
+
+      URL_ENCODED: [
+        '%3c',
+        '%3C'
+      ]
+    },
+
+
+    '>': {
+
+      HTML_ENTITY: [
+        '&gt;',
+        '&#62;',
+        '&#062;',
+        '&#x3e;',
+        '&#x03e;'
+      ],
+
+      JSON_ESCAPE: [
+        '\\u003e',
+        '\\u003E'
+      ],
+
+      JS_ESCAPE: [
+        '\\x3e',
+        '\\x3E'
+      ],
+
+      URL_ENCODED: [
+        '%3e',
+        '%3E'
+      ]
+    },
+
+
+    ';': {
+
+      HTML_ENTITY: [
+        '&#59;',
+        '&#059;',
+        '&#x3b;',
+        '&#x03b;'
+      ],
+
+      JSON_ESCAPE: [
+        '\\u003b',
+        '\\u003B'
+      ],
+
+      URL_ENCODED: [
+        '%3b',
+        '%3B'
+      ]
+    },
+
+
+    ':': {
+
+      HTML_ENTITY: [
+        '&#58;',
+        '&#058;',
+        '&#x3a;',
+        '&#x03a;'
+      ],
+
+      JSON_ESCAPE: [
+        '\\u003a',
+        '\\u003A'
+      ],
+
+      URL_ENCODED: [
+        '%3a',
+        '%3A'
+      ]
+    },
+
+
+    "'": {
+
+      HTML_ENTITY: [
+        '&#39;',
+        '&#039;',
+        '&#x27;',
+        '&#x027;',
+        '&apos;'
+      ],
+
+      JSON_ESCAPE: [
+        "\\'",
+        '\\u0027'
+      ],
+
+      URL_ENCODED: [
+        '%27'
+      ]
+    },
+
+
+    '"': {
+
+      HTML_ENTITY: [
+        '&quot;',
+        '&#34;',
+        '&#034;',
+        '&#x22;',
+        '&#x022;'
+      ],
+
+      JSON_ESCAPE: [
+        '\\"',
+        '\\u0022'
+      ],
+
+      URL_ENCODED: [
+        '%22'
+      ]
+    },
+
+
+    '`': {
+
+      HTML_ENTITY: [
+        '&#96;',
+        '&#096;',
+        '&#x60;',
+        '&#x060;'
+      ],
+
+      JSON_ESCAPE: [
+        '\\u0060'
+      ],
+
+      URL_ENCODED: [
+        '%60'
+      ]
+    }
+  };
+
+
+  // ============================================================
+  // REPRESENTATION LIST
+  // ============================================================
+
+  function getRepresentations(character) {
+
+    const representations = [
+
+      {
+        status:
+          'RAW',
+
+        representation:
+          character
+      }
+    ];
+
+    const definitions =
+      CHAR_ENCODINGS[character] || {};
+
+    for (
+      const [
+        encoding,
+        values
+      ]
+      of Object.entries(definitions)
+    ) {
+
+      for (
+        const value
+        of values
+      ) {
+
+        representations.push({
+
+          status:
+            encoding,
+
+          representation:
+            value
+        });
+      }
+    }
+
+    return representations;
+  }
+
+
+  // ============================================================
+  // CHARACTER MATCH
+  // ============================================================
+
+  function matchCharacter(
+    text,
+    offset,
+    character
+  ) {
+
+    const representations =
+      getRepresentations(
+        character
+      );
+
+    for (
+      const item
+      of representations
+    ) {
+
+      if (
+        text.startsWith(
+          item.representation,
+          offset
+        )
+      ) {
+
+        return {
+
+          status:
+            item.status,
+
+          representation:
+            item.representation,
+
+          position:
+            offset,
+
+          skipped:
+            0,
+
+          consumed:
+            item.representation.length
+        };
+      }
+    }
+
+    return null;
+  }
+
+
+  // ============================================================
+  // RESYNC SEARCH
+  // ============================================================
+
+  function findCharacterAhead(
+    text,
+    offset,
+    character
+  ) {
+
+    const representations =
+      getRepresentations(
+        character
+      );
+
+    const searchEnd =
+      Math.min(
+        text.length,
+        offset +
+        CONFIG.RESYNC_LOOKAHEAD
+      );
+
+    let best = null;
+
+    for (
+      const item
+      of representations
+    ) {
+
+      const index =
+        text.indexOf(
+          item.representation,
+          offset
+        );
+
+      if (
+        index === -1 ||
+        index >= searchEnd
+      ) {
+
+        continue;
+      }
+
+      if (
+        !best ||
+        index < best.position ||
+        (
+          index === best.position &&
+          item.representation.length >
+          best.representation.length
+        )
+      ) {
+
+        best = {
+
+          status:
+            item.status,
+
+          representation:
+            item.representation,
+
+          position:
+            index,
+
+          skipped:
+            index - offset,
+
+          consumed:
+            item.representation.length
+        };
+      }
+    }
+
+    return best;
+  }
+
+
+  // ============================================================
+  // NEXT CHARACTER RESYNC
+  // ============================================================
+
+  function findNextExpectedCharacter(
+    text,
+    offset,
+    specialCharacters,
+    currentIndex
+  ) {
+
+    let best = null;
+
+    for (
+      let i =
+        currentIndex + 1;
+
+      i <
+        specialCharacters.length;
+
+      i++
+    ) {
+
+      const character =
+        specialCharacters[i];
+
+      const match =
+        findCharacterAhead(
+          text,
+          offset,
+          character
+        );
+
+      if (!match) {
+        continue;
+      }
+
+      if (
+        !best ||
+        match.position <
+        best.match.position
+      ) {
+
+        best = {
+
+          characterIndex:
+            i,
+
+          character,
+
+          match
+        };
+      }
+    }
+
+    return best;
+  }
+
+
+  // ============================================================
+  // RESYNC CHARACTER ANALYSIS
+  // ============================================================
+
+  function analyzeReflectionAt(
+    body,
+    marker,
+    markerPosition
+  ) {
+
+    const start =
+      markerPosition +
+      marker.length;
+
+    const segment =
+      body.substring(
+        start,
+        Math.min(
+          body.length,
+          start +
+          CONFIG.TRANSFORM_LOOKAHEAD
+        )
+      );
+
+    const characters =
+      [...CONFIG.SPECIAL];
+
+    const map = [];
+
+    let offset = 0;
+
+    let resyncCount = 0;
+
+
+    for (
+      let i = 0;
+      i < characters.length;
+      i++
+    ) {
+
+      const character =
+        characters[i];
+
+
+      // ----------------------------------------------------------
+      // 1. 현재 위치에서 정상 match
+      // ----------------------------------------------------------
+
+      const direct =
+        matchCharacter(
+          segment,
+          offset,
+          character
+        );
+
+
+      if (
+        direct
+      ) {
+
+        map.push({
+
+          Character:
+            character,
+
+          Status:
+            direct.status,
+
+          Representation:
+            direct.representation,
+
+          Position:
+            direct.position,
+
+          Skipped:
+            0,
+
+          Resynced:
+            false
+        });
+
+
+        offset =
+          direct.position +
+          direct.consumed;
+
+
+        continue;
+      }
+
+
+      // ----------------------------------------------------------
+      // 2. 현재 문자가 약간 뒤에서 발견되는지 확인
+      //
+      // 단순히 뒤에서 발견됐다고 바로 해당 문자라고 판단하면
+      // 주변 HTML/JSON 문자와 혼동할 수 있으므로,
+      // RESYNC_LOOKAHEAD 안에서만 제한적으로 탐색한다.
+      // ----------------------------------------------------------
+
+      const ahead =
+        findCharacterAhead(
+          segment,
+          offset,
+          character
+        );
+
+
+      // ----------------------------------------------------------
+      // 3. 다음 기대 문자 위치도 확인
+      // ----------------------------------------------------------
+
+      const nextExpected =
+        findNextExpectedCharacter(
+          segment,
+          offset,
+          characters,
+          i
+        );
+
+
+      /*
+       * 현재 문자의 representation이 먼저 나온다면:
+       *
+       *   unexpected bytes + current character
+       *
+       * 로 판단하고 현재 문자에 resync.
+       */
+
+      if (
+        ahead &&
+        (
+          !nextExpected ||
+          ahead.position <
+          nextExpected.match.position
+        )
+      ) {
+
+        map.push({
+
+          Character:
+            character,
+
+          Status:
+            ahead.status,
+
+          Representation:
+            ahead.representation,
+
+          Position:
+            ahead.position,
+
+          Skipped:
+            ahead.skipped,
+
+          Resynced:
+            true
+        });
+
+
+        offset =
+          ahead.position +
+          ahead.consumed;
+
+
+        resyncCount++;
+
+
+        continue;
+      }
+
+
+      /*
+       * 다음 기대 문자가 먼저 발견되면
+       * 현재 문자는 응답 sequence에서 사라진 것으로 본다.
+       *
+       * REMOVED라고 확정하지 않고 MISSING으로만 기록한다.
+       */
+
+      if (
+        nextExpected
+      ) {
+
+        map.push({
+
+          Character:
+            character,
+
+          Status:
+            'MISSING',
+
+          Representation:
+            '',
+
+          Position:
+            offset,
+
+          Skipped:
+            nextExpected.match.position -
+            offset,
+
+          Resynced:
+            true
+        });
+
+
+        /*
+         * offset은 건드리지 않는다.
+         *
+         * 다음 loop에서 next character가 현재 offset 이후에서
+         * 다시 정상적으로 탐색된다.
+         */
+
+        resyncCount++;
+
+
+        continue;
+      }
+
+
+      // ----------------------------------------------------------
+      // 4. 이후 기대 문자도 발견되지 않음
+      // ----------------------------------------------------------
+
+      map.push({
+
+        Character:
+          character,
+
+        Status:
+          'MISSING_OR_TRUNCATED',
+
+        Representation:
+          segment.substring(
+            offset,
+            offset + 20
+          ),
+
+        Position:
+          offset,
+
+        Skipped:
+          0,
+
+        Resynced:
+          false
+      });
+    }
+
+
+    return {
+
+      markerPosition,
+
+      reflectedSegment:
+        segment.substring(
+          0,
+          Math.min(
+            segment.length,
+            150
+          )
+        ),
+
+      resyncCount,
+
+      charMap:
+        map
+    };
+  }
+
+
+  // ============================================================
+  // AGGREGATE CHARACTER MAP
+  // ============================================================
+
+  function aggregateCharMap(
+    reflectionAnalyses
+  ) {
+
+    const aggregate = {};
+
+
+    for (
+      const character
+      of CONFIG.SPECIAL
+    ) {
+
+      aggregate[character] = {
+
+        RAW:
+          0,
+
+        HTML_ENTITY:
+          0,
+
+        JSON_ESCAPE:
+          0,
+
+        JS_ESCAPE:
+          0,
+
+        URL_ENCODED:
+          0,
+
+        MISSING:
+          0,
+
+        MISSING_OR_TRUNCATED:
+          0
+      };
+    }
+
+
+    for (
+      const analysis
+      of reflectionAnalyses
+    ) {
+
+      for (
+        const item
+        of analysis.charMap
+      ) {
+
+        if (
+          aggregate[item.Character] &&
+          aggregate[item.Character][item.Status] !== undefined
+        ) {
+
+          aggregate[item.Character][item.Status]++;
+        }
+      }
+    }
+
+
+    return aggregate;
+  }
+
+
+  // ============================================================
+  // TRANSFORMATION CLASS
+  // ============================================================
+
+  function classifyTransformation(
+    reflectionAnalyses
+  ) {
+
+    if (
+      !reflectionAnalyses.length
+    ) {
+
+      return 'NOT_REFLECTED';
+    }
+
+
+    const statuses =
+      reflectionAnalyses.flatMap(
+        analysis =>
+          analysis.charMap.map(
+            item =>
+              item.Status
+          )
+      );
+
+
+    if (
+      statuses.length &&
+      statuses.every(
+        status =>
+          status === 'RAW'
+      )
+    ) {
+
+      return 'RAW';
+    }
+
+
+    const rawCount =
+      statuses.filter(
+        status =>
+          status === 'RAW'
+      ).length;
+
+
+    const encodedStatuses =
+      statuses.filter(
+        status =>
+          status === 'HTML_ENTITY' ||
+          status === 'JSON_ESCAPE' ||
+          status === 'JS_ESCAPE' ||
+          status === 'URL_ENCODED'
+      );
+
+
+    const missingStatuses =
+      statuses.filter(
+        status =>
+          status === 'MISSING' ||
+          status === 'MISSING_OR_TRUNCATED'
+      );
+
+
+    if (
+      encodedStatuses.length &&
+      !rawCount &&
+      !missingStatuses.length
+    ) {
+
+      const encodingTypes =
+        new Set(
+          encodedStatuses
+        );
+
+
+      if (
+        encodingTypes.size === 1
+      ) {
+
+        return [
+          ...encodingTypes
+        ][0];
+      }
+
+
+      return 'FULL_ENCODED_MIXED';
+    }
+
+
+    if (
+      encodedStatuses.length &&
+      rawCount &&
+      !missingStatuses.length
+    ) {
+
+      return 'PARTIAL_ENCODED';
+    }
+
+
+    if (
+      missingStatuses.length &&
+      !rawCount &&
+      !encodedStatuses.length
+    ) {
+
+      return 'FILTERED_OR_TRUNCATED';
+    }
+
+
+    if (
+      missingStatuses.length &&
+      (
+        rawCount ||
+        encodedStatuses.length
+      )
+    ) {
+
+      return 'PARTIAL_FILTERED';
+    }
+
+
+    return 'OTHER_TRANSFORM';
+  }
+
+
+  // ============================================================
+  // CHARACTER SUMMARY
+  // ============================================================
+
+  function getCharacterSummary(
+    reflectionAnalyses
+  ) {
+
+    if (
+      !reflectionAnalyses.length
+    ) {
+
+      return '-';
+    }
+
+
+    const first =
+      reflectionAnalyses[0];
+
+
+    return first.charMap
+      .map(
+        item => {
+
+          const suffix =
+            item.Resynced
+              ? `@+${item.Skipped}`
+              : '';
+
+          return (
+            `${item.Character}:${item.Status}${suffix}`
+          );
+        }
+      )
+      .join(' | ');
+  }
+
+
+  // ============================================================
+  // HTML CONTEXT
+  // ============================================================
+
+  function classifyHtmlContext(
+    body,
+    marker
+  ) {
+
+    const index =
+      body.indexOf(marker);
+
+
+    if (
+      index === -1
+    ) {
+
+      return 'NOT_REFLECTED';
+    }
+
+
+    const before =
+      body.substring(
+        0,
+        index
+      );
+
+
+    const lower =
+      before.toLowerCase();
+
+
+    const scriptStart =
+      lower.lastIndexOf('<script');
+
+    if (
+      scriptStart >
+      lower.lastIndexOf('</script')
+    ) {
+
+      const tagEnd =
+        lower.indexOf('>', scriptStart);
+
+      const openingTag =
+        tagEnd === -1
+          ? lower.substring(scriptStart)
+          : lower.substring(scriptStart, tagEnd + 1);
+
+      if (
+        /type\s*=\s*["']?(?:application\/(?:ld\+)?json|importmap|speculationrules)/i.test(
+          openingTag
+        )
+      ) {
+
+        return 'SCRIPT_DATA';
+      }
+
+      return 'SCRIPT';
+    }
+
+
+    if (
+      lower.lastIndexOf('<style') >
+      lower.lastIndexOf('</style')
+    ) {
+
+      return 'STYLE';
+    }
+
+
+    const lastLT =
+      before.lastIndexOf('<');
+
+
+    const lastGT =
+      before.lastIndexOf('>');
+
+
+    if (
+      lastLT >
+      lastGT
+    ) {
+
+      const fragment =
+        before.substring(
+          lastLT
+        );
+
+
+      const dq =
+        (
+          fragment.match(/"/g) ||
+          []
+        ).length;
+
+
+      const sq =
+        (
+          fragment.match(/'/g) ||
+          []
+        ).length;
+
+
+      if (
+        dq % 2 === 1
+      ) {
+
+        return 'HTML_ATTRIBUTE_DQ';
+      }
+
+
+      if (
+        sq % 2 === 1
+      ) {
+
+        return 'HTML_ATTRIBUTE_SQ';
+      }
+
+
+      return 'HTML_ATTRIBUTE_UNQUOTED';
+    }
+
+
+    return 'HTML_TEXT';
+  }
+
+
+  // ============================================================
+  // CONTEXT CLASSIFIER
+  // ============================================================
+
+  function classifyContext(
+    body,
+    marker,
+    contentType
+  ) {
+
+    if (
+      !body.includes(marker)
+    ) {
+
+      return 'NOT_REFLECTED';
+    }
+
+
+    const type =
+      normalizeContentType(
+        contentType
+      );
+
+
+    if (
+      type.includes('json') ||
+      type.includes('+json')
+    ) {
+
+      return 'JSON';
+    }
+
+
+    if (
+      type.includes('javascript') ||
+      type.includes('ecmascript')
+    ) {
+
+      return 'SCRIPT';
+    }
+
+
+    if (
+      type.includes('html') ||
+      type.includes('xhtml')
+    ) {
+
+      return classifyHtmlContext(
+        body,
+        marker
+      );
+    }
+
+
+    if (
+      type.startsWith('text/')
+    ) {
+
+      return 'TEXT';
+    }
+
+
+    return 'UNKNOWN';
+  }
+
+
+  // ============================================================
+  // VALUE TYPE
+  // ============================================================
+
+  function inferValueType(value) {
+
+    if (
+      value === ''
+    ) {
+
+      return 'EMPTY';
+    }
+
+
+    if (
+      /^(?:true|false)$/i.test(value)
+    ) {
+
+      return 'BOOLEAN';
+    }
+
+
+    if (
+      /^-?(?:\d+|\d*\.\d+)$/.test(value)
+    ) {
+
+      return 'NUMBER';
+    }
+
+
+    return 'STRING';
+  }
+
+
+  // ============================================================
+  // LENGTH ANALYSIS
+  // ============================================================
+
+  function getLengthAnalysis(
+    baselineLength,
+    testedLength
+  ) {
+
+    const diff =
+      testedLength -
+      baselineLength;
+
+
+    const absoluteDiff =
+      Math.abs(
+        diff
+      );
+
+
+    const ratio =
+      baselineLength > 0
+        ? absoluteDiff /
+          baselineLength
+        : (
+            absoluteDiff > 0
+              ? 1
+              : 0
+          );
+
+
+    const significant =
+      absoluteDiff >
+        CONFIG.LENGTH_DIFF_THRESHOLD &&
+
+      ratio >
+        CONFIG.LENGTH_DIFF_RATIO_THRESHOLD;
+
+
+    return {
+
+      diff,
+
+      ratio,
+
+      significant
+    };
+  }
+
+
+  // ============================================================
+  // RESULT CLASSIFIER
+  // ============================================================
+
+  function classifyResult({
+
+    baseline,
+
+    tested,
+
+    reflected,
+
+    exact,
+
+    lengthAnalysis
+
+  }) {
+
+    const statusChanged =
+      baseline.status !==
+      tested.status;
+
+
+    const classChanged =
+      baseline.statusClass !==
+      tested.statusClass;
+
+
+    const baselineError =
+      isErrorClass(
+        baseline.statusClass
+      );
+
+
+    const testedError =
+      isErrorClass(
+        tested.statusClass
+      );
+
+
+    if (
+      reflected
+    ) {
+
+      if (
+        !baselineError &&
+        testedError
+      ) {
+
+        return 'ERROR_REFLECTION';
+      }
+
+
+      if (
+        baselineError
+      ) {
+
+        return 'ERROR_BASELINE_REFLECTION';
+      }
+
+
+      if (
+        statusChanged ||
+        classChanged
+      ) {
+
+        return 'STATUS_CHANGED_REFLECTION';
+      }
+
+
+      if (
+        exact
+      ) {
+
+        return 'STABLE_EXACT_REFLECTION';
+      }
+
+
+      return 'STABLE_TRANSFORMED_REFLECTION';
+    }
+
+
+    if (
+      statusChanged ||
+      classChanged
+    ) {
+
+      return 'VALIDATION_STATUS_CHANGE';
+    }
+
+
+    if (
+      lengthAnalysis.significant
+    ) {
+
+      return 'RESPONSE_CHANGED';
+    }
+
+
+    return 'NO_REFLECTION';
+  }
+
+
+  // ============================================================
+  // DISCOVERY SOURCES
+  // ============================================================
+
+  const rawSources = [];
+
+
+  // CURRENT
+  rawSources.push({
+
+    source:
+      'CURRENT',
+
+    method:
+      'GET',
+
+    methodConfidence:
+      'KNOWN',
+
+    initiatorType:
+      'navigation',
+
+    name:
+      location.href
+  });
+
+
+  // NAVIGATION
+  const navigationEntries =
+    performance.getEntriesByType(
+      'navigation'
+    );
+
+
+  for (
+    const entry
+    of navigationEntries
+  ) {
+
+    rawSources.push({
+
+      source:
+        'NAVIGATION',
+
+      method:
+        'GET',
+
+      methodConfidence:
+        'KNOWN',
+
+      initiatorType:
+        'navigation',
+
+      name:
+        entry.name
+    });
+  }
+
+
+  // RESOURCE
+  const resourceEntries =
+    performance.getEntriesByType(
+      'resource'
+    );
+
+
+  for (
+    const entry
+    of resourceEntries
+  ) {
+
+    const initiatorType =
+      String(
+        entry.initiatorType
+      ).toLowerCase();
+
+
+    if (
+      initiatorType !== 'fetch' &&
+      initiatorType !== 'xmlhttprequest'
+    ) {
+
+      continue;
+    }
+
+
+    rawSources.push({
+
+      source:
+        'RESOURCE',
+
+      method:
+        'UNKNOWN',
+
+      methodConfidence:
+        'UNKNOWN',
+
+      initiatorType:
+        entry.initiatorType,
+
+      name:
+        entry.name
+    });
+  }
+
+
+  // DOCUMENT LINKS
+  // Resource Timing may be unavailable or cleared by the application. Query
+  // URLs already present in same-page link/form markup are safe discovery
+  // candidates: this step observes them only; GET replay remains gated by the
+  // existing same-origin policy below.
+  for (
+    const element
+    of document.querySelectorAll(
+      'a[href], area[href], form[action]'
+    )
+  ) {
+
+    if (
+      element instanceof HTMLFormElement &&
+      element.method.toUpperCase() !== 'GET'
+    ) {
+      continue;
+    }
+
+    const value =
+      element instanceof HTMLFormElement
+        ? element.action
+        : element.href;
+
+
+    if (!value) {
+      continue;
+    }
+
+
+    rawSources.push({
+
+      source:
+        'DOCUMENT_LINK',
+
+      method:
+        'GET',
+
+      methodConfidence:
+        'ASSUMED',
+
+      initiatorType:
+        element.tagName.toLowerCase(),
+
+      name:
+        value
+    });
+  }
+
+
+  // ============================================================
+  // DISCOVERY
+  // ============================================================
+
+  const discovered = [];
+
+
+  for (
+    const source
+    of rawSources
+  ) {
+
+    try {
+
+      const url =
+        new URL(
+          source.name
+        );
+
+
+      if (
+        CONFIG.STATIC_EXT.test(
+          url.pathname
+        )
+      ) {
+
+        continue;
+      }
+
+
+      if (
+        !url.search
+      ) {
+
+        continue;
+      }
+
+
+      const params =
+        getParameters(
+          url
+        );
+
+
+      if (
+        !params.length
+      ) {
+
+        continue;
+      }
+
+
+      const sameOrigin =
+        url.origin ===
+        location.origin;
+
+
+      if (
+        sameOrigin &&
+        !CONFIG.TEST_SAME_ORIGIN
+      ) {
+
+        continue;
+      }
+
+
+      if (
+        !sameOrigin &&
+        !CONFIG.TEST_CROSS_ORIGIN
+      ) {
+
+        continue;
+      }
+
+
+      discovered.push({
+
+        source:
+          source.source,
+
+        observedMethod:
+          source.method,
+
+        methodConfidence:
+          source.methodConfidence,
+
+        originalURL:
+          url.href,
+
+        url,
+
+        params,
+
+        sameOrigin,
+
+        initiatorType:
+          source.initiatorType
+      });
+
+
+    } catch {
+
+      // malformed URL
+
+    }
+  }
+
+
+  // ============================================================
+  // DEDUP
+  // ============================================================
+
+  const priority = {
+
+    CURRENT:
+      3,
+
+    NAVIGATION:
+      2,
+
+    DOCUMENT_LINK:
+      2,
+
+    RESOURCE:
+      1
+  };
+
+
+  const uniqueMap =
+    new Map();
+
+
+  for (
+    const item
+    of discovered
+  ) {
+
+    const parameterStructure =
+      [...item.params]
+        .sort()
+        .join('&');
+
+
+    const key =
+      [
+        item.url.origin,
+        item.url.pathname,
+        parameterStructure
+      ].join('|');
+
+
+    const previous =
+      uniqueMap.get(
+        key
+      );
+
+
+    if (
+      !previous ||
+      priority[item.source] >
+      priority[previous.source]
+    ) {
+
+      uniqueMap.set(
+        key,
+        item
+      );
+    }
+  }
+
+
+  const targets =
+    [
+      ...uniqueMap.values()
+    ];
+
+
+  // ============================================================
+  // DISCOVERY OUTPUT
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ XSS SCOUT v2.8 ================'
+  );
+
+
+  console.log(
+    `[Raw Sources] ${rawSources.length}`
+  );
+
+
+  console.log(
+    `[Candidates] ${targets.length}`
+  );
+
+
+  console.table(
+
+    targets.map(
+      (target, index) => ({
+
+        No:
+          index + 1,
+
+        Source:
+          target.source,
+
+        ObservedMethod:
+          target.observedMethod,
+
+        Origin:
+          target.sameOrigin
+            ? 'SAME'
+            : 'CROSS',
+
+        Host:
+          target.url.hostname,
+
+        Path:
+          target.url.pathname,
+
+        Parameters:
+          target.params.join(', '),
+
+        Initiator:
+          target.initiatorType
+      })
+    )
+  );
+
+
+  // ============================================================
+  // RESULT ARRAYS
+  // ============================================================
+
+  const results = [];
+
+  const replayableTargets = [];
+
+  const unreplayableTargets = [];
+
+  const staticTargets = [];
+
+  let markerCounter = 0;
+
+
+  // ============================================================
+  // TARGET LOOP
+  // ============================================================
+
+  for (
+    let targetIndex = 0;
+    targetIndex < targets.length;
+    targetIndex++
+  ) {
+
+    const target =
+      targets[targetIndex];
+
+
+    console.log('');
+
+    console.log(
+      '================================================'
+    );
+
+
+    console.log(
+      `[TARGET ${targetIndex + 1}/${targets.length}]`,
+      `[${target.source}]`,
+      target.url.pathname
+    );
+
+
+    // ==========================================================
+    // BASELINE
+    // ==========================================================
+
+    let baseline;
+
+
+    try {
+
+      console.log(
+        '[GET PROBE]',
+        target.originalURL
+      );
+
+
+      const response =
+        await fetchGET(
+          target.originalURL
+        );
+
+
+      baseline =
+        await readResponse(
+          response
+        );
+
+
+      console.log(
+        '[BASELINE]',
+        `HTTP=${baseline.status}`,
+        `Class=${baseline.statusClass}`,
+        `Length=${baseline.length}`,
+        `Type=${baseline.normalizedContentType}`
+      );
+
+
+    } catch (error) {
+
+      unreplayableTargets.push({
+
+        Source:
+          target.source,
+
+        Origin:
+          target.sameOrigin
+            ? 'SAME'
+            : 'CROSS',
+
+        Host:
+          target.url.hostname,
+
+        Path:
+          target.url.pathname,
+
+        ObservedMethod:
+          target.observedMethod,
+
+        ProbeMethod:
+          'GET',
+
+        Reason:
+          'NETWORK_OR_CORS',
+
+        Error:
+          String(error)
+      });
+
+
+      console.warn(
+        '[UNREPLAYABLE]',
+        'NETWORK_OR_CORS',
+        target.url.pathname
+      );
+
+
+      continue;
+    }
+
+
+    // ==========================================================
+    // METHOD REJECT
+    // ==========================================================
+
+    if (
+      CONFIG.METHOD_REJECT_STATUS.has(
+        baseline.status
+      )
+    ) {
+
+      unreplayableTargets.push({
+
+        Source:
+          target.source,
+
+        Origin:
+          target.sameOrigin
+            ? 'SAME'
+            : 'CROSS',
+
+        Host:
+          target.url.hostname,
+
+        Path:
+          target.url.pathname,
+
+        ObservedMethod:
+          target.observedMethod,
+
+        ProbeMethod:
+          'GET',
+
+        HTTP:
+          baseline.status,
+
+        BaselineClass:
+          baseline.statusClass,
+
+        Reason:
+          'METHOD_REJECTED'
+      });
+
+
+      console.warn(
+        '[UNREPLAYABLE]',
+        `METHOD_REJECTED ${baseline.status}`,
+        target.url.pathname
+      );
+
+
+      continue;
+    }
+
+
+    // ==========================================================
+    // STATIC
+    // ==========================================================
+
+    if (
+      CONFIG.SKIP_CONTENT_TYPE.test(
+        baseline.contentType
+      )
+    ) {
+
+      staticTargets.push({
+
+        Source:
+          target.source,
+
+        Host:
+          target.url.hostname,
+
+        Path:
+          target.url.pathname,
+
+        HTTP:
+          baseline.status,
+
+        BaselineClass:
+          baseline.statusClass,
+
+        ContentType:
+          baseline.normalizedContentType,
+
+        Reason:
+          'STATIC_RESPONSE'
+      });
+
+
+      console.log(
+        '[STATIC]',
+        baseline.normalizedContentType,
+        target.url.pathname
+      );
+
+
+      continue;
+    }
+
+
+    // ==========================================================
+    // REPLAYABLE
+    // ==========================================================
+
+    replayableTargets.push({
+
+      Source:
+        target.source,
+
+      Origin:
+        target.sameOrigin
+          ? 'SAME'
+          : 'CROSS',
+
+      Host:
+        target.url.hostname,
+
+      Path:
+        target.url.pathname,
+
+      ObservedMethod:
+        target.observedMethod,
+
+      ReplayMethod:
+        'GET',
+
+      BaselineHTTP:
+        baseline.status,
+
+      BaselineClass:
+        baseline.statusClass,
+
+      ContentType:
+        baseline.normalizedContentType,
+
+      Parameters:
+        target.params.join(', ')
+    });
+
+
+    // ==========================================================
+    // PARAMETER LOOP
+    // ==========================================================
+
+    for (
+      const parameter
+      of target.params
+    ) {
+
+      markerCounter++;
+
+
+      const marker =
+        `xsstest${markerCounter}`;
+
+
+      const payload =
+        marker +
+        CONFIG.SPECIAL;
+
+
+      const testURL =
+        new URL(
+          target.originalURL
+        );
+
+
+      const originalValues =
+        getOriginalValues(
+          testURL,
+          parameter
+        );
+
+
+      const originalValue =
+        originalValues.length
+          ? originalValues[0]
+          : '';
+
+
+      const valueType =
+        inferValueType(
+          originalValue
+        );
+
+
+      testURL.searchParams.set(
+        parameter,
+        payload
+      );
+
+
+      console.log('');
+
+      console.log(
+        `[TEST ${markerCounter}]`,
+        parameter,
+        `OriginalType=${valueType}`
+      );
+
+
+      try {
+
+        const response =
+          await fetchGET(
+            testURL.href
+          );
+
+
+        const tested =
+          await readResponse(
+            response
+          );
+
+
+        // --------------------------------------------------------
+        // REFLECTION
+        // --------------------------------------------------------
+
+        const markerPositions =
+          findMarkerPositions(
+            tested.body,
+            marker
+          );
+
+
+        const reflected =
+          markerPositions.length > 0;
+
+
+        const exact =
+          reflected &&
+          tested.body.includes(
+            payload
+          );
+
+
+        // --------------------------------------------------------
+        // CHARACTER-LEVEL TRANSFORMATION
+        // --------------------------------------------------------
+
+        const reflectionAnalyses =
+          markerPositions.map(
+            position =>
+              analyzeReflectionAt(
+                tested.body,
+                marker,
+                position
+              )
+          );
+
+
+        const transformationType =
+          classifyTransformation(
+            reflectionAnalyses
+          );
+
+
+        const charMap =
+          aggregateCharMap(
+            reflectionAnalyses
+          );
+
+
+        const characterSummary =
+          getCharacterSummary(
+            reflectionAnalyses
+          );
+
+
+        const resyncCount =
+          reflectionAnalyses.reduce(
+            (
+              sum,
+              analysis
+            ) =>
+              sum +
+              analysis.resyncCount,
+            0
+          );
+
+
+        // --------------------------------------------------------
+        // CONTEXT
+        // --------------------------------------------------------
+
+        const contextType =
+          reflected
+            ? classifyContext(
+                tested.body,
+                marker,
+                tested.contentType
+              )
+            : '-';
+
+
+        // --------------------------------------------------------
+        // RESPONSE STATE
+        // --------------------------------------------------------
+
+        const statusChanged =
+          tested.status !==
+          baseline.status;
+
+
+        const statusClassChanged =
+          tested.statusClass !==
+          baseline.statusClass;
+
+
+        const contentTypeTransition =
+          getContentTypeTransition(
+            baseline.contentType,
+            tested.contentType
+          );
+
+
+        const contentTypeChanged =
+          contentTypeTransition !==
+          'STABLE';
+
+
+        const lengthAnalysis =
+          getLengthAnalysis(
+            baseline.length,
+            tested.length
+          );
+
+
+        // --------------------------------------------------------
+        // RESULT
+        // --------------------------------------------------------
+
+        const resultType =
+          classifyResult({
+
+            baseline,
+
+            tested,
+
+            reflected,
+
+            exact,
+
+            lengthAnalysis
+          });
+
+
+        results.push({
+
+          Source:
+            target.source,
+
+          Origin:
+            target.sameOrigin
+              ? 'SAME'
+              : 'CROSS',
+
+          ObservedMethod:
+            target.observedMethod,
+
+          ReplayMethod:
+            'GET',
+
+          Host:
+            target.url.hostname,
+
+          Path:
+            target.url.pathname,
+
+          Parameter:
+            parameter,
+
+          Original:
+            originalValue,
+
+          OriginalType:
+            valueType,
+
+          HTTP:
+            `${baseline.status}→${tested.status}`,
+
+          BaselineClass:
+            baseline.statusClass,
+
+          ResponseClass:
+            tested.statusClass,
+
+          StatusChanged:
+            statusChanged,
+
+          StatusClassChanged:
+            statusClassChanged,
+
+          BaselineContentType:
+            baseline.normalizedContentType,
+
+          ResponseContentType:
+            tested.normalizedContentType,
+
+          ContentTypeChanged:
+            contentTypeChanged,
+
+          ContentTypeTransition:
+            contentTypeTransition,
+
+          Reflected:
+            reflected,
+
+          Occurrences:
+            markerPositions.length,
+
+          Exact:
+            exact,
+
+          Transformation:
+            transformationType,
+
+          CharacterMap:
+            charMap,
+
+          CharacterSummary:
+            characterSummary,
+
+          ResyncCount:
+            resyncCount,
+
+          ReflectionAnalyses:
+            reflectionAnalyses,
+
+          ContextType:
+            contextType,
+
+          BaselineLength:
+            baseline.length,
+
+          ResponseLength:
+            tested.length,
+
+          LengthDiff:
+            lengthAnalysis.diff,
+
+          LengthDiffRatio:
+            Number(
+              lengthAnalysis.ratio
+                .toFixed(4)
+            ),
+
+          SignificantLengthChange:
+            lengthAnalysis.significant,
+
+          Result:
+            resultType,
+
+          Context:
+            reflected
+              ? getContext(
+                  tested.body,
+                  marker
+                )
+              : '(NOT FOUND)',
+
+          URL:
+            testURL.href
+        });
+
+
+        console.log(
+          '[RECV]',
+          `${baseline.status}→${tested.status}`,
+          `${baseline.statusClass}→${tested.statusClass}`,
+          `Reflection=${reflected}`,
+          `Count=${markerPositions.length}`,
+          `Transform=${transformationType}`,
+          `Context=${contextType}`,
+          `Resync=${resyncCount}`,
+          `Type=${contentTypeTransition}`,
+          `Result=${resultType}`
+        );
+
+
+        if (
+          reflected
+        ) {
+
+          console.log(
+            '[CHAR MAP]',
+            characterSummary
+          );
+        }
+
+
+      } catch (error) {
+
+        results.push({
+
+          Source:
+            target.source,
+
+          Origin:
+            target.sameOrigin
+              ? 'SAME'
+              : 'CROSS',
+
+          ObservedMethod:
+            target.observedMethod,
+
+          ReplayMethod:
+            'GET',
+
+          Host:
+            target.url.hostname,
+
+          Path:
+            target.url.pathname,
+
+          Parameter:
+            parameter,
+
+          Original:
+            originalValue,
+
+          OriginalType:
+            valueType,
+
+          HTTP:
+            `${baseline.status}→ERROR`,
+
+          BaselineClass:
+            baseline.statusClass,
+
+          ResponseClass:
+            'NETWORK_ERROR',
+
+          StatusChanged:
+            null,
+
+          StatusClassChanged:
+            null,
+
+          BaselineContentType:
+            baseline.normalizedContentType,
+
+          ResponseContentType:
+            null,
+
+          ContentTypeChanged:
+            null,
+
+          ContentTypeTransition:
+            null,
+
+          Reflected:
+            false,
+
+          Occurrences:
+            0,
+
+          Exact:
+            false,
+
+          Transformation:
+            '-',
+
+          CharacterMap:
+            null,
+
+          CharacterSummary:
+            '-',
+
+          ResyncCount:
+            null,
+
+          ReflectionAnalyses:
+            [],
+
+          ContextType:
+            '-',
+
+          BaselineLength:
+            baseline.length,
+
+          ResponseLength:
+            null,
+
+          LengthDiff:
+            null,
+
+          LengthDiffRatio:
+            null,
+
+          SignificantLengthChange:
+            null,
+
+          Result:
+            'REQUEST_ERROR',
+
+          Context:
+            String(error),
+
+          URL:
+            testURL.href
+        });
+      }
+    }
+  }
+
+
+  // ============================================================
+  // RESULT GROUPS
+  // ============================================================
+
+  const reflectionCandidates =
+    results.filter(
+      result =>
+        result.Reflected
+    );
+
+
+  const stableReflections =
+    results.filter(
+      result =>
+        result.Result ===
+          'STABLE_EXACT_REFLECTION' ||
+
+        result.Result ===
+          'STABLE_TRANSFORMED_REFLECTION'
+    );
+
+
+  const statusChangedReflections =
+    results.filter(
+      result =>
+        result.Result ===
+        'STATUS_CHANGED_REFLECTION'
+    );
+
+
+  const errorReflections =
+    results.filter(
+      result =>
+        result.Result ===
+          'ERROR_REFLECTION' ||
+
+        result.Result ===
+          'ERROR_BASELINE_REFLECTION'
+    );
+
+
+  const rawReflections =
+    reflectionCandidates.filter(
+      result =>
+        result.Transformation ===
+        'RAW'
+    );
+
+
+  const partialEncodedReflections =
+    reflectionCandidates.filter(
+      result =>
+        result.Transformation ===
+        'PARTIAL_ENCODED'
+    );
+
+
+  const filteredReflections =
+    reflectionCandidates.filter(
+      result =>
+        result.Transformation ===
+          'PARTIAL_FILTERED' ||
+
+        result.Transformation ===
+          'FILTERED_OR_TRUNCATED'
+    );
+
+
+  const transformedReflections =
+    reflectionCandidates.filter(
+      result =>
+        result.Transformation !==
+        'RAW'
+    );
+
+
+  const validationChanges =
+    results.filter(
+      result =>
+        result.Result ===
+        'VALIDATION_STATUS_CHANGE'
+    );
+
+
+  const responseChanges =
+    results.filter(
+      result =>
+        result.Result ===
+        'RESPONSE_CHANGED'
+    );
+
+
+  const contentTypeChanges =
+    results.filter(
+      result =>
+        result.ContentTypeChanged ===
+        true
+    );
+
+
+  // ============================================================
+  // ACTIVE RESULTS
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ ACTIVE RESULTS ================'
+  );
+
+
+  if (
+    results.length
+  ) {
+
+    console.table(
+
+      results.map(
+        result => ({
+
+          Origin:
+            result.Origin,
+
+          Path:
+            result.Path,
+
+          Parameter:
+            result.Parameter,
+
+          HTTP:
+            result.HTTP,
+
+          State:
+            `${result.BaselineClass}→${result.ResponseClass}`,
+
+          Reflected:
+            result.Reflected,
+
+          Count:
+            result.Occurrences,
+
+          Transform:
+            result.Transformation,
+
+          Context:
+            result.ContextType,
+
+          Resync:
+            result.ResyncCount,
+
+          Type:
+            result.ContentTypeTransition,
+
+          Result:
+            result.Result
+        })
+      )
+    );
+
+  } else {
+
+    console.log(
+      '[XSS Scout] Mutation 결과 없음'
+    );
+  }
+
+
+  // ============================================================
+  // REFLECTION CANDIDATES
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ REFLECTION CANDIDATES ================'
+  );
+
+
+  if (
+    reflectionCandidates.length
+  ) {
+
+    console.table(
+
+      reflectionCandidates.map(
+        result => ({
+
+          Origin:
+            result.Origin,
+
+          Path:
+            result.Path,
+
+          Parameter:
+            result.Parameter,
+
+          HTTP:
+            result.HTTP,
+
+          State:
+            `${result.BaselineClass}→${result.ResponseClass}`,
+
+          ContentType:
+            result.ContentTypeTransition,
+
+          Count:
+            result.Occurrences,
+
+          Exact:
+            result.Exact,
+
+          Transform:
+            result.Transformation,
+
+          Context:
+            result.ContextType,
+
+          Resync:
+            result.ResyncCount,
+
+          CharacterMap:
+            result.CharacterSummary,
+
+          Result:
+            result.Result
+        })
+      )
+    );
+
+  } else {
+
+    console.log(
+      '[XSS Scout] Reflection 없음'
+    );
+  }
+
+
+  // ============================================================
+  // RAW REFLECTION
+  // ============================================================
+
+  if (
+    rawReflections.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ RAW REFLECTION ================'
+    );
+
+
+    console.table(
+
+      rawReflections.map(
+        result => ({
+
+          Path:
+            result.Path,
+
+          Parameter:
+            result.Parameter,
+
+          HTTP:
+            result.HTTP,
+
+          Context:
+            result.ContextType,
+
+          Characters:
+            result.CharacterSummary,
+
+          Result:
+            result.Result
+        })
+      )
+    );
+  }
+
+
+  // ============================================================
+  // TRANSFORMED REFLECTION
+  // ============================================================
+
+  if (
+    transformedReflections.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ TRANSFORMED REFLECTION ================'
+    );
+
+
+    console.table(
+
+      transformedReflections.map(
+        result => ({
+
+          Path:
+            result.Path,
+
+          Parameter:
+            result.Parameter,
+
+          HTTP:
+            result.HTTP,
+
+          Transform:
+            result.Transformation,
+
+          Context:
+            result.ContextType,
+
+          Resync:
+            result.ResyncCount,
+
+          Characters:
+            result.CharacterSummary,
+
+          Result:
+            result.Result
+        })
+      )
+    );
+  }
+
+
+  // ============================================================
+  // FILTERED / TRUNCATED
+  // ============================================================
+
+  if (
+    filteredReflections.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ FILTERED / TRUNCATED ================'
+    );
+
+
+    console.table(
+
+      filteredReflections.map(
+        result => ({
+
+          Path:
+            result.Path,
+
+          Parameter:
+            result.Parameter,
+
+          HTTP:
+            result.HTTP,
+
+          Transform:
+            result.Transformation,
+
+          Context:
+            result.ContextType,
+
+          Resync:
+            result.ResyncCount,
+
+          Characters:
+            result.CharacterSummary,
+
+          Result:
+            result.Result
+        })
+      )
+    );
+  }
+
+
+  // ============================================================
+  // ERROR REFLECTION
+  // ============================================================
+
+  if (
+    errorReflections.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ ERROR REFLECTION ================'
+    );
+
+
+    console.table(
+
+      errorReflections.map(
+        result => ({
+
+          Path:
+            result.Path,
+
+          Parameter:
+            result.Parameter,
+
+          HTTP:
+            result.HTTP,
+
+          State:
+            `${result.BaselineClass}→${result.ResponseClass}`,
+
+          ContentType:
+            result.ContentTypeTransition,
+
+          Transform:
+            result.Transformation,
+
+          Characters:
+            result.CharacterSummary,
+
+          Context:
+            result.ContextType,
+
+          Result:
+            result.Result
+        })
+      )
+    );
+  }
+
+
+  // ============================================================
+  // CONTENT TYPE CHANGES
+  // ============================================================
+
+  if (
+    contentTypeChanges.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ CONTENT-TYPE CHANGES ================'
+    );
+
+
+    console.table(
+
+      contentTypeChanges.map(
+        result => ({
+
+          Path:
+            result.Path,
+
+          Parameter:
+            result.Parameter,
+
+          HTTP:
+            result.HTTP,
+
+          Transition:
+            result.ContentTypeTransition,
+
+          Reflected:
+            result.Reflected,
+
+          Result:
+            result.Result
+        })
+      )
+    );
+  }
+
+
+  // ============================================================
+  // GET REPLAYABLE
+  // ============================================================
+
+  if (
+    replayableTargets.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ GET REPLAYABLE ================'
+    );
+
+
+    console.table(
+      replayableTargets
+    );
+  }
+
+
+  // ============================================================
+  // UNREPLAYABLE
+  // ============================================================
+
+  if (
+    unreplayableTargets.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ UNREPLAYABLE ================'
+    );
+
+
+    console.table(
+      unreplayableTargets
+    );
+  }
+
+
+  // ============================================================
+  // STATIC
+  // ============================================================
+
+  if (
+    staticTargets.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ STATIC SKIPPED ================'
+    );
+
+
+    console.table(
+      staticTargets
+    );
+  }
+
+
+  // ============================================================
+  // SUMMARY
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ SUMMARY ================'
+  );
+
+
+  console.table([{
+
+    Discovered:
+      targets.length,
+
+    GetReplayable:
+      replayableTargets.length,
+
+    Unreplayable:
+      unreplayableTargets.length,
+
+    Static:
+      staticTargets.length,
+
+    TestedParameters:
+      results.length,
+
+    Reflection:
+      reflectionCandidates.length,
+
+    StableReflection:
+      stableReflections.length,
+
+    StatusChangedReflection:
+      statusChangedReflections.length,
+
+    ErrorReflection:
+      errorReflections.length,
+
+    RawReflection:
+      rawReflections.length,
+
+    PartialEncoded:
+      partialEncodedReflections.length,
+
+    FilteredReflection:
+      filteredReflections.length,
+
+    TransformedReflection:
+      transformedReflections.length,
+
+    ValidationChanged:
+      validationChanges.length,
+
+    ResponseChanged:
+      responseChanges.length,
+
+    ContentTypeChanged:
+      contentTypeChanges.length
+  }]);
+
+
+  // ============================================================
+  // SAVE
+  // ============================================================
+
+  window.__XSS_SCOUT__ = {
+
+    version:
+      '2.8',
+
+    config:
+      CONFIG,
+
+    rawSources,
+
+    discovered:
+      targets,
+
+    replayableTargets,
+
+    unreplayableTargets,
+
+    staticTargets,
+
+    results,
+
+    reflectionCandidates,
+
+    stableReflections,
+
+    statusChangedReflections,
+
+    errorReflections,
+
+    rawReflections,
+
+    partialEncodedReflections,
+
+    filteredReflections,
+
+    transformedReflections,
+
+    validationChanges,
+
+    responseChanges,
+
+    contentTypeChanges
+  };
+
+
+  console.log('');
+
+  console.log(
+    '[XSS Scout v2.8] 완료'
+  );
+
+
+  console.log(
+    'Reflection:',
+    'window.__XSS_SCOUT__.reflectionCandidates'
+  );
+
+
+  console.log(
+    'Raw Reflection:',
+    'window.__XSS_SCOUT__.rawReflections'
+  );
+
+
+  console.log(
+    'Filtered Reflection:',
+    'window.__XSS_SCOUT__.filteredReflections'
+  );
+
+
+  console.log(
+    'Error Reflection:',
+    'window.__XSS_SCOUT__.errorReflections'
+  );
+
+
+  console.log(
+    'All Results:',
+    'window.__XSS_SCOUT__.results'
+  );
+
+
+// v2.9 analysis executes after v2.8 result persistence.
+(() => {
+
+  // ============================================================
+  // XSS SCOUT v2.9
+  // PASSIVE RESULT ANALYZER
+  //
+  // 입력:
+  //   window.__XSS_SCOUT__.results
+  //
+  // 기능:
+  //   - 추가 HTTP 요청 없음
+  //   - HIGH / MEDIUM / LOW / INFO signal 분류
+  //   - endpoint 단위 saturation 계산
+  //   - 반복적인 FULL URL encoding noise 압축
+  //   - 원본 results 보존
+  // ============================================================
+
+
+  const scout =
+    window.__XSS_SCOUT__;
+
+
+  if (
+    !scout ||
+    !Array.isArray(scout.results)
+  ) {
+
+    console.error(
+      '[XSS Scout v2.9] v2.8 results가 없습니다.'
+    );
+
+    return;
+  }
+
+
+  const results =
+    scout.results;
+
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
+  function endpointKey(result) {
+
+    return [
+      result.Origin || '',
+      result.Host || '',
+      result.Path || ''
+    ].join('|');
+  }
+
+
+  function isErrorReflection(result) {
+
+    return (
+      result.Result === 'ERROR_REFLECTION' ||
+      result.Result === 'ERROR_BASELINE_REFLECTION'
+    );
+  }
+
+
+  function isStableReflection(result) {
+
+    return (
+      result.Result === 'STABLE_EXACT_REFLECTION' ||
+      result.Result === 'STABLE_TRANSFORMED_REFLECTION'
+    );
+  }
+
+
+  function isFilteredTransform(result) {
+
+    return (
+      result.Transformation === 'PARTIAL_FILTERED' ||
+      result.Transformation === 'FILTERED_OR_TRUNCATED'
+    );
+  }
+
+
+  function isFullUrlEncoded(result) {
+
+    const map =
+      result.CharacterMap;
+
+
+    if (!map) {
+      return false;
+    }
+
+
+    const special =
+      [...`<>;:'"\``];
+
+
+    let seen = 0;
+
+
+    for (
+      const character
+      of special
+    ) {
+
+      const entry =
+        map[character];
+
+
+      if (!entry) {
+        return false;
+      }
+
+
+      const total =
+        Object.values(entry)
+          .reduce(
+            (sum, value) =>
+              sum +
+              (
+                Number(value) || 0
+              ),
+            0
+          );
+
+
+      if (
+        total === 0
+      ) {
+
+        return false;
+      }
+
+
+      if (
+        (
+          entry.URL_ENCODED || 0
+        ) !== total
+      ) {
+
+        return false;
+      }
+
+
+      seen++;
+    }
+
+
+    return (
+      seen ===
+      special.length
+    );
+  }
+
+
+  function hasRawCharacter(result) {
+
+    const map =
+      result.CharacterMap;
+
+
+    if (!map) {
+      return false;
+    }
+
+
+    return Object
+      .values(map)
+      .some(
+        entry =>
+          (
+            entry?.RAW || 0
+          ) > 0
+      );
+  }
+
+
+  function hasRawStructuralCharacter(result) {
+
+    const map =
+      result.CharacterMap;
+
+
+    if (!map) {
+      return false;
+    }
+
+
+    return [
+      '<',
+      '>',
+      '"',
+      "'"
+    ].some(
+      character =>
+        (
+          map[character]?.RAW ||
+          0
+        ) > 0
+    );
+  }
+
+
+  function hasMissingCharacter(result) {
+
+    const map =
+      result.CharacterMap;
+
+
+    if (!map) {
+      return false;
+    }
+
+
+    return Object
+      .values(map)
+      .some(
+        entry =>
+          (
+            (
+              entry?.MISSING || 0
+            ) +
+
+            (
+              entry?.MISSING_OR_TRUNCATED || 0
+            )
+          ) > 0
+      );
+  }
+
+
+  // ============================================================
+  // ENDPOINT GROUPING
+  // ============================================================
+
+  const endpointMap =
+    new Map();
+
+
+  for (
+    const result
+    of results
+  ) {
+
+    const key =
+      endpointKey(
+        result
+      );
+
+
+    if (
+      !endpointMap.has(key)
+    ) {
+
+      endpointMap.set(
+        key,
+        {
+          key,
+
+          Origin:
+            result.Origin,
+
+          Host:
+            result.Host,
+
+          Path:
+            result.Path,
+
+          results:
+            []
+        }
+      );
+    }
+
+
+    endpointMap
+      .get(key)
+      .results
+      .push(result);
+  }
+
+
+  // ============================================================
+  // ENDPOINT STATISTICS
+  // ============================================================
+
+  const endpointStats = [];
+
+
+  for (
+    const endpoint
+    of endpointMap.values()
+  ) {
+
+    const rows =
+      endpoint.results;
+
+
+    const tested =
+      rows.length;
+
+
+    const reflected =
+      rows.filter(
+        row =>
+          row.Reflected
+      ).length;
+
+
+    const stable =
+      rows.filter(
+        isStableReflection
+      ).length;
+
+
+    const errors =
+      rows.filter(
+        isErrorReflection
+      ).length;
+
+
+    const raw =
+      rows.filter(
+        row =>
+          row.Transformation === 'RAW'
+      ).length;
+
+
+    const partial =
+      rows.filter(
+        row =>
+          row.Transformation === 'PARTIAL_ENCODED'
+      ).length;
+
+
+    const filtered =
+      rows.filter(
+        isFilteredTransform
+      ).length;
+
+
+    const fullUrlEncoded =
+      rows.filter(
+        row =>
+          row.Reflected &&
+          isFullUrlEncoded(row)
+      ).length;
+
+
+    const reflectionRate =
+      tested
+        ? reflected / tested
+        : 0;
+
+
+    const fullUrlEncodingRate =
+      reflected
+        ? fullUrlEncoded / reflected
+        : 0;
+
+
+    // ----------------------------------------------------------
+    // DOMINANT TRANSFORMATION
+    // ----------------------------------------------------------
+
+    const transformCounts =
+      new Map();
+
+
+    for (
+      const row
+      of rows
+    ) {
+
+      if (
+        !row.Reflected
+      ) {
+        continue;
+      }
+
+
+      const type =
+        row.Transformation ||
+        'UNKNOWN';
+
+
+      transformCounts.set(
+        type,
+        (
+          transformCounts.get(type) ||
+          0
+        ) + 1
+      );
+    }
+
+
+    const dominantTransform =
+      [
+        ...transformCounts.entries()
+      ]
+
+        .sort(
+          (a, b) =>
+            b[1] - a[1]
+        )[0]?.[0] ||
+        '-';
+
+
+    // ----------------------------------------------------------
+    // SATURATION
+    // ----------------------------------------------------------
+
+    let saturation =
+      'NONE';
+
+
+    if (
+      tested >= 3 &&
+      reflectionRate >= 0.90
+    ) {
+
+      saturation =
+        'VERY_HIGH';
+
+    } else if (
+      tested >= 3 &&
+      reflectionRate >= 0.60
+    ) {
+
+      saturation =
+        'HIGH';
+
+    } else if (
+      reflectionRate > 0
+    ) {
+
+      saturation =
+        'PARTIAL';
+    }
+
+
+    // ----------------------------------------------------------
+    // HOMOGENEOUS URL ENCODING
+    // ----------------------------------------------------------
+
+    const homogeneousUrlEncoding =
+      (
+        reflected >= 3 &&
+        fullUrlEncodingRate >= 0.90
+      );
+
+
+    endpointStats.push({
+
+      Key:
+        endpoint.key,
+
+      Origin:
+        endpoint.Origin,
+
+      Host:
+        endpoint.Host,
+
+      Path:
+        endpoint.Path,
+
+      Tested:
+        tested,
+
+      Reflected:
+        reflected,
+
+      ReflectionRate:
+        Number(
+          reflectionRate
+            .toFixed(3)
+        ),
+
+      Stable:
+        stable,
+
+      ErrorReflection:
+        errors,
+
+      Raw:
+        raw,
+
+      PartialEncoded:
+        partial,
+
+      Filtered:
+        filtered,
+
+      FullUrlEncoded:
+        fullUrlEncoded,
+
+      FullUrlEncodingRate:
+        Number(
+          fullUrlEncodingRate
+            .toFixed(3)
+        ),
+
+      DominantTransform:
+        dominantTransform,
+
+      Saturation:
+        saturation,
+
+      HomogeneousUrlEncoding:
+        homogeneousUrlEncoding
+    });
+  }
+
+
+  // ============================================================
+  // LOOKUP
+  // ============================================================
+
+  const endpointLookup =
+    new Map(
+      endpointStats.map(
+        stat => [
+          stat.Key,
+          stat
+        ]
+      )
+    );
+
+
+  // ============================================================
+  // SIGNAL CLASSIFICATION
+  // ============================================================
+
+  function classifySignal(result) {
+
+    const endpoint =
+      endpointLookup.get(
+        endpointKey(result)
+      );
+
+
+    if (
+      !result.Reflected
+    ) {
+
+      if (
+        result.Result ===
+        'VALIDATION_STATUS_CHANGE'
+      ) {
+
+        return {
+          Signal:
+            'INFO',
+
+          Reason:
+            'VALIDATION_CHANGE'
+        };
+      }
+
+
+      if (
+        result.Result ===
+        'RESPONSE_CHANGED'
+      ) {
+
+        return {
+          Signal:
+            'INFO',
+
+          Reason:
+            'RESPONSE_CHANGE'
+        };
+      }
+
+
+      return {
+        Signal:
+          'INFO',
+
+        Reason:
+          'NO_REFLECTION'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // ERROR REFLECTION
+    // ----------------------------------------------------------
+
+    if (
+      isErrorReflection(
+        result
+      )
+    ) {
+
+      return {
+        Signal:
+          'LOW',
+
+        Reason:
+          'ERROR_RESPONSE_REFLECTION'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // NON-EXECUTABLE SCRIPT DATA
+    //
+    // application/json, import maps, and speculation rules are serialized
+    // data containers, not executable JavaScript. Preserve the reflection as
+    // a reviewable fact without promoting it to an XSS finding.
+    // ----------------------------------------------------------
+
+    if (
+      result.ContextType ===
+      'SCRIPT_DATA'
+    ) {
+
+      return {
+        Signal:
+          'LOW',
+
+        Reason:
+          'SERIALIZED_SCRIPT_DATA_REFLECTION'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // SERIALIZED JSON
+    //
+    // A response declared as JSON is data, not an HTML execution context.
+    // Keep it visible for data-flow review, but do not promote reflection in
+    // the response itself to a direct XSS finding.
+    // ----------------------------------------------------------
+
+    if (
+      result.ContextType ===
+      'JSON'
+    ) {
+
+      return {
+        Signal:
+          'LOW',
+
+        Reason:
+          'SERIALIZED_JSON_REFLECTION'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // SCRIPT CONTEXT WITH TRANSFORMATION
+    //
+    // "SCRIPT" also covers serialized bootstrap/config data. A transformed
+    // reflection alone is insufficient to claim executable JavaScript, so it
+    // is a manual-review candidate rather than an automatic HIGH.
+    // ----------------------------------------------------------
+
+    if (
+      result.ContextType === 'SCRIPT' &&
+      (
+        result.Transformation === 'PARTIAL_FILTERED' ||
+        result.Transformation === 'PARTIAL_ENCODED'
+      )
+    ) {
+
+      return {
+        Signal:
+          'MEDIUM',
+
+        Reason:
+          'SCRIPT_TRANSFORM_REVIEW'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // FILTERING / CHARACTER REMOVAL
+    // ----------------------------------------------------------
+
+    if (
+      isFilteredTransform(
+        result
+      ) ||
+      hasMissingCharacter(
+        result
+      )
+    ) {
+
+      return {
+        Signal:
+          'HIGH',
+
+        Reason:
+          'CHARACTER_FILTERING'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // RAW
+    // ----------------------------------------------------------
+
+    if (
+      result.Transformation ===
+      'RAW'
+    ) {
+
+      return {
+        Signal:
+          'HIGH',
+
+        Reason:
+          'RAW_REFLECTION'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // PARTIAL ENCODING + RAW CHARACTER SURVIVAL
+    // ----------------------------------------------------------
+
+    if (
+      result.Transformation ===
+        'PARTIAL_ENCODED' &&
+      result.ContextType ===
+        'HTML_TEXT' &&
+      hasRawCharacter(result) &&
+      !hasRawStructuralCharacter(result)
+    ) {
+
+      return {
+        Signal:
+          'LOW',
+
+        Reason:
+          'HTML_TEXT_STRUCTURAL_ENCODING'
+      };
+    }
+
+    if (
+      result.Transformation ===
+        'PARTIAL_ENCODED' &&
+      hasRawCharacter(result)
+    ) {
+
+      return {
+        Signal:
+          'HIGH',
+
+        Reason:
+          'PARTIAL_ENCODING'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // SATURATED FULL URL ENCODING
+    // ----------------------------------------------------------
+
+    if (
+      endpoint &&
+      endpoint.HomogeneousUrlEncoding &&
+      isFullUrlEncoded(result)
+    ) {
+
+      return {
+        Signal:
+          'LOW',
+
+        Reason:
+          'SATURATED_FULL_URL_ENCODING'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // FULL URL ENCODING
+    // ----------------------------------------------------------
+
+    if (
+      isFullUrlEncoded(
+        result
+      )
+    ) {
+
+      return {
+        Signal:
+          'LOW',
+
+        Reason:
+          'FULL_URL_ENCODING'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // CONTEXT-SENSITIVE TRANSFORMATION
+    // ----------------------------------------------------------
+
+    if (
+      result.Transformation ===
+        'HTML_ENTITY' ||
+
+      result.Transformation ===
+        'JSON_ESCAPE' ||
+
+      result.Transformation ===
+        'FULL_ENCODED_MIXED'
+    ) {
+
+      return {
+        Signal:
+          'MEDIUM',
+
+        Reason:
+          'CONTEXT_ENCODING'
+      };
+    }
+
+
+    // ----------------------------------------------------------
+    // DEFAULT REFLECTION
+    // ----------------------------------------------------------
+
+    return {
+      Signal:
+        'MEDIUM',
+
+      Reason:
+        'REFLECTION_REVIEW'
+    };
+  }
+
+
+  // ============================================================
+  // ENRICH RESULTS
+  // ============================================================
+
+  const analyzedResults =
+    results.map(
+      result => {
+
+        const signal =
+          classifySignal(
+            result
+          );
+
+
+        const endpoint =
+          endpointLookup.get(
+            endpointKey(result)
+          );
+
+
+        return {
+
+          ...result,
+
+          Signal:
+            signal.Signal,
+
+          SignalReason:
+            signal.Reason,
+
+          EndpointReflectionRate:
+            endpoint
+              ?.ReflectionRate ??
+            0,
+
+          EndpointSaturation:
+            endpoint
+              ?.Saturation ??
+            'NONE',
+
+          EndpointDominantTransform:
+            endpoint
+              ?.DominantTransform ??
+            '-'
+        };
+      }
+    );
+
+
+  // ============================================================
+  // PRIORITY ORDER
+  // ============================================================
+
+  const signalWeight = {
+
+    HIGH:
+      4,
+
+    MEDIUM:
+      3,
+
+    LOW:
+      2,
+
+    INFO:
+      1
+  };
+
+
+  const priorityResults =
+    [...analyzedResults]
+
+      .sort(
+        (a, b) => {
+
+          const signalDiff =
+            (
+              signalWeight[b.Signal] ||
+              0
+            ) -
+            (
+              signalWeight[a.Signal] ||
+              0
+            );
+
+
+          if (
+            signalDiff !== 0
+          ) {
+
+            return signalDiff;
+          }
+
+
+          if (
+            a.Reflected !==
+            b.Reflected
+          ) {
+
+            return Number(
+              b.Reflected
+            ) -
+            Number(
+              a.Reflected
+            );
+          }
+
+
+          return (
+            (
+              b.EndpointReflectionRate ||
+              0
+            ) -
+            (
+              a.EndpointReflectionRate ||
+              0
+            )
+          );
+        }
+      );
+
+
+  // ============================================================
+  // GROUPS
+  // ============================================================
+
+  const highSignal =
+    priorityResults.filter(
+      row =>
+        row.Signal === 'HIGH'
+    );
+
+
+  const mediumSignal =
+    priorityResults.filter(
+      row =>
+        row.Signal === 'MEDIUM'
+    );
+
+
+  const lowSignal =
+    priorityResults.filter(
+      row =>
+        row.Signal === 'LOW'
+    );
+
+
+  const infoSignal =
+    priorityResults.filter(
+      row =>
+        row.Signal === 'INFO'
+    );
+
+
+  // ============================================================
+  // ENDPOINT SUMMARY
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ XSS SCOUT v2.9 ================'
+  );
+
+
+  console.log('');
+
+  console.log(
+    '================ ENDPOINT SUMMARY ================'
+  );
+
+
+  console.table(
+
+    [...endpointStats]
+
+      .sort(
+        (a, b) => {
+
+          if (
+            a.HomogeneousUrlEncoding !==
+            b.HomogeneousUrlEncoding
+          ) {
+
+            return Number(
+              a.HomogeneousUrlEncoding
+            ) -
+            Number(
+              b.HomogeneousUrlEncoding
+            );
+          }
+
+
+          return (
+            b.ReflectionRate -
+            a.ReflectionRate
+          );
+        }
+      )
+
+      .map(
+        endpoint => ({
+
+          Origin:
+            endpoint.Origin,
+
+          Host:
+            endpoint.Host,
+
+          Path:
+            endpoint.Path,
+
+          Tested:
+            endpoint.Tested,
+
+          Reflected:
+            endpoint.Reflected,
+
+          Rate:
+            endpoint.ReflectionRate,
+
+          Dominant:
+            endpoint.DominantTransform,
+
+          Saturation:
+            endpoint.Saturation,
+
+          FullUrlEncoded:
+            endpoint.FullUrlEncoded,
+
+          UrlEncodedRate:
+            endpoint.FullUrlEncodingRate,
+
+          RepetitiveUrlEncoding:
+            endpoint.HomogeneousUrlEncoding
+        })
+      )
+  );
+
+
+  // ============================================================
+  // PRIORITY RESULTS
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ PRIORITY RESULTS ================'
+  );
+
+
+  console.table(
+
+    priorityResults.map(
+      row => ({
+
+        Signal:
+          row.Signal,
+
+        Reason:
+          row.SignalReason,
+
+        Origin:
+          row.Origin,
+
+        Path:
+          row.Path,
+
+        Parameter:
+          row.Parameter,
+
+        HTTP:
+          row.HTTP,
+
+        Reflected:
+          row.Reflected,
+
+        Transform:
+          row.Transformation,
+
+        Context:
+          row.ContextType,
+
+        Saturation:
+          row.EndpointSaturation,
+
+        Rate:
+          row.EndpointReflectionRate,
+
+        Result:
+          row.Result
+      })
+    )
+  );
+
+
+  // ============================================================
+  // HIGH SIGNAL
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ HIGH SIGNAL ================'
+  );
+
+
+  if (
+    highSignal.length
+  ) {
+
+    console.table(
+
+      highSignal.map(
+        row => ({
+
+          Path:
+            row.Path,
+
+          Parameter:
+            row.Parameter,
+
+          HTTP:
+            row.HTTP,
+
+          Reason:
+            row.SignalReason,
+
+          Transform:
+            row.Transformation,
+
+          Context:
+            row.ContextType,
+
+          Characters:
+            row.CharacterSummary,
+
+          Result:
+            row.Result
+        })
+      )
+    );
+
+  } else {
+
+    console.log(
+      '[XSS Scout] HIGH signal 없음'
+    );
+  }
+
+
+  // ============================================================
+  // MEDIUM SIGNAL
+  // ============================================================
+
+  if (
+    mediumSignal.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ MEDIUM SIGNAL ================'
+    );
+
+
+    console.table(
+
+      mediumSignal.map(
+        row => ({
+
+          Path:
+            row.Path,
+
+          Parameter:
+            row.Parameter,
+
+          HTTP:
+            row.HTTP,
+
+          Reason:
+            row.SignalReason,
+
+          Transform:
+            row.Transformation,
+
+          Context:
+            row.ContextType,
+
+          Result:
+            row.Result
+        })
+      )
+    );
+  }
+
+
+  // ============================================================
+  // LOW SIGNAL SUMMARY
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ LOW SIGNAL SUMMARY ================'
+  );
+
+
+  const lowEndpointMap =
+    new Map();
+
+
+  for (
+    const row
+    of lowSignal
+  ) {
+
+    const key =
+      endpointKey(
+        row
+      );
+
+
+    if (
+      !lowEndpointMap.has(key)
+    ) {
+
+      lowEndpointMap.set(
+        key,
+        {
+          Origin:
+            row.Origin,
+
+          Host:
+            row.Host,
+
+          Path:
+            row.Path,
+
+          Count:
+            0,
+
+          Parameters:
+            [],
+
+          Reasons:
+            new Set(),
+
+          Transforms:
+            new Set()
+        }
+      );
+    }
+
+
+    const group =
+      lowEndpointMap.get(key);
+
+
+    group.Count++;
+
+    group.Parameters.push(
+      row.Parameter
+    );
+
+    group.Reasons.add(
+      row.SignalReason
+    );
+
+    group.Transforms.add(
+      row.Transformation
+    );
+  }
+
+
+  console.table(
+
+    [
+      ...lowEndpointMap.values()
+    ].map(
+      group => ({
+
+        Origin:
+          group.Origin,
+
+        Host:
+          group.Host,
+
+        Path:
+          group.Path,
+
+        Count:
+          group.Count,
+
+        Parameters:
+          group.Parameters.join(', '),
+
+        Reasons:
+          [
+            ...group.Reasons
+          ].join(', '),
+
+        Transforms:
+          [
+            ...group.Transforms
+          ].join(', ')
+      })
+    )
+  );
+
+
+  // ============================================================
+  // SUMMARY
+  // ============================================================
+
+  console.log('');
+
+  console.log(
+    '================ SUMMARY ================'
+  );
+
+
+  console.table([{
+
+    Endpoints:
+      endpointStats.length,
+
+    Results:
+      analyzedResults.length,
+
+    Reflections:
+      analyzedResults.filter(
+        row =>
+          row.Reflected
+      ).length,
+
+    High:
+      highSignal.length,
+
+    Medium:
+      mediumSignal.length,
+
+    Low:
+      lowSignal.length,
+
+    Info:
+      infoSignal.length,
+
+    SaturatedEndpoints:
+      endpointStats.filter(
+        endpoint =>
+          endpoint.Saturation ===
+            'VERY_HIGH' ||
+
+          endpoint.Saturation ===
+            'HIGH'
+      ).length,
+
+    RepetitiveUrlEncodingEndpoints:
+      endpointStats.filter(
+        endpoint =>
+          endpoint.HomogeneousUrlEncoding
+      ).length
+  }]);
+
+
+  // ============================================================
+  // SAVE
+  // ============================================================
+
+  window.__XSS_SCOUT_V29__ = {
+
+    version:
+      '2.9',
+
+    sourceVersion:
+      scout.version,
+
+    endpointStats,
+
+    results:
+      analyzedResults,
+
+    priorityResults,
+
+    highSignal,
+
+    mediumSignal,
+
+    lowSignal,
+
+    infoSignal
+  };
+
+
+  console.log('');
+
+  console.log(
+    '[XSS Scout v2.9] 분석 완료'
+  );
+
+
+  console.log(
+    'HIGH:',
+    'window.__XSS_SCOUT_V29__.highSignal'
+  );
+
+
+  console.log(
+    'MEDIUM:',
+    'window.__XSS_SCOUT_V29__.mediumSignal'
+  );
+
+
+  console.log(
+    'LOW:',
+    'window.__XSS_SCOUT_V29__.lowSignal'
+  );
+
+
+  console.log(
+    'Endpoint:',
+    'window.__XSS_SCOUT_V29__.endpointStats'
+  );
+
+
+  console.log(
+    'All:',
+    'window.__XSS_SCOUT_V29__.priorityResults'
+  );
+
+})();
+// XSS SCOUT v3.3 — unified compatibility export + DOM/request coverage
+window.__XSS_SCOUT__.version = '3.3';
+const __xssScoutDomSummary = __XSS_SCOUT_DOM__.summary();
+const __xssScoutScanRows = window.__XSS_SCOUT_V29__.results || [];
+const __xssScoutCoverage = {
+  activeMutationScope: 'SAME_ORIGIN_ONLY',
+  analyzedResults: __xssScoutScanRows.length,
+  sameOriginResults: __xssScoutScanRows.filter(row => row.Origin === 'SAME').length,
+  crossOriginResults: __xssScoutScanRows.filter(row => row.Origin === 'CROSS').length,
+  endpointCount: window.__XSS_SCOUT_V29__.endpointStats.length,
+  domHookStatus: __xssScoutDomSummary.hookStatus,
+  activeDomHooks: __xssScoutDomSummary.activeHookCount,
+  unavailableDomHooks: __xssScoutDomSummary.unavailableHooks,
+  observedDomEvents: __xssScoutDomSummary.total,
+  observedRequestShapes: __xssScoutDomSummary.requestShapes.length,
+  blindSpots: [
+    'POST/GraphQL bodies are observed but never replayed or mutated.',
+    'Only actions performed after this script starts are observed.',
+    'Framework internals or unhookable browser APIs may not be visible.'
+  ]
+};
+window.__XSS_SCOUT_V33__ = {
+  version: '3.3',
+  scanner: window.__XSS_SCOUT__,
+  analysis: window.__XSS_SCOUT_V29__,
+  results: window.__XSS_SCOUT_V29__.results,
+  priorityResults: window.__XSS_SCOUT_V29__.priorityResults,
+  endpointStats: window.__XSS_SCOUT_V29__.endpointStats,
+  highSignal: window.__XSS_SCOUT_V29__.highSignal,
+  mediumSignal: window.__XSS_SCOUT_V29__.mediumSignal,
+  lowSignal: window.__XSS_SCOUT_V29__.lowSignal,
+  infoSignal: window.__XSS_SCOUT_V29__.infoSignal,
+  domObserver: __XSS_SCOUT_DOM__,
+  domSummary: __xssScoutDomSummary,
+  domHighSignal: __xssScoutDomSummary.high,
+  domMediumSignal: __xssScoutDomSummary.medium,
+  domLowSignal: __xssScoutDomSummary.low,
+  requestShapes: __xssScoutDomSummary.requestShapes,
+  stateChangingRequestShapes: __xssScoutDomSummary.stateChangingRequestShapes,
+  coverage: __xssScoutCoverage
+};
+console.log('[XSS Scout v3.3] 통합 분석 완료:', 'window.__XSS_SCOUT_V33__');
+console.log('[XSS Scout v3.3] DOM/request observer is active. Use a harmless XSSSCOUT_* form marker if needed, then run: window.__XSS_SCOUT_V33__.domObserver.summary()');
+console.table([__xssScoutCoverage]);
+
+})();

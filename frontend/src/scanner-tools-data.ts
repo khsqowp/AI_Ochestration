@@ -10,7 +10,15 @@
  * 요약을 다시 쓰는 대신 원본 설명서를 신뢰할 수 있는 출처로 그대로 넘긴다.
  */
 
+import xssScoutV33 from './scanner-scripts/xssScoutV33.txt?raw'
+import xssScoutV33ResultCheck from './scanner-scripts/xssScoutV33ResultCheck.txt?raw'
+import clientRouteScoutV12 from './scanner-scripts/clientRouteScoutV12.txt?raw'
+
 export interface ScannerFile { filename: string; note?: string }
+
+// 브라우저 DevTools 콘솔에 직접 붙여넣는 스크립트 -- 파일 다운로드가 아니라 클립보드 복사가
+// 핵심 동작이라 files와 별도 필드로 둔다.
+export interface ScannerScript { label: string; content: string; note?: string }
 
 export interface ScannerTool {
   id: string
@@ -19,6 +27,7 @@ export interface ScannerTool {
   standalone: boolean // 외부 워드리스트/의존성 없이 바로 동작하는지 (false면 옵션 일부만 그럼)
   notes: string[]
   files: ScannerFile[]
+  scripts?: ScannerScript[]
 }
 
 export const SCANNER_TOOLS: ScannerTool[] = [
@@ -83,6 +92,38 @@ export const SCANNER_TOOLS: ScannerTool[] = [
     files: [
       { filename: 'xss_stored_scanner.py' },
       { filename: '설명서.txt' },
+    ],
+  },
+  {
+    id: 'xss-scout-console',
+    name: 'XSS Scout v3.3 (콘솔)',
+    tagline: '브라우저 DevTools 콘솔 붙여넣기형 -- DOM sink 관찰 + GET 파라미터 반사/인코딩 분석',
+    standalone: true,
+    notes: [
+      '파일 다운로드 없이 콘솔에 붙여넣고 바로 실행 -- 페이지 새로고침하면 관찰기 전부 해제됨.',
+      '1) 본 스크립트 붙여넣기 → 몇 초 대기(같은 오리진 GET 파라미터 mutation 진행) → 2) 결과 확인 스크립트로 시그니처 회귀 체크.',
+      'innerHTML/document.write 등 HTML sink만 훅 -- payload 주입·네비게이션·요청 헤더 변조 없음, 관찰만 함.',
+      'Active mutation은 기본적으로 같은 오리진 GET만 나감(CONFIG.TEST_CROSS_ORIGIN=false) -- 허가된 진단 범위에서만 사용.',
+    ],
+    files: [],
+    scripts: [
+      { label: '본 스크립트', content: xssScoutV33, note: '콘솔에 먼저 붙여넣기 (DOM 관찰 + GET mutation 스캔)' },
+      { label: '결과 확인 스크립트', content: xssScoutV33ResultCheck, note: '본 스크립트 완료 후 붙여넣기 (window.__XSS_SCOUT_V33__ 요약 + 픽스처 회귀 체크)' },
+    ],
+  },
+  {
+    id: 'client-route-scout',
+    name: 'Client Route Scout (콘솔)',
+    tagline: '브라우저 DevTools 콘솔 붙여넣기형 -- DOM/리소스/같은 오리진 스크립트에서 라우트·노출후보 수집',
+    standalone: true,
+    notes: [
+      '같은 오리진 GET만 사용 -- 경로 추측·폼 제출·세션 값 변경 없음, 순수 관찰.',
+      '노출 후보(API 키/JWT/자격증명 패턴)는 값 자체를 절대 안 담고 마스킹된 위치·근거만 기록 -- 실제 비밀 여부는 서버 코드에서 직접 확인 필요.',
+      '결과는 window.__CLIENT_ROUTE_SCOUT_V12__에 저장됨.',
+    ],
+    files: [],
+    scripts: [
+      { label: '스캐너 스크립트', content: clientRouteScoutV12, note: '콘솔에 붙여넣으면 즉시 실행 후 라우트/노출후보 표를 출력' },
     ],
   },
   {

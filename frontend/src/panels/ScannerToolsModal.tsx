@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Download, FolderSearch, X } from 'lucide-react'
+import { ChevronDown, Clipboard, Download, FolderSearch, X } from 'lucide-react'
 import { SCANNER_TOOLS } from '../scanner-tools-data'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
@@ -7,6 +7,13 @@ import { useModalA11y } from '../hooks/useModalA11y'
 export function ScannerToolsModal({ onClose }: { onClose: () => void }) {
   const modalRef = useModalA11y(true, onClose)
   const [open, setOpen] = useState<string | null>(SCANNER_TOOLS[0].id)
+  const [copiedLabel, setCopiedLabel] = useState<string | null>(null)
+
+  const copyScript = async (label: string, content: string) => {
+    await navigator.clipboard.writeText(content)
+    setCopiedLabel(label)
+    window.setTimeout(() => setCopiedLabel(l => (l === label ? null : l)), 1500)
+  }
 
   return <PanelShell className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">진단 · 정찰</p><h2><FolderSearch size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>정찰/취약점 스캐너</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
@@ -22,11 +29,16 @@ export function ScannerToolsModal({ onClose }: { onClose: () => void }) {
             </button>
             {expanded && <div className="diag-scanner-body">
               <ul className="diag-bullet-list">{tool.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
-              <div className="diag-file-list">
+              {tool.scripts && <div className="diag-file-list">
+                {tool.scripts.map(s => <button className="diag-file-download" key={s.label} onClick={() => void copyScript(s.label, s.content)}>
+                  <Clipboard size={14}/><span><b>{copiedLabel === s.label ? '복사됨' : s.label}</b>{s.note && <small>{s.note}</small>}</span>
+                </button>)}
+              </div>}
+              {tool.files.length > 0 && <div className="diag-file-list">
                 {tool.files.map(f => <a className="diag-file-download" key={f.filename} href={`/diagnostics-fixtures/${tool.id}/${f.filename}`} download={f.filename.split('/').pop()}>
                   <Download size={14}/><span><b>{f.filename}</b>{f.note && <small>{f.note}</small>}</span>
                 </a>)}
-              </div>
+              </div>}
             </div>}
           </article>
         })}

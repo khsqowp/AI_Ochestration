@@ -1,0 +1,52 @@
+(() => {
+  const scout = window.__XSS_SCOUT_V33__;
+  if (!scout) {
+    console.warn('[XSS Scout v3.3] 먼저 xss_scout_v3.3.js 전체를 실행하세요.');
+    return;
+  }
+  const observed = scout.domObserver.summary();
+  const expectedFixtureSignals = [
+    ['/fixture/html-raw', 'HIGH'],
+    ['/fixture/html-escaped', 'LOW'],
+    ['/fixture/json-escaped', 'LOW'],
+    ['/fixture/script-data', 'LOW'],
+    ['/fixture/script-exec-escaped', 'MEDIUM'],
+    ['/fixture/url-encoded', 'LOW'],
+    ['/fixture/route-info', 'LOW'],
+  ];
+  const byPath = new Map(scout.priorityResults.map(row => [row.Path, row]));
+  const fixtureRegression = expectedFixtureSignals.map(([path, expected]) => {
+    const row = byPath.get(path);
+    return {
+      Path: path,
+      Expected: expected,
+      Actual: row?.Signal || 'NOT_OBSERVED',
+      Reason: row?.SignalReason || '-',
+      Pass: row?.Signal === expected,
+    };
+  });
+  const expectedDomSignals = [
+    ['HTML_SINK_INNER_HTML', 'HIGH'],
+    ['HTML_SINK_SHADOW_ROOT_INNER_HTML', 'HIGH'],
+  ];
+  const domRegression = expectedDomSignals.map(([kind, expected]) => {
+    const row = observed.rows.find(item => item.Kind === kind && item.Signal === expected);
+    return { Kind: kind, Expected: expected, Actual: row?.Signal || 'NOT_OBSERVED', Pass: Boolean(row) };
+  });
+  console.table(scout.highSignal);
+  console.table(scout.mediumSignal);
+  console.table(observed.high);
+  console.table(observed.medium);
+  console.table(observed.stateChangingRequestShapes);
+  console.table(fixtureRegression);
+  console.table(domRegression);
+  console.table([scout.coverage]);
+  console.table([{
+    ReflectedHigh: scout.highSignal.length,
+    ReflectedMedium: scout.mediumSignal.length,
+    DomHigh: observed.high.length,
+    DomMedium: observed.medium.length,
+    ControlledInputMarkers: observed.controlledInputMarkerCount,
+    ObservedStateChangingRequests: observed.stateChangingRequestShapes.length,
+  }]);
+})();

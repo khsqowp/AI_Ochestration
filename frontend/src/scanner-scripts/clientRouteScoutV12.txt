@@ -1,0 +1,246 @@
+/*
+ * Client Route Scout v1.2 — DevTools Console / Snippet
+ * Passive same-origin route, asset, crypto/encoding, and exposure-candidate inventory.
+ * It does not guess paths, submit forms, modify session values, or print
+ * secret material. Loaded same-origin scripts are read with GET only.
+ */
+(async () => {
+  'use strict';
+
+  const CONFIG = {
+    sameOriginOnly: true,
+    fetchLoadedScripts: true,
+    maxScripts: 30,
+    maxScriptBytes: 1_000_000,
+    timeoutMs: 10_000,
+    maxCandidates: 1_000,
+    verbose: false,
+  };
+
+  const origin = location.origin;
+  const candidates = new Map();
+  const exposures = [];
+  const skipped = [];
+  const errors = [];
+  const coverage = {
+    domScripts: 0, inlineScripts: 0, sameOriginScripts: 0,
+    fetchedScripts: 0, resourceEntries: 0, resourceScriptCandidates: 0, documentMetadataScanned: false,
+    duplicateInlineScriptScanSuppressed: true,
+  };
+  const log = (...args) => console.log('%c[Client Route Scout]', 'color:#0f766e;font-weight:bold', ...args);
+
+  const normalize = value => {
+    try {
+      const url = new URL(value, location.href);
+      url.hash = '';
+      if (!/^https?:$/.test(url.protocol)) return null;
+      if (CONFIG.sameOriginOnly && url.origin !== origin) return null;
+      return url;
+    } catch { return null; }
+  };
+
+  const sourceLabel = source => String(source || 'UNKNOWN').toUpperCase();
+
+  const addCandidate = (value, source, evidence = '') => {
+    const url = normalize(value);
+    if (!url || candidates.size >= CONFIG.maxCandidates) return;
+    const parameterNames = [...new Set(url.searchParams.keys())];
+    const key = `${url.origin}${url.pathname}?${parameterNames.sort().join('&')}`;
+    const safeURL = parameterNames.length
+      ? `${url.origin}${url.pathname}?${parameterNames.map(name => `${encodeURIComponent(name)}=[redacted]`).join('&')}`
+      : `${url.origin}${url.pathname}`;
+    let record = candidates.get(key);
+    if (!record) {
+      record = {
+        URL: safeURL,
+        Path: url.pathname,
+        Parameters: parameterNames.join(', '),
+        Sources: new Set(),
+        Evidence: new Set(),
+        StaticAsset: /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|woff2?|ico|webp|mp4|pdf)$/i.test(url.pathname),
+      };
+      candidates.set(key, record);
+    }
+    record.Sources.add(sourceLabel(source));
+    if (evidence) record.Evidence.add(evidence.slice(0, 160));
+  };
+
+  const sourceLocation = (text, offset) => {
+    if (!Number.isInteger(offset) || offset < 0) return 'unknown';
+    const before = text.slice(0, offset);
+    const line = (before.match(/\n/g) || []).length + 1;
+    const column = offset - before.lastIndexOf('\n');
+    return `line:${line}, column:${column}`;
+  };
+
+  const addExposure = (type, source, detail, severity = 'REVIEW', location = 'unknown') => {
+    const key = `${type}|${source}|${detail}`;
+    if (exposures.some(item => item.Key === key)) return;
+    const confidence = severity === 'HIGH' ? 'PATTERN_MATCH_REQUIRES_VERIFICATION'
+      : severity === 'REVIEW' ? 'LOW_CONTEXT_ONLY' : 'INFORMATIONAL';
+    exposures.push({ Key: key, Type: type, Severity: severity, Confidence: confidence, Source: source, Location: location, Detail: detail, Value: '[redacted]' });
+  };
+
+  const scanExposureCandidates = (text, source) => {
+    const body = String(text || '');
+    const checks = [
+      ['PRIVATE_KEY_MATERIAL', /-----BEGIN (?:RSA |EC |OPENSSH |)?PRIVATE KEY-----/i, 'private-key block marker', 'HIGH'],
+      ['PUBLIC_KEY_MATERIAL', /-----BEGIN (?:RSA |EC |OPENSSH )?PUBLIC KEY-----/i, 'public-key block marker; normally non-secret, verify intended exposure', 'INFO'],
+      ['AUTHORIZATION_LITERAL', /(?:authorization|bearer)\s*[:=]\s*['"`][^'"`\s]{12,}/i, 'authorization-like literal', 'HIGH'],
+      ['CLOUD_ACCESS_KEY_PATTERN', /(?:AKIA|ASIA)[A-Z0-9]{16}/, 'cloud access-key pattern', 'HIGH'],
+      ['PASSWORD_LITERAL', /(?:password|passwd|pwd)\s*[:=]\s*['"`][^'"`\s]{4,}/i, 'password-like literal', 'HIGH'],
+      ['API_KEY_LITERAL', /(?:api[_-]?key|client[_-]?secret|access[_-]?token|secret[_-]?key)\s*[:=]\s*['"`][^'"`\s]{8,}/i, 'credential-like configuration literal', 'HIGH'],
+      ['JWT_LITERAL', /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, 'JWT-shaped literal', 'HIGH'],
+      ['CRYPTO_KEY_LITERAL', /(?:encryption|crypto|aes|rsa)[A-Za-z0-9_\-]*(?:key|iv)\s*[:=]\s*['"`][^'"`\s]{8,}/i, 'hard-coded crypto-key/IV-like literal', 'HIGH'],
+      ['WEBCRYPTO_KEY_OPERATION', /\bcrypto\.subtle\.(?:importKey|exportKey|generateKey|deriveKey|deriveBits|wrapKey|unwrapKey)\b/i, 'WebCrypto key-management operation', 'REVIEW'],
+      ['WEBCRYPTO_CRYPTO_OPERATION', /\bcrypto\.subtle\.(?:encrypt|decrypt|sign|verify|digest)\b/i, 'WebCrypto cryptographic operation', 'INFO'],
+      ['CRYPTO_ALGORITHM_REFERENCE', /\b(?:AES-(?:GCM|CBC|CTR|KW)|RSA-OAEP|RSA-PSS|PBKDF2|HKDF|ECDH|ECDSA|SHA-(?:1|256|384|512)|MD5)\b/i, 'crypto algorithm reference; verify design and key handling', 'INFO'],
+      ['KEY_CONFIGURATION_IDENTIFIER', /\b(?:publicKey|privateKey|keyId|key_id|clientSecret|encryptionKey|cryptoKey|initializationVector|\biv\b|\bsalt\b|\bnonce\b)\b/i, 'key or cryptographic-parameter identifier; inspect handling, not a secret by itself', 'REVIEW'],
+      ['ENCODING_OPERATION', /\b(?:atob|btoa|TextEncoder|TextDecoder|base64url|base64|encodeURIComponent|decodeURIComponent)\b/i, 'encoding or decoding operation', 'INFO'],
+      ['JWT_PROCESSING_REFERENCE', /\b(?:jwt|jsonwebtoken|jose|decodeJwt|signJwt|verifyJwt)\b/i, 'JWT processing reference; inspect token validation server-side', 'REVIEW'],
+      ['PUBLIC_RUNTIME_CONFIGURATION', /\b(?:VITE_[A-Z0-9_]+|NEXT_PUBLIC_[A-Z0-9_]+|window\.__ENV__|runtimeConfig)\b/i, 'public runtime configuration marker', 'REVIEW'],
+      ['SOURCE_MAP_REFERENCE', /sourceMappingURL\s*=/i, 'source-map reference', 'INFO'],
+      ['DEBUG_OR_BUILD_INFO', /(?:build-info|debug\s*[:=]\s*true|source map|stacktrace)/i, 'debug/build-info marker', 'REVIEW'],
+    ];
+    for (const [type, pattern, detail, severity] of checks) {
+      const match = body.match(pattern);
+      if (match) addExposure(type, source, detail, severity, sourceLocation(body, match.index));
+    }
+  };
+
+  const extractRouteStrings = (text, source) => {
+    const body = String(text || '');
+    const patterns = [
+      /(?:https?:)?\/\/[^\s'"`<>\\]+/g,
+      /\b(?:import|fetch)\s*\(\s*['"`]([^'"`]+)['"`]/g,
+      /\bnew\s+URL\(\s*['"`]([^'"`]+)['"`]\s*,\s*import\.meta\.url\s*\)/g,
+      /(?:['"`])((?:\/)(?:api|rest|graphql|auth|oauth|admin|internal|v\d+|assets|static|uploads|download)[A-Za-z0-9_~%?&=+./:{}\-]*)(?:['"`])/gi,
+      /(?:['"`])(\/[A-Za-z0-9_~%?&=+./:{}\-]{2,})(?:['"`])/g,
+    ];
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(body))) {
+        const value = match[1] || match[0];
+        if (value.length > 2 && value.length < 2_048) addCandidate(value, source, 'static string');
+      }
+    }
+  };
+
+  const collectDom = () => {
+    addCandidate(location.href, 'CURRENT_DOCUMENT', 'location');
+    document.querySelectorAll('a[href], link[href], script[src], img[src], iframe[src], form[action], video[src], audio[src], source[src]').forEach(node => {
+      const attribute = node.getAttribute('href') !== null ? 'href' : node.getAttribute('src') !== null ? 'src' : 'action';
+      const value = node.getAttribute(attribute);
+      if (value) addCandidate(value, `DOM_${node.tagName}`, attribute);
+    });
+    document.querySelectorAll('form').forEach(form => {
+      const action = form.getAttribute('action') || location.href;
+      addCandidate(action, 'FORM', String(form.method || 'GET').toUpperCase());
+      form.querySelectorAll('input[name], select[name], textarea[name]').forEach(input => {
+        const name = input.getAttribute('name');
+        if (name) addCandidate(`${action}${action.includes('?') ? '&' : '?'}${encodeURIComponent(name)}=`, 'FORM_FIELD', name);
+      });
+    });
+    const inlineScripts = document.querySelectorAll('script:not([src])');
+    coverage.inlineScripts = inlineScripts.length;
+    coverage.domScripts = document.scripts.length;
+    inlineScripts.forEach((node, index) => {
+      const text = node.textContent || '';
+      extractRouteStrings(text, `INLINE_SCRIPT_${index + 1}`);
+      scanExposureCandidates(text, `INLINE_SCRIPT_${index + 1}`);
+    });
+  };
+
+  const collectPerformance = () => {
+    const resources = performance.getEntriesByType('resource');
+    coverage.resourceEntries = resources.length;
+    resources.forEach(entry => {
+      addCandidate(entry.name, `RESOURCE_${entry.initiatorType || 'OTHER'}`, 'PerformanceResourceTiming');
+    });
+    performance.getEntriesByType('navigation').forEach(entry => addCandidate(entry.name, 'NAVIGATION', 'PerformanceNavigationTiming'));
+  };
+
+  const fetchText = async url => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CONFIG.timeoutMs);
+    try {
+      const response = await fetch(url, { credentials: 'include', cache: 'no-store', signal: controller.signal });
+      const length = Number(response.headers.get('content-length') || 0);
+      if (!response.ok) throw new Error(`HTTP_${response.status}`);
+      if (length > CONFIG.maxScriptBytes) throw new Error('SIZE_LIMIT');
+      const text = await response.text();
+      if (text.length > CONFIG.maxScriptBytes) throw new Error('SIZE_LIMIT');
+      return text;
+    } finally { clearTimeout(timer); }
+  };
+
+  const collectLoadedScripts = async () => {
+    if (!CONFIG.fetchLoadedScripts) return;
+    const resourceScriptURLs = performance.getEntriesByType('resource')
+      .filter(entry => /\.(?:m?js)(?:$|[?#])/i.test(entry.name))
+      .map(entry => entry.name);
+    coverage.resourceScriptCandidates = [...new Set(resourceScriptURLs)].length;
+    const allScriptURLs = [...new Set([
+      ...[...document.scripts].map(script => script.src).filter(Boolean),
+      ...resourceScriptURLs,
+    ])]
+      .map(normalize).filter(Boolean);
+    coverage.sameOriginScripts = allScriptURLs.filter(url => url.origin === origin).length;
+    const urls = allScriptURLs
+      .filter(url => url.origin === origin).slice(0, CONFIG.maxScripts);
+    for (const url of urls) {
+      try {
+        const text = await fetchText(url.href);
+        coverage.fetchedScripts++;
+        extractRouteStrings(text, `SCRIPT_${url.pathname}`);
+        scanExposureCandidates(text, `SCRIPT_${url.pathname}`);
+      } catch (error) {
+        skipped.push({ URL: url.href, Reason: String(error?.message || error) });
+      }
+    }
+  };
+
+  log('Collecting DOM, network, and loaded same-origin script evidence…');
+  collectDom();
+  collectPerformance();
+  const metadataCopy = document.documentElement.cloneNode(true);
+  metadataCopy.querySelectorAll('script').forEach(node => node.remove());
+  scanExposureCandidates(metadataCopy.outerHTML, 'DOCUMENT_METADATA');
+  coverage.documentMetadataScanned = true;
+  await collectLoadedScripts();
+
+  const routes = [...candidates.values()].map(row => ({
+    URL: row.URL, Path: row.Path, Parameters: row.Parameters,
+    Sources: [...row.Sources].join(', '), Evidence: [...row.Evidence].join(', '), StaticAsset: row.StaticAsset,
+  })).sort((a, b) => a.Path.localeCompare(b.Path));
+  const exposureRows = exposures.map(({ Key, ...row }) => row);
+  const apiCandidates = routes.filter(row => /\/(?:api|rest|graphql|auth|oauth|admin|internal|v\d+)\b/i.test(row.Path));
+  const coverageReport = {
+    ...coverage,
+    skippedScripts: skipped.length,
+    routes: routes.length,
+    apiCandidates: apiCandidates.length,
+    exposureCandidates: exposureRows.length,
+    highExposureCandidates: exposureRows.filter(row => row.Severity === 'HIGH').length,
+    blindSpots: [
+      'Only loaded same-origin scripts up to the configured count/size are read.',
+      'Dynamically constructed, encrypted, or server-only routes may not be discoverable.',
+      'Candidate patterns are masked and require source-code or server-side verification.'
+    ]
+  };
+
+  window.__CLIENT_ROUTE_SCOUT_V12__ = {
+    version: '1.2', startedAt: new Date().toISOString(), config: CONFIG,
+    routes, apiCandidates, exposureCandidates: exposureRows, skipped, errors, coverage: coverageReport,
+    note: 'Exposure candidates are masked indicators, not confirmed secrets. Verify server-side and rotate only confirmed credentials.',
+  };
+
+  console.log('');
+  console.log('================ CLIENT ROUTE SCOUT v1.2 ================');
+  console.table(apiCandidates);
+  console.log('================ EXPOSURE CANDIDATES (MASKED) ================');
+  console.table(exposureRows);
+  console.log('================ SUMMARY ================');
+  console.table([coverageReport]);
+  log('Done. Full routes:', 'window.__CLIENT_ROUTE_SCOUT_V12__.routes', 'Masked exposure candidates:', 'window.__CLIENT_ROUTE_SCOUT_V12__.exposureCandidates', 'Coverage:', 'window.__CLIENT_ROUTE_SCOUT_V12__.coverage');
+})();
