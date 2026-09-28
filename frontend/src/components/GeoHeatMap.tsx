@@ -1,13 +1,21 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { geoNaturalEarth1, geoMercator, geoPath, type GeoProjection } from 'd3-geo'
 import { feature } from 'topojson-client'
 import worldTopo from 'world-atlas/countries-110m.json'
+import koreaProvinceTopo from './geo-data/skorea-provinces-topo.json'
 import type { AccessPoint } from '../lib/types'
 
+type LandFeatures = { features: { id?: string; properties?: { name?: string } }[] }
+
 // world-atlas ships a TopoJSON Topology; type it loosely and convert once.
-const LAND = feature(worldTopo as never, (worldTopo as never as { objects: { countries: never } }).objects.countries) as unknown as {
-  features: { id?: string; properties?: { name?: string } }[]
-}
+const LAND = feature(worldTopo as never, (worldTopo as never as { objects: { countries: never } }).objects.countries) as unknown as LandFeatures
+
+// 국가 경계까지만 있는 world-atlas와 별도로, "국내" 뷰는 출처: southkorea/southkorea-maps
+// (KOSTAT 2018, 시/도 단순화판)의 시/도 경계를 그려서 점이 어느 지역에 속하는지 구분되게 한다.
+const KOREA_PROVINCES = feature(
+  koreaProvinceTopo as never,
+  (koreaProvinceTopo as never as { objects: { skorea_provinces_2018_geo: never } }).objects.skorea_provinces_2018_geo,
+) as unknown as LandFeatures
 
 const KOREA_BOUNDS = { type: 'MultiPoint' as const, coordinates: [[124.5, 33.0], [131.9, 38.7]] }
 const MIN_ZOOM = 1
@@ -26,11 +34,13 @@ export function GeoHeatMap({ view, points }: { view: 'world' | 'korea'; points: 
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: MIN_ZOOM })
   const [dragging, setDragging] = useState(false)
   const drag = useRef<{ pointerId: number; clientX: number; clientY: number; x: number; y: number; zoom: number } | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   const { paths, dots } = useMemo(() => {
     const proj = project(view, W, H)
     const path = geoPath(proj)
-    const paths = LAND.features.map((f, i) => ({ d: path(f as never) || '', key: i }))
+    const landFeatures = view === 'korea' ? KOREA_PROVINCES.features : LAND.features
+    const paths = landFeatures.map((f, i) => ({ d: path(f as never) || '', key: i }))
     const maxHits = Math.max(1, ...points.map(p => p.hits))
     const dots = points.map(p => {
       const xy = proj([p.lon, p.lat])
@@ -42,28 +52,41 @@ export function GeoHeatMap({ view, points }: { view: 'world' | 'korea'; points: 
   }, [view, W, H, points])
 
   const resetViewport = () => setViewport({ x: 0, y: 0, zoom: MIN_ZOOM })
+  // prev 기반 함수형 업데이트 -- viewport를 클로저로 안 잡아서 아래 wheel 리스너를
+  // mount 시 한 번만 등록해도 항상 최신 상태로 계산된다.
   const zoomAt = (clientX: number, clientY: number, multiplier: number, target: SVGSVGElement) => {
-    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.zoom * multiplier))
-    if (nextZoom === viewport.zoom) return
     const rect = target.getBoundingClientRect()
     const ratioX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
     const ratioY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
-    const currentWidth = W / viewport.zoom
-    const currentHeight = H / viewport.zoom
-    const nextWidth = W / nextZoom
-    const nextHeight = H / nextZoom
-    const worldX = viewport.x + ratioX * currentWidth
-    const worldY = viewport.y + ratioY * currentHeight
-    setViewport({
-      x: Math.max(0, Math.min(W - nextWidth, worldX - ratioX * nextWidth)),
-      y: Math.max(0, Math.min(H - nextHeight, worldY - ratioY * nextHeight)),
-      zoom: nextZoom,
+    setViewport(prev => {
+      const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev.zoom * multiplier))
+      if (nextZoom === prev.zoom) return prev
+      const currentWidth = W / prev.zoom
+      const currentHeight = H / prev.zoom
+      const nextWidth = W / nextZoom
+      const nextHeight = H / nextZoom
+      const worldX = prev.x + ratioX * currentWidth
+      const worldY = prev.y + ratioY * currentHeight
+      return {
+        x: Math.max(0, Math.min(W - nextWidth, worldX - ratioX * nextWidth)),
+        y: Math.max(0, Math.min(H - nextHeight, worldY - ratioY * nextHeight)),
+        zoom: nextZoom,
+      }
     })
   }
-  const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
-    event.preventDefault()
-    zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, event.currentTarget)
-  }
+  // React 17+는 onWheel을 루트에 passive 리스너로 붙여서 그 안의 preventDefault()가
+  // 씹힌다 -- 그래서 지도 확대하려고 휠 돌리면 페이지 스크롤까지 같이 움직였다.
+  // 네이티브 리스너를 passive:false로 직접 붙여야 확대와 스크롤이 분리된다.
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const onWheel = (event: globalThis.WheelEvent) => {
+      event.preventDefault()
+      zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, el)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [W, H])
   const handleKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
     if (event.key === '0') { event.preventDefault(); resetViewport(); return }
     if (event.key !== '+' && event.key !== '=' && event.key !== '-') return
@@ -97,7 +120,7 @@ export function GeoHeatMap({ view, points }: { view: 'world' | 'korea'; points: 
   const viewBox = `${viewport.x} ${viewport.y} ${W / viewport.zoom} ${H / viewport.zoom}`
 
   return <div className="geo-map">
-    <svg viewBox={viewBox} role="img" tabIndex={0} onWheel={handleWheel} onKeyDown={handleKeyDown}
+    <svg ref={svgRef} viewBox={viewBox} role="img" tabIndex={0} onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
       className={dragging ? 'is-dragging' : undefined}
       aria-label={`${view === 'korea' ? '국내 접근 지도' : '전세계 접근 지도'}. 마우스 휠로 확대·축소하고, 왼쪽 버튼으로 드래그해 이동합니다. 0 키로 초기화합니다.`}>
