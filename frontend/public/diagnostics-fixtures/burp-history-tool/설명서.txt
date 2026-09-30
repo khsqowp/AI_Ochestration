@@ -1,0 +1,69 @@
+burp_history_to_wordlist.py 사용 설명서
+================================================
+
+역할
+----
+Burp Suite에서 모은 요청 내역(Proxy > HTTP history, 또는 Site map의 일부)을
+내보낸 파일에서 URL 경로만 뽑아 중복 제거된 워드리스트로 만들어준다.
+네트워크 요청을 전혀 하지 않는 순수 로컬 파싱 도구 -- 다른 도구들에 있는
+동시 요청 제한/속도 제한이 여기엔 없다(애초에 요청을 안 보내니까).
+
+기본 사용법
+----------
+python burp_history_to_wordlist.py history.xml
+python burp_history_to_wordlist.py requests.txt --output-dir ./out
+python burp_history_to_wordlist.py history.xml more-history.xml   (여러 개 합치기)
+
+대화형(간단) 모드
+----------------
+인자 없이 실행하면(더블클릭 포함) 파일 경로를 순서대로 물어봄(빈 줄=입력
+종료) → 저장 폴더만 확인하면 바로 실행. 옵션이 2개뿐이라 별도 고급 메뉴는
+없음.
+
+입력 파일 만드는 법 (Burp Suite)
+-------------------------------
+1. Proxy > HTTP history 탭에서 원하는 요청들을 선택(Ctrl+클릭 또는 전체
+   선택)
+2. 우클릭 → "Save items" 선택 → XML로 저장
+   (Site map 탭에서 특정 서브트리만 우클릭 → Save selected items도 가능)
+3. 저장된 .xml 파일을 이 스크립트에 그대로 넘기면 됨
+
+XML이 아니어도 됨 -- 아래 형식의 텍스트 파일(.txt)도 그대로 지원:
+  https://target.example/api/users        <- 전체 URL 한 줄씩
+  GET /api/users/profile HTTP/1.1          <- 요청줄(메서드+경로) 형식
+  /legacy/old-endpoint                     <- 경로만(메서드는 GET으로 간주)
+수동으로 요청 로그를 메모장에 붙여넣은 것도 그대로 먹인다.
+
+출력 파일
+--------
+--output-dir로 지정한 폴더(기본: 현재 폴더)에 2개 생성:
+
+paths-wordlist.txt
+    경로만 한 줄씩, 중복 제거 + 정렬, 앞의 "/"는 제거(SecLists 워드리스트
+    파일들과 같은 형식). 그대로 다음처럼 바로 쓸 수 있음:
+      python crawler.py https://target.example --wordlist paths-wordlist.txt
+    (절대경로로 주면 crawler.py가 SecLists 폴더 대신 이 파일을 바로 찾음)
+
+methods-by-path.txt
+    "경로<TAB>관측된메서드들" 형식. 한 경로에서 GET 외에 POST/PUT/DELETE/
+    OPTIONS 등 여러 메서드가 실제로 오간 걸 봤다면 전부 쉼표로 나열됨 --
+    "이 경로는 메서드별로 뭘 더 찔러볼 만한가"를 고를 때 참고.
+    예: api/users	GET,OPTIONS,POST
+
+옵션 설명
+--------
+files (필수, 위치인자, 여러 개 가능)
+    Burp XML export 또는 텍스트 파일 경로. 여러 개 주면 전부 합쳐서(중복
+    제거) 하나의 출력으로 만듦.
+
+--output-dir 경로 (기본: 현재 폴더)
+    결과 파일 2개를 저장할 디렉터리. 없으면 자동 생성.
+
+주의
+----
+- 이 도구 자체는 아무 요청도 보내지 않지만, 결과로 만든 워드리스트를
+  다른 스캐너(crawler.py, default_content_scanner.py)에 넣어 실제로
+  탐색할 때는 그쪽 도구의 사용 권한/제한이 그대로 적용됨.
+- Burp export에는 인증 토큰·쿠키 등 민감정보가 포함될 수 있음(특히
+  <request>/<response> 필드). 이 스크립트는 그 필드를 읽지 않지만(경로/
+  메서드만 사용), 원본 export 파일 자체는 취급에 주의할 것.

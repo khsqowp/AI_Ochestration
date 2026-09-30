@@ -34,12 +34,13 @@ export const SCANNER_TOOLS: ScannerTool[] = [
   {
     id: 'default-content-scanner',
     name: '기본 콘텐츠/백업 파일 스캐너',
-    tagline: 'Tomcat/Apache/nginx/IIS/Next.js 기본 파일 + 백업 확장자 변형 + 경로순회(Traversal) 퍼징',
+    tagline: 'Tomcat/Apache/nginx/IIS/Next.js/API/CMS 기본 파일 + 백업 확장자 변형 + 우회 인코딩 포함 경로순회(Traversal) 퍼징',
     standalone: true,
     notes: [
       '인자 없이 실행하면(더블클릭 포함) URL·쿠키·모드만 순서대로 묻는 대화형 간단 모드로 진입 -- 옵션 이름 외울 필요 없음.',
       '--cookies/--headers로 로그인 후에만 보이는 경로도 점검 가능.',
-      '기본 동작(내장 generic 목록)은 추가 워드리스트 없이 바로 됨 -- --tech/--traversal용 SecLists·PayloadsAllTheThings 목록은 없으면 자동으로 건너뜀(에러 아님, 위 오프라인 올인원 패키지로 채울 수 있음).',
+      '--tech에 axis/glassfish/iplanet/jrun/api/cms(wordpress·drupal·joomla)까지 추가됨, generic 목록도 SecLists quickhits.txt(2500여개) 병합으로 대폭 확대 -- "탐색 가짓수가 너무 적다"는 피드백 반영해 위 오프라인 올인원 패키지 자체를 훨씬 두껍게 채움.',
+      '경로순회(traversal) 모드는 기본으로 우회 인코딩(단일/이중 URL인코딩, 오버롱 UTF-8, null byte)을 자동 적용함(--no-bypass-encodings로 끌 수 있음), 타겟 파일도 시그니처로 검증 가능한 7종(passwd/apache·nginx·php 설정/win.ini/boot.ini/web.config)으로 확대.',
       'robots.txt 준수 + 호스트별 최소 요청 간격 + 전체 요청 상한이 기본으로 항상 걸려 있음(끌 수 없음).',
     ],
     files: [
@@ -166,10 +167,27 @@ export const SCANNER_TOOLS: ScannerTool[] = [
       '인자 없이 실행하면 URL·쿠키·깊이만 순서대로 묻는 대화형 간단 모드로 진입.',
       '--cookies/--headers로 로그인 후에만 보이는 페이지도 크롤링 가능(크롤링·워드리스트 탐색·SPA 보조 탐지 전부 적용).',
       '취약점 스캐너 아님(discovery 전용) -- 동시 요청 캡 + 호스트별 최소 간격이 항상 강제됨(끌 수 없음).',
-      '--wordlist로 경로 존재 탐색도 같이 가능, 여러 번 줘서 여러 목록 합치기 가능 -- "common.txt"는 위 오프라인 올인원 패키지에 포함, 그 외는 직접 지정 필요.',
+      '--wordlist로 경로 존재 탐색도 같이 가능, 여러 번 줘서 여러 목록 합치기 가능 -- common.txt·raft-large/medium-directories·raft-large/medium-files는 위 오프라인 올인원 패키지에 포함, 그 외는 직접 지정 필요.',
+      '리포트 끝에 "수집 실패·건너뜀" 섹션이 추가됨 -- robots.txt 차단, 타임아웃/네트워크 오류, 범위 밖(다른 도메인) 스킵 건수를 전부 명시적으로 보여줘서 "경로를 다 구해왔는데도 뭐가 빠졌는지 모르겠다"는 상황을 없앰.',
     ],
     files: [
       { filename: 'crawler.py' },
+      { filename: '설명서.txt' },
+    ],
+  },
+  {
+    id: 'burp-history-tool',
+    name: 'Burp 히스토리 → 워드리스트 변환기',
+    tagline: 'Burp Suite export(XML/텍스트)에서 URL 경로를 뽑아 중복 제거된 워드리스트 + 경로별 메서드 목록 생성',
+    standalone: true,
+    notes: [
+      '네트워크 요청을 전혀 하지 않는 순수 로컬 파싱 도구 -- 다른 도구들의 속도 제한이 여기엔 없음(애초에 요청을 안 보냄).',
+      'Burp Proxy > HTTP history에서 "Save items"로 내보낸 XML, 또는 URL/요청줄을 줄 단위로 붙여넣은 텍스트 파일 둘 다 지원, 여러 파일 합치기 가능.',
+      '출력된 paths-wordlist.txt를 그대로 crawler.py --wordlist / default_content_scanner.py 대상 경로 선정에 바로 사용 가능. methods-by-path.txt는 경로별로 실제 관측된 HTTP 메서드를 모아줘서 OPTIONS 등 메서드 테스트 대상 고르는 데 씀.',
+      '인자 없이 실행하면 파일 경로만 순서대로 물어보는 대화형 모드로 진입.',
+    ],
+    files: [
+      { filename: 'burp_history_to_wordlist.py' },
       { filename: '설명서.txt' },
     ],
   },

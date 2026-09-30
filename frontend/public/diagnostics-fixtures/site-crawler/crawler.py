@@ -264,6 +264,9 @@ class CrawlStats:
     termination_reason: str = TERMINATION_MAX_DEPTH
     unlimited_pages: bool = False  # --max-pages 0
     query_variation_warnings: list[str] = field(default_factory=list)
+    external_skipped: int = 0  # links discovered but never fetched because they left the
+    # allowed scope (--allow-external not set) -- previously counted locally and discarded,
+    # so "다 구해왔다고 생각했는데 빠진 게 있다"를 확인할 방법이 없었음.
 
     def to_dict(self) -> dict:
         return {
@@ -273,6 +276,7 @@ class CrawlStats:
             "termination_reason": self.termination_reason,
             "unlimited_pages": self.unlimited_pages,
             "query_variation_warnings": self.query_variation_warnings,
+            "external_skipped": self.external_skipped,
         }
 
 
@@ -740,6 +744,7 @@ def crawl(
             if len(visited) >= visited_limit:
                 emergency_stop = True
                 break
+        stats.external_skipped += external_count
         current_level = next_level
 
         if emergency_stop:
@@ -817,6 +822,21 @@ def print_console_report(results: list[PageResult], stats: CrawlStats | None = N
         for r in sorted(real_hits, key=lambda r: (r.status_code or 0, r.url)):
             print(f"  {r.status_code:<4} {r.response_time_ms or 0:>7.1f}ms  {r.content_type or '-':<20} {r.url}  [출처: Burp History]")
 
+    failed = [r for r in results if r.error]
+    if failed:
+        robots_skipped = [r for r in failed if r.error and r.error.startswith("Disallowed")]
+        other_failed = [r for r in failed if r not in robots_skipped]
+        print(f"\n[수집 실패·건너뜀] (robots.txt 차단 {len(robots_skipped)}건, 그 외 오류 {len(other_failed)}건)")
+        show_limit = 50
+        for r in other_failed[:show_limit]:
+            print(f"  실패  {r.url}  -- {r.error}")
+        if len(other_failed) > show_limit:
+            print(f"  ... {len(other_failed) - show_limit}건 더 (JSON 출력으로 전체 확인 가능)")
+        for r in robots_skipped[:show_limit]:
+            print(f"  차단  {r.url}")
+        if len(robots_skipped) > show_limit:
+            print(f"  ... {len(robots_skipped) - show_limit}건 더 (JSON 출력으로 전체 확인 가능)")
+
     if stats is not None:
         print("\n" + "=" * 60)
         print(" 탐색 진행 요약")
@@ -827,6 +847,8 @@ def print_console_report(results: list[PageResult], stats: CrawlStats | None = N
         print("단계별 방문 페이지 수:")
         for d in sorted(stats.pages_by_depth):
             print(f"  {d + 1}단계 (내부 depth {d}): {stats.pages_by_depth[d]}개")
+        if stats.external_skipped:
+            print(f"범위 밖(다른 도메인)이라 건너뛴 링크: {stats.external_skipped}개 (--allow-external로 포함 가능)")
         print(f"더 진행하지 못한 이유: {stats.termination_reason}")
         if stats.query_variation_warnings:
             print(f"\n[경고] 쿼리 파라미터만 다른 무한 URL 생성 의심 ({len(stats.query_variation_warnings)}건):")

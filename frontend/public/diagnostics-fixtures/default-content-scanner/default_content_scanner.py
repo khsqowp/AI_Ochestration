@@ -7,19 +7,24 @@ always on, never disabled):
 
   1. Fingerprint mode (default): probes known default/sample/test/docs
      paths shipped by common server software (Tomcat, Apache httpd,
-     nginx, IIS, JBoss) using the bundled SecLists Web-Servers lists,
-     plus a small built-in list of common sensitive/generic files
-     (.env, .git/HEAD, docker-compose.yml, phpinfo.php, ...).
+     nginx, IIS, JBoss, Axis, Glassfish, iPlanet, JRun) plus REST API
+     surface (api) and popular CMS (wordpress/drupal/joomla) lists,
+     using the bundled SecLists Web-Content lists, plus a built-in
+     list of common sensitive/generic files (.env, .git/HEAD, ...)
+     merged with SecLists' quickhits.txt.
 
   2. Backup-mutation mode (--mutate): for every path the fingerprint
      pass finds (status != 404), also probes common backup-file
      variants of it (.bak, ~, .old, .orig, .swp, .zip, ...).
 
   3. Path-traversal mode (--traversal): fuzzes a query parameter or a
-     FUZZ marker in a URL template with traversal payloads from the
-     bundled PayloadsAllTheThings Directory Traversal lists, and flags
-     responses matching known target-file signatures (/etc/passwd,
-     win.ini).
+     FUZZ marker in a URL template with traversal/LFI payloads from
+     the bundled PayloadsAllTheThings Directory Traversal + File
+     Inclusion lists, applies WAF-bypass encoding variants (URL/double
+     URL-encode, overlong UTF-8, null byte -- toggle with
+     --no-bypass-encodings) to the depth-template payloads, and flags
+     responses matching known target-file signatures (passwd, apache/
+     nginx/php config, win.ini, boot.ini, web.config).
 
 Usage:
     python default_content_scanner.py https://target.example --tech tomcat,nginx
@@ -50,19 +55,47 @@ logger = logging.getLogger("default_content_scanner")
 TOOLS_DIR = Path(__file__).resolve().parent.parent
 SECLISTS_WEB_CONTENT = TOOLS_DIR / "SecLists-master" / "Discovery" / "Web-Content"
 PAYLOADS_TRAVERSAL_DIR = TOOLS_DIR / "PayloadsAllTheThings-master" / "Directory Traversal" / "Intruder"
+PAYLOADS_LFI_DIR = TOOLS_DIR / "PayloadsAllTheThings-master" / "File Inclusion" / "Intruders"
 
 DEFAULT_USER_AGENT = "default-content-scanner/1.0 (+rate-limited; contact: local-security-testing)"
 MAX_BODY_BYTES = 512 * 1024
 MAX_TOTAL_REQUESTS = 3000  # hard ceiling unless --force
 
-TECH_WORDLISTS = {
+# 값이 list[Path]인 항목은 여러 파일을 합쳐서(중복 제거) 하나의 --tech 카테고리로 씀
+# -- SecLists가 같은 소프트웨어를 여러 파일로 쪼개놨거나(IIS 본체+system.web 설정), api/cms처럼
+# 원래도 여러 출처 파일을 모아야 의미있는 카테고리인 경우.
+TECH_WORDLISTS: dict[str, Path | list[Path]] = {
     "tomcat": SECLISTS_WEB_CONTENT / "Web-Servers" / "Apache-Tomcat.txt",
     "apache": SECLISTS_WEB_CONTENT / "Web-Servers" / "Apache.txt",
     "nginx": SECLISTS_WEB_CONTENT / "Web-Servers" / "nginx.txt",
-    "iis": SECLISTS_WEB_CONTENT / "Web-Servers" / "IIS.txt",
+    "iis": [
+        SECLISTS_WEB_CONTENT / "Web-Servers" / "IIS.txt",
+        SECLISTS_WEB_CONTENT / "Web-Servers" / "IIS-systemweb.txt",
+    ],
     "jboss": SECLISTS_WEB_CONTENT / "Web-Servers" / "JBoss.txt",
     "db-backups": SECLISTS_WEB_CONTENT / "Common-DB-Backups.txt",
+    "axis": SECLISTS_WEB_CONTENT / "Web-Servers" / "Apache-Axis.txt",
+    "glassfish": SECLISTS_WEB_CONTENT / "Web-Servers" / "Glassfish-Sun-Microsystems.txt",
+    "iplanet": SECLISTS_WEB_CONTENT / "Web-Servers" / "Oracle-Sun-iPlanet.txt",
+    "jrun": SECLISTS_WEB_CONTENT / "Web-Servers" / "Java-Servlet-Runner-Adobe-JRun.txt",
+    "api": [
+        SECLISTS_WEB_CONTENT / "api" / "api-endpoints.txt",
+        SECLISTS_WEB_CONTENT / "api" / "api-endpoints-res.txt",
+        SECLISTS_WEB_CONTENT / "api" / "objects.txt",
+        SECLISTS_WEB_CONTENT / "api" / "actions.txt",
+    ],
+    "cms": [
+        SECLISTS_WEB_CONTENT / "CMS" / "wordpress.fuzz.txt",
+        SECLISTS_WEB_CONTENT / "CMS" / "wp-plugins.fuzz.txt",
+        SECLISTS_WEB_CONTENT / "CMS" / "wp-themes.fuzz.txt",
+        SECLISTS_WEB_CONTENT / "CMS" / "drupal-themes.fuzz.txt",
+        SECLISTS_WEB_CONTENT / "CMS" / "joomla-plugins.fuzz.txt",
+    ],
 }
+
+# generic 카테고리 보강용 -- 하드코딩 목록(GENERIC_DEFAULT_PATHS)은 그대로 유지하고, 있으면
+# 이 파일(알려진 민감파일 2500여개 모음)에서 더 불러와 합친다(없으면 조용히 건너뜀, 에러 아님).
+GENERIC_EXTRA_WORDLIST = SECLISTS_WEB_CONTENT / "quickhits.txt"
 
 # Next.js has no dedicated SecLists file (Web-Servers/ covers server software,
 # not frontend frameworks) -- built in directly instead of a wordlist file.
@@ -96,11 +129,34 @@ GENERIC_DEFAULT_PATHS = [
 
 BACKUP_SUFFIXES = [".bak", ".backup", ".old", ".orig", ".save", ".swp", ".tmp", "~", ".1", ".copy", ".zip", ".tar.gz", ".rar", ".7z"]
 
-TRAVERSAL_TARGET_FILES = {"unix": "etc/passwd", "windows": "windows/win.ini"}
-TRAVERSAL_SIGNATURES = {
-    "unix": re.compile(r"root:.*:0:0:"),
-    "windows": re.compile(r"\[(fonts|extensions)\]", re.IGNORECASE),
+# 타겟 파일마다 실제로 "읽혔다"를 확인할 콘텐츠 시그니처가 있어야 의미가 있다 -- 시그니처 없는
+# 타겟을 더 넣는 건 매치될 수 없는 요청만 늘리는 것이라 일부러 안 함(Linux-files.txt 같은
+# 무검증 대량 목록 대신, 확인 가능한 소수 정예로 감).
+TRAVERSAL_TARGET_FILES: dict[str, list[str]] = {
+    "unix": ["etc/passwd", "etc/apache2/apache2.conf", "etc/nginx/nginx.conf", "etc/php.ini"],
+    "windows": ["windows/win.ini", "boot.ini", "inetpub/wwwroot/web.config"],
 }
+TRAVERSAL_SIGNATURES: dict[str, re.Pattern] = {
+    "passwd": re.compile(r"root:.*:0:0:"),
+    "apache-conf": re.compile(r"ServerRoot", re.IGNORECASE),
+    "nginx-conf": re.compile(r"worker_processes", re.IGNORECASE),
+    "php-ini": re.compile(r"\[PHP\]"),
+    "win-ini": re.compile(r"\[(fonts|extensions)\]", re.IGNORECASE),
+    "boot-ini": re.compile(r"\[boot loader\]", re.IGNORECASE),
+    "web-config": re.compile(r"<configuration>", re.IGNORECASE),
+}
+
+# 이미 완성된 트래버설/LFI 문자열 목록 -- {FILE} 치환 불필요, 상당수가 출처에서부터 null
+# byte(%00)·이중 인코딩 등 우회 변형을 자체 포함하고 있음.
+FLAT_TRAVERSAL_FILES = [
+    (PAYLOADS_TRAVERSAL_DIR, "directory_traversal.txt"),
+    (PAYLOADS_TRAVERSAL_DIR, "dotdotpwn.txt"),
+    (PAYLOADS_LFI_DIR, "JHADDIX_LFI.txt"),
+    (PAYLOADS_LFI_DIR, "List_Of_File_To_Include.txt"),
+    (PAYLOADS_LFI_DIR, "List_Of_File_To_Include_NullByteAdded.txt"),
+    (PAYLOADS_LFI_DIR, "dot-slash-PathTraversal_and_LFI_pairing.txt"),
+    (PAYLOADS_LFI_DIR, "LFI-FD-check.txt"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -193,32 +249,76 @@ def build_fingerprint_targets(techs: list[str], include_generic: bool) -> list[t
         if wl is None:
             logger.warning("Unknown --tech value: %s (known: %s)", tech, ", ".join([*TECH_WORDLISTS, *BUILTIN_TECH_PATHS]))
             continue
-        if not wl.is_file():
-            logger.warning("Wordlist missing for %s: %s", tech, wl)
-            continue
-        for line in load_lines(wl):
-            targets.append((tech, line))
+        wordlist_files = wl if isinstance(wl, list) else [wl]
+        seen_paths: set[str] = set()
+        found_any = False
+        for wf in wordlist_files:
+            if not wf.is_file():
+                continue
+            found_any = True
+            for line in load_lines(wf):
+                if line not in seen_paths:
+                    seen_paths.add(line)
+                    targets.append((tech, line))
+        if not found_any:
+            logger.warning("Wordlist(s) missing for %s: %s", tech, ", ".join(str(w) for w in wordlist_files))
     if include_generic:
-        targets.extend(("generic", p) for p in GENERIC_DEFAULT_PATHS)
+        seen_generic: set[str] = set()
+        merged_generic = list(GENERIC_DEFAULT_PATHS)
+        if GENERIC_EXTRA_WORDLIST.is_file():
+            merged_generic += load_lines(GENERIC_EXTRA_WORDLIST)
+        for p in merged_generic:
+            if p not in seen_generic:
+                seen_generic.add(p)
+                targets.append(("generic", p))
     return targets
 
 
-def load_traversal_payloads(target_os: str, limit: int) -> list[tuple[str, str]]:
-    """Returns (target_file_label, payload) pairs."""
+def mutate_traversal_payload(payload: str) -> list[str]:
+    """WAF/필터 우회용 인코딩 변형 4종(원본 포함 최대 4개): 단일 URL 인코딩, 이중 URL
+    인코딩, 오버롱 UTF-8 슬래시(..%c0%af), null byte suffix. 우리가 직접 조립하는
+    depth-템플릿 페이로드에만 적용한다 -- flat 목록(FLAT_TRAVERSAL_FILES)은 이미 출처에서부터
+    자체 인코딩 변형을 포함하고 있어서 대상이 아님."""
+    variants = [payload]
+    if "/" in payload or "." in payload:
+        single = payload.replace("/", "%2f").replace(".", "%2e")
+        if single != payload:
+            variants.append(single)
+        double = payload.replace("/", "%252f").replace(".", "%252e")
+        if double != payload:
+            variants.append(double)
+    if "../" in payload:
+        variants.append(payload.replace("../", "..%c0%af"))
+    variants.append(payload + "%00")
+    return variants
+
+
+def load_traversal_payloads(target_os: str, limit: int, bypass_encodings: bool = True) -> list[tuple[str, str]]:
+    """Returns (label, payload) pairs."""
     payloads: list[tuple[str, str]] = []
 
-    direct_file = PAYLOADS_TRAVERSAL_DIR / "directory_traversal.txt"
-    if direct_file.is_file():
-        payloads.extend(("mixed", p) for p in load_lines(direct_file))
+    for directory, fname in FLAT_TRAVERSAL_FILES:
+        p = directory / fname
+        if p.is_file():
+            payloads.extend(("flat", line) for line in load_lines(p))
 
     os_list = ["unix", "windows"] if target_os == "both" else [target_os]
+    template_payloads: list[tuple[str, str]] = []
     for template_file in ("deep_traversal.txt", "traversals-8-deep-exotic-encoding.txt"):
         p = PAYLOADS_TRAVERSAL_DIR / template_file
         if not p.is_file():
             continue
         for line in load_lines(p):
             for os_name in os_list:
-                payloads.append((os_name, line.replace("{FILE}", TRAVERSAL_TARGET_FILES[os_name])))
+                for target_file in TRAVERSAL_TARGET_FILES[os_name]:
+                    template_payloads.append((os_name, line.replace("{FILE}", target_file)))
+
+    if bypass_encodings:
+        for label, base in template_payloads:
+            for variant in mutate_traversal_payload(base):
+                payloads.append((label, variant))
+    else:
+        payloads.extend(template_payloads)
 
     seen: set[str] = set()
     unique = [pl for pl in payloads if not (pl[1] in seen or seen.add(pl[1]))]
@@ -308,9 +408,9 @@ def _fetch_batch(
         matched = None
         if signature_check and body:
             text = body.decode("utf-8", errors="replace")
-            for os_name, pattern in TRAVERSAL_SIGNATURES.items():
+            for sig_label, pattern in TRAVERSAL_SIGNATURES.items():
                 if pattern.search(text):
-                    matched = os_name
+                    matched = sig_label
                     break
         return ProbeResult(category=category, url=url, status_code=status, content_length=length, response_time_ms=round(elapsed_ms, 1), error=error, matched_signature=matched, payload=payload)
 
@@ -395,6 +495,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url-template", action="store_true", help="Treat url as a template containing a literal FUZZ marker for traversal payloads")
     parser.add_argument("--target-os", choices=["unix", "windows", "both"], default="both", help="Which OS target file to aim traversal payloads at (default: both)")
     parser.add_argument("--traversal-limit", type=int, default=300, help="Max traversal payloads to try (default 300, hard ceiling 2000 unless --force)")
+    parser.add_argument(
+        "--no-bypass-encodings", action="store_true",
+        help="Disable automatic WAF/filter bypass encoding variants (single/double URL-encode, "
+        "overlong UTF-8, null byte) of traversal payloads -- on by default",
+    )
     parser.add_argument("--workers", type=int, default=3, help="Max concurrent requests (default 3, capped at 10)")
     parser.add_argument("--min-interval", type=float, default=0.5, help="Minimum seconds between requests to the same host (default 0.5)")
     parser.add_argument("--timeout", type=int, default=10, help="Per-request timeout in seconds (default 10)")
@@ -428,6 +533,7 @@ KOREAN_HELP = {
     "url_template": "url 인자를 템플릿으로 취급, 안의 리터럴 FUZZ 문자열을 페이로드로 치환",
     "target_os": "트래버설 대상 OS (unix/windows/both, 기본 both)",
     "traversal_limit": "시도할 최대 트래버설 페이로드 수 (기본 300, 안전상한 2000)",
+    "no_bypass_encodings": "WAF/필터 우회 인코딩 변형(단일/이중 URL인코딩, 오버롱 UTF-8, null byte) 끄기 -- 기본은 켜짐",
     "workers": "동시 요청 수 (기본 3, 최대 10)",
     "min_interval": "같은 호스트에 대한 요청 사이 최소 간격, 초 단위 (기본 0.5)",
     "timeout": "요청 1건당 타임아웃, 초 단위 (기본 10)",
@@ -688,7 +794,7 @@ def _estimate_dict(args: argparse.Namespace) -> dict:
         budget -= fingerprint_count
 
     if args.traversal and budget > 0:
-        payload_pairs = load_traversal_payloads(args.target_os, min(args.traversal_limit, budget))
+        payload_pairs = load_traversal_payloads(args.target_os, min(args.traversal_limit, budget), not args.no_bypass_encodings)
         traversal_count = len(payload_pairs)
 
     mutate_paths_count = 0
@@ -849,7 +955,7 @@ def main(argv: list[str] | None = None) -> int:
                 budget -= len(mut_results)
 
     if args.traversal and budget > 0:
-        payload_pairs = load_traversal_payloads(args.target_os, min(args.traversal_limit, budget))
+        payload_pairs = load_traversal_payloads(args.target_os, min(args.traversal_limit, budget), not args.no_bypass_encodings)
         if args.url_template:
             jobs = [("traversal", args.url.replace("FUZZ", payload), payload) for _, payload in payload_pairs]
         else:

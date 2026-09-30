@@ -68,10 +68,16 @@ url (필수, 위치인자)
 --wordlist 경로 또는 짧은이름 (반복 가능)
     디렉터리/파일 탐색용 경로 목록 파일. 절대/상대 경로를 직접 줘도 되고,
     "common.txt", "raft-large-directories" 처럼 짧은 이름만 주면
-    SecLists-master\Discovery\Web-Content\ 안에서 자동으로 찾음.
+    SecLists-master\Discovery\Web-Content\ 안에서 자동으로 찾음. 오프라인
+    올인원 패키지엔 common.txt(가벼움) 외에 raft-large/medium-directories,
+    raft-large/medium-files(더 깊고 넓음)까지 포함돼있음 -- 상황에 맞게
+    골라 쓰거나 여러 개 합쳐 쓰면 됨.
+    Burp Suite 히스토리에서 직접 워드리스트를 뽑고 싶으면 같이 제공되는
+    burp_history_to_wordlist.py로 export(XML/텍스트)를 변환한 뒤 그
+    결과 파일(paths-wordlist.txt)을 여기 경로로 넘기면 됨.
     --wordlist를 여러 번 줘서 여러 목록을 한 번에 합쳐서 쓸 수 있음(합친
     뒤 중복 제거하고 --wordlist-limit 한 번만 적용). 예:
-      --wordlist common.txt --wordlist raft-small-words.txt
+      --wordlist common.txt --wordlist raft-large-directories.txt
     지정 시 기존 크롤링에 "추가로" 루트 경로에 대해 목록의 각 경로를
     probing 함 (404 아닌 결과만 콘솔에 강조 출력).
 
@@ -91,6 +97,16 @@ url (필수, 위치인자)
 
 -v, --verbose
     상세 로그 출력.
+
+리포트의 "수집 실패·건너뜀" 섹션
+------------------------------
+크롤링/워드리스트 탐색이 끝나면 콘솔·JSON 리포트 마지막에 실패·차단·
+범위밖 스킵 내역이 별도로 정리돼서 나온다:
+  - robots.txt 차단 건수 + URL 목록
+  - 타임아웃/네트워크 오류로 재시도 소진된 건수 + URL 목록(오류 내용 포함)
+  - 다른 도메인이라 건너뛴 링크 수(--allow-external로 포함 가능)
+"경로를 다 모았는데 뭐가 빠졌는지 모르겠다"를 막기 위한 섹션 -- 예전엔
+이 정보가 로그에만 스치듯 지나가고 최종 리포트엔 안 남았음.
 
 주의
 ----
