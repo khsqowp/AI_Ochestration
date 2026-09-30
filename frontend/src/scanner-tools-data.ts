@@ -39,7 +39,7 @@ export const SCANNER_TOOLS: ScannerTool[] = [
     notes: [
       '인자 없이 실행하면(더블클릭 포함) URL·쿠키·모드만 순서대로 묻는 대화형 간단 모드로 진입 -- 옵션 이름 외울 필요 없음.',
       '--cookies/--headers로 로그인 후에만 보이는 경로도 점검 가능.',
-      '--tech에 axis/glassfish/iplanet/jrun/api/cms(wordpress·drupal·joomla)까지 추가됨, generic 목록도 SecLists quickhits.txt(2500여개) 병합으로 대폭 확대 -- "탐색 가짓수가 너무 적다"는 피드백 반영해 위 오프라인 올인원 패키지 자체를 훨씬 두껍게 채움.',
+      '--tech에 axis/glassfish/iplanet/jrun/api/cms(wordpress·drupal·joomla)까지 추가됨, generic 목록도 SecLists quickhits.txt(2500여개) 병합으로 대폭 확대 -- "탐색 가짓수가 너무 적다"는 피드백 반영해 위 오프라인 올인원 패키지 자체를 훨씬 두껍게 채움. 해당 워드리스트 파일이 없으면(번들 없이 스크립트만 받은 경우) 그 항목만 자동으로 건너뜀(에러 아님).',
       '경로순회(traversal) 모드는 기본으로 우회 인코딩(단일/이중 URL인코딩, 오버롱 UTF-8, null byte)을 자동 적용함(--no-bypass-encodings로 끌 수 있음), 타겟 파일도 시그니처로 검증 가능한 7종(passwd/apache·nginx·php 설정/win.ini/boot.ini/web.config)으로 확대.',
       'robots.txt 준수 + 호스트별 최소 요청 간격 + 전체 요청 상한이 기본으로 항상 걸려 있음(끌 수 없음).',
     ],
