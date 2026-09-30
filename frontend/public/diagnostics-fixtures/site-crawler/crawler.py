@@ -572,13 +572,16 @@ def resolve_wordlist_path(spec: str) -> Path:
     )
 
 
-def load_wordlist(path: Path, limit: int) -> list[str]:
+def load_wordlist(path: Path, limit: int | None = None) -> list[str]:
+    """limit=None skips truncation here -- used when the caller (multiple
+    --wordlist files) wants to merge everything first and apply one combined
+    limit afterward, instead of truncating each file independently."""
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     paths = [line.strip() for line in lines if line.strip() and not line.startswith("#")]
     # de-dupe while preserving order
     seen: set[str] = set()
     unique = [p for p in paths if not (p in seen or seen.add(p))]
-    if len(unique) > limit:
+    if limit is not None and len(unique) > limit:
         logger.warning("Wordlist has %d entries, truncating to --wordlist-limit %d", len(unique), limit)
         unique = unique[:limit]
     return unique
@@ -873,9 +876,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--headers", action="append", default=[], help="Extra header 'Name: value' sent with every request across the whole run, repeatable")
     parser.add_argument(
         "--wordlist",
-        default=None,
+        action="append", default=[],
         help="Path (or short name, e.g. 'common.txt') of a SecLists-style path list to probe against the "
-        f"target root, in addition to link crawling. Short names resolve under {SECLISTS_WEB_CONTENT_DIR}",
+        f"target root, in addition to link crawling. Short names resolve under {SECLISTS_WEB_CONTENT_DIR}. "
+        "Repeatable -- entries from every given list are merged and de-duplicated before --wordlist-limit applies.",
     )
     parser.add_argument(
         "--wordlist-limit",
@@ -915,6 +919,34 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force", action="store_true", help=f"Allow depth greater than the default safety ceiling ({MAX_ALLOWED_DEPTH})")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     return parser
+
+
+# 고급 메뉴 번호 목록에 뜨는 설명 -- argparse 자체 help(영어, --help 출력용)는
+# 그대로 두고, 대화형 메뉴에서 보여줄 텍스트만 따로 둔다.
+KOREAN_HELP = {
+    "depth": "시작 URL로부터 몇 단계까지 링크를 따라갈지 (기본 1, 0=시작 페이지만)",
+    "workers": "동시 요청 수 (기본 3, 최대 10)",
+    "min_interval": "같은 호스트에 대한 요청 사이 최소 간격, 초 단위 (기본 0.5)",
+    "timeout": "요청 1건당 타임아웃, 초 단위 (기본 10)",
+    "retries": "네트워크 오류 시 재시도 횟수 (기본 1)",
+    "max_pages": "깊이와 무관하게 전체 요청 수 상한 (기본 200, 0=제한 없음)",
+    "allow_external": "다른 도메인으로 나가는 링크도 따라가기 (기본은 같은 호스트만)",
+    "ignore_robots": "robots.txt 무시 (기본은 준수)",
+    "user_agent": "요청 시 보낼 User-Agent 문자열",
+    "cookies": "이번 실행 전체(크롤링/워드리스트/SPA 보조/추가 URL)에 실어 보낼 Cookie 헤더",
+    "headers": "이번 실행 전체에 추가할 헤더 'Name: value' (반복 가능)",
+    "wordlist": "경로 존재 탐색용 워드리스트 파일명/경로 (반복 가능 -- 여러 개 지정하면 합쳐서 중복 제거 후 사용)",
+    "wordlist_limit": "워드리스트에서 실제로 시도할 최대 경로 수 (기본 200, 안전상한 2000)",
+    "output": "출력 형식 (console 또는 json)",
+    "output_file": "JSON 리포트를 저장할 파일 경로",
+    "spa_assist": "SPA 보조 탐지 -- 크롤링한 페이지의 JS 번들에서 라우트 후보를 뽑아 실제 요청으로 검증",
+    "js_bundle_limit": "SPA 보조 탐지에서 다운로드할 JS 번들 최대 개수 (기본 10)",
+    "spa_candidate_limit": "SPA 보조 탐지에서 실제 요청할 후보 경로 최대 개수 (기본 60)",
+    "extra_urls": "추가로 검증할 URL 목록, 쉼표로 구분 (예: Burp History에서 수집한 경로)",
+    "extra_header": "--extra-urls 요청에만 추가할 헤더 -- --cookies/--headers 위에 덧붙임 (반복 가능)",
+    "force": "안전상한(깊이/워드리스트/SPA 관련 상한) 초과를 허용",
+    "verbose": "상세 로그 출력",
+}
 
 
 def _ask_yes_no(prompt: str, default: bool = False) -> bool:
@@ -998,7 +1030,8 @@ def _interactive_menu_loop(
                 state = f"(기본값: {act.default})" if act.default is not None else "(미설정)"
             req = " *필수" if getattr(act, "required", False) else ""
             choices = f" 선택지:{','.join(map(str, act.choices))}" if act.choices else ""
-            print(f"  {i:>2}. {name:<20} = {state:<22}{req}  {act.help or ''}{choices}")
+            help_text = KOREAN_HELP.get(act.dest, act.help or '')
+            print(f"  {i:>2}. {name:<20} = {state:<22}{req}  {help_text}{choices}")
         choice = input("\n번호 선택 (0=실행, q=취소): ").strip().lower()
         if choice == "q":
             return None
@@ -1193,17 +1226,30 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.wordlist:
-        try:
-            wordlist_path = resolve_wordlist_path(args.wordlist)
-        except FileNotFoundError as exc:
-            logger.error(str(exc))
-            return 2
-        paths = load_wordlist(wordlist_path, args.wordlist_limit)
-        logger.info("Loaded %d path(s) from %s", len(paths), wordlist_path)
+        combined: list[str] = []
+        seen: set[str] = set()
+        for spec in args.wordlist:
+            try:
+                wordlist_path = resolve_wordlist_path(spec)
+            except FileNotFoundError as exc:
+                logger.error(str(exc))
+                return 2
+            loaded = load_wordlist(wordlist_path)
+            logger.info("Loaded %d path(s) from %s", len(loaded), wordlist_path)
+            for p in loaded:
+                if p not in seen:
+                    seen.add(p)
+                    combined.append(p)
+        if len(combined) > args.wordlist_limit:
+            logger.warning(
+                "Combined wordlist has %d entries across %d file(s), truncating to --wordlist-limit %d",
+                len(combined), len(args.wordlist), args.wordlist_limit,
+            )
+            combined = combined[:args.wordlist_limit]
         results.extend(
             probe_wordlist(
                 args.url,
-                paths,
+                combined,
                 max_workers=args.workers,
                 min_interval_seconds=args.min_interval,
                 timeout=args.timeout,

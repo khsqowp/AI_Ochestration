@@ -65,10 +65,13 @@ url (필수, 위치인자)
 --headers "Name: value" (반복 가능)
     이번 실행 전체에 추가할 헤더.
 
---wordlist 경로 또는 짧은이름
+--wordlist 경로 또는 짧은이름 (반복 가능)
     디렉터리/파일 탐색용 경로 목록 파일. 절대/상대 경로를 직접 줘도 되고,
     "common.txt", "raft-large-directories" 처럼 짧은 이름만 주면
-    E:\temp\tools\SecLists-master\Discovery\Web-Content\ 안에서 자동으로 찾음.
+    SecLists-master\Discovery\Web-Content\ 안에서 자동으로 찾음.
+    --wordlist를 여러 번 줘서 여러 목록을 한 번에 합쳐서 쓸 수 있음(합친
+    뒤 중복 제거하고 --wordlist-limit 한 번만 적용). 예:
+      --wordlist common.txt --wordlist raft-small-words.txt
     지정 시 기존 크롤링에 "추가로" 루트 경로에 대해 목록의 각 경로를
     probing 함 (404 아닌 결과만 콘솔에 강조 출력).
 

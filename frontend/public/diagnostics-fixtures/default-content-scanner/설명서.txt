@@ -49,7 +49,9 @@ url (필수, 위치인자)
     대상 기본 URL. --url-template 사용 시 "FUZZ" 마커를 포함한 전체 URL.
 
 --tech 목록 (기본 tomcat,apache,nginx)
-    쉼표로 구분. 사용 가능: tomcat, apache, nginx, iis, jboss, db-backups
+    쉼표로 구분. 사용 가능: tomcat, apache, nginx, iis, jboss, db-backups, nextjs
+    (nextjs는 SecLists 파일 없이 내장된 경로 목록 사용 -- _next/static/*,
+    .next/BUILD_ID, next.config.js 등)
 
 --no-generic
     내장 generic 목록(.env, .git/HEAD, docker-compose.yml 등) 제외.

@@ -34,7 +34,7 @@ export const SCANNER_TOOLS: ScannerTool[] = [
   {
     id: 'default-content-scanner',
     name: '기본 콘텐츠/백업 파일 스캐너',
-    tagline: 'Tomcat/Apache/nginx/IIS 기본 파일 + 백업 확장자 변형 + 경로순회(Traversal) 퍼징',
+    tagline: 'Tomcat/Apache/nginx/IIS/Next.js 기본 파일 + 백업 확장자 변형 + 경로순회(Traversal) 퍼징',
     standalone: true,
     notes: [
       '인자 없이 실행하면(더블클릭 포함) URL·쿠키·모드만 순서대로 묻는 대화형 간단 모드로 진입 -- 옵션 이름 외울 필요 없음.',
@@ -166,7 +166,7 @@ export const SCANNER_TOOLS: ScannerTool[] = [
       '인자 없이 실행하면 URL·쿠키·깊이만 순서대로 묻는 대화형 간단 모드로 진입.',
       '--cookies/--headers로 로그인 후에만 보이는 페이지도 크롤링 가능(크롤링·워드리스트 탐색·SPA 보조 탐지 전부 적용).',
       '취약점 스캐너 아님(discovery 전용) -- 동시 요청 캡 + 호스트별 최소 간격이 항상 강제됨(끌 수 없음).',
-      '--wordlist로 경로 존재 탐색도 같이 가능 -- "common.txt"는 위 오프라인 올인원 패키지에 포함, 그 외는 직접 지정 필요.',
+      '--wordlist로 경로 존재 탐색도 같이 가능, 여러 번 줘서 여러 목록 합치기 가능 -- "common.txt"는 위 오프라인 올인원 패키지에 포함, 그 외는 직접 지정 필요.',
     ],
     files: [
       { filename: 'crawler.py' },

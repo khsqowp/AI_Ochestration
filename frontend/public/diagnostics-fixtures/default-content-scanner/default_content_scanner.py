@@ -64,6 +64,26 @@ TECH_WORDLISTS = {
     "db-backups": SECLISTS_WEB_CONTENT / "Common-DB-Backups.txt",
 }
 
+# Next.js has no dedicated SecLists file (Web-Servers/ covers server software,
+# not frontend frameworks) -- built in directly instead of a wordlist file.
+NEXTJS_DEFAULT_PATHS = [
+    "_next/static/development/_buildManifest.js",
+    "_next/static/development/_ssgManifest.js",
+    "_next/static/chunks/webpack.js",
+    "_next/static/chunks/main.js",
+    "_next/static/chunks/pages/_app.js",
+    ".next/BUILD_ID",
+    "_next/server/pages-manifest.json",
+    "_next/server/middleware-manifest.json",
+    "_next/data/development/index.json",
+    "next.config.js",
+    "next.config.mjs",
+    "_next/image",
+]
+BUILTIN_TECH_PATHS = {
+    "nextjs": NEXTJS_DEFAULT_PATHS,
+}
+
 GENERIC_DEFAULT_PATHS = [
     ".env", ".env.bak", ".env.local", ".git/HEAD", ".git/config", ".svn/entries",
     ".htaccess", ".htpasswd", "web.config", "docker-compose.yml", "Dockerfile",
@@ -165,9 +185,13 @@ def load_lines(path: Path) -> list[str]:
 def build_fingerprint_targets(techs: list[str], include_generic: bool) -> list[tuple[str, str]]:
     targets: list[tuple[str, str]] = []
     for tech in techs:
+        builtin = BUILTIN_TECH_PATHS.get(tech)
+        if builtin is not None:
+            targets.extend((tech, p) for p in builtin)
+            continue
         wl = TECH_WORDLISTS.get(tech)
         if wl is None:
-            logger.warning("Unknown --tech value: %s (known: %s)", tech, ", ".join(TECH_WORDLISTS))
+            logger.warning("Unknown --tech value: %s (known: %s)", tech, ", ".join([*TECH_WORDLISTS, *BUILTIN_TECH_PATHS]))
             continue
         if not wl.is_file():
             logger.warning("Wordlist missing for %s: %s", tech, wl)
@@ -356,7 +380,7 @@ def write_json_report(results: list[ProbeResult], path: str, baseline: tuple[int
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="default_content_scanner", description="Rate-limited default-content / backup-file / path-traversal scanner.")
     parser.add_argument("url", help="Target base URL (or full URL with a literal FUZZ marker when using --url-template)")
-    parser.add_argument("--tech", default="tomcat,apache,nginx", help="Comma-separated tech wordlists to probe (default: tomcat,apache,nginx). Known: " + ", ".join(TECH_WORDLISTS))
+    parser.add_argument("--tech", default="tomcat,apache,nginx", help="Comma-separated tech wordlists to probe (default: tomcat,apache,nginx). Known: " + ", ".join([*TECH_WORDLISTS, *BUILTIN_TECH_PATHS]))
     parser.add_argument("--no-generic", action="store_true", help="Skip the built-in generic sensitive/default-file list")
     parser.add_argument("--no-fingerprint", action="store_true", help="Skip fingerprint mode entirely (useful with --traversal only)")
     parser.add_argument("--mutate", action="store_true", help="Also probe backup-suffix variants of every fingerprint hit (status != 404)")
@@ -389,6 +413,36 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     return parser
+
+
+# 고급 메뉴 번호 목록에 뜨는 설명 -- argparse 자체 help(영어, --help 출력용)는
+# 그대로 두고, 대화형 메뉴에서 보여줄 텍스트만 따로 둔다.
+KOREAN_HELP = {
+    "tech": "탐색할 기술 스택, 쉼표로 구분 (기본 tomcat,apache,nginx). 가능: " + ", ".join([*TECH_WORDLISTS, *BUILTIN_TECH_PATHS]),
+    "no_generic": "내장 generic 목록(.env, .git/HEAD 등) 제외",
+    "no_fingerprint": "지문(fingerprint) 모드 자체를 끔 (--traversal만 쓰고 싶을 때)",
+    "mutate": "발견된 경로들의 백업 확장자 변형본(.bak/.old/~ 등)도 탐색",
+    "mutate_paths": "지정한 URL 목록(쉼표 구분)의 백업 변형본만 독립적으로 탐색 -- 지문/트래버설 모드 무시",
+    "traversal": "경로탐색(디렉터리 트래버설) 퍼징 활성화 -- param 또는 url_template 중 하나 필수",
+    "param": "트래버설 페이로드를 넣을 쿼리 파라미터명 (예: file)",
+    "url_template": "url 인자를 템플릿으로 취급, 안의 리터럴 FUZZ 문자열을 페이로드로 치환",
+    "target_os": "트래버설 대상 OS (unix/windows/both, 기본 both)",
+    "traversal_limit": "시도할 최대 트래버설 페이로드 수 (기본 300, 안전상한 2000)",
+    "workers": "동시 요청 수 (기본 3, 최대 10)",
+    "min_interval": "같은 호스트에 대한 요청 사이 최소 간격, 초 단위 (기본 0.5)",
+    "timeout": "요청 1건당 타임아웃, 초 단위 (기본 10)",
+    "retries": "네트워크 오류 시 재시도 횟수 (기본 1)",
+    "max_requests": "전체 모드 합산 요청 수 상한 (기본 1000, 안전상한 3000)",
+    "ignore_robots": "robots.txt 무시 (기본은 준수)",
+    "user_agent": "요청 시 보낼 User-Agent 문자열",
+    "cookies": "모든 요청에 실어 보낼 Cookie 헤더, 'k=v; k2=v2' 형식",
+    "headers": "모든 요청에 추가할 헤더 'Name: value' (반복 가능)",
+    "output": "출력 형식 (console 또는 json)",
+    "output_file": "JSON 리포트를 저장할 파일 경로",
+    "force": "안전상한(traversal-limit 2000, max-requests 3000) 초과를 허용",
+    "estimate_only": "실제 요청 없이 예상 요청 수만 JSON으로 출력하고 종료",
+    "verbose": "상세 로그 출력",
+}
 
 
 def _ask_yes_no(prompt: str, default: bool = False) -> bool:
@@ -472,7 +526,8 @@ def _interactive_menu_loop(
                 state = f"(기본값: {act.default})" if act.default is not None else "(미설정)"
             req = " *필수" if getattr(act, "required", False) else ""
             choices = f" 선택지:{','.join(map(str, act.choices))}" if act.choices else ""
-            print(f"  {i:>2}. {name:<20} = {state:<22}{req}  {act.help or ''}{choices}")
+            help_text = KOREAN_HELP.get(act.dest, act.help or '')
+            print(f"  {i:>2}. {name:<20} = {state:<22}{req}  {help_text}{choices}")
         choice = input("\n번호 선택 (0=실행, q=취소): ").strip().lower()
         if choice == "q":
             return None
