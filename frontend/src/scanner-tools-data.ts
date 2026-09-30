@@ -37,7 +37,9 @@ export const SCANNER_TOOLS: ScannerTool[] = [
     tagline: 'Tomcat/Apache/nginx/IIS 기본 파일 + 백업 확장자 변형 + 경로순회(Traversal) 퍼징',
     standalone: true,
     notes: [
-      '기본 동작(내장 generic 목록)은 추가 워드리스트 없이 바로 됨 -- --tech/--traversal용 SecLists·PayloadsAllTheThings 목록은 없으면 자동으로 건너뜀(에러 아님).',
+      '인자 없이 실행하면(더블클릭 포함) URL·쿠키·모드만 순서대로 묻는 대화형 간단 모드로 진입 -- 옵션 이름 외울 필요 없음.',
+      '--cookies/--headers로 로그인 후에만 보이는 경로도 점검 가능.',
+      '기본 동작(내장 generic 목록)은 추가 워드리스트 없이 바로 됨 -- --tech/--traversal용 SecLists·PayloadsAllTheThings 목록은 없으면 자동으로 건너뜀(에러 아님, 위 오프라인 올인원 패키지로 채울 수 있음).',
       'robots.txt 준수 + 호스트별 최소 요청 간격 + 전체 요청 상한이 기본으로 항상 걸려 있음(끌 수 없음).',
     ],
     files: [
@@ -51,7 +53,8 @@ export const SCANNER_TOOLS: ScannerTool[] = [
     tagline: '보안헤더 누락 / 디렉터리 리스팅 / 위험 메서드 / 서버헤더 노출 / 서브도메인·vhost 격리',
     standalone: true,
     notes: [
-      'GET/HEAD/OPTIONS만 사용, 리다이렉트 안 따라감, 상태 변경 요청 없음 -- 가장 가벼운 점검.',
+      '인자 없이 실행하면 대상과 점검 종류(기본 전체)만 묻는 대화형 간단 모드로 진입.',
+      'GET/HEAD/OPTIONS만 사용, 리다이렉트 안 따라감, 상태 변경 요청 없음 -- 쿠키/세션도 의도적으로 지원 안 함(서버 기본 설정만 보는 도구라 로그인 여부가 결과에 영향 없음).',
       '룰 파일(safe_http_checks/)이 SHA-256으로 검증됨 -- 폴더 구조를 바꾸지 말고 그대로 둘 것.',
     ],
     files: [
@@ -160,8 +163,10 @@ export const SCANNER_TOOLS: ScannerTool[] = [
     tagline: 'URL+깊이로 링크를 따라가며 수집 -- 다른 스캐너에 넣을 URL 목록 뽑을 때',
     standalone: true,
     notes: [
+      '인자 없이 실행하면 URL·쿠키·깊이만 순서대로 묻는 대화형 간단 모드로 진입.',
+      '--cookies/--headers로 로그인 후에만 보이는 페이지도 크롤링 가능(크롤링·워드리스트 탐색·SPA 보조 탐지 전부 적용).',
       '취약점 스캐너 아님(discovery 전용) -- 동시 요청 캡 + 호스트별 최소 간격이 항상 강제됨(끌 수 없음).',
-      '--wordlist로 경로 존재 탐색도 같이 가능(옵션, 직접 워드리스트 지정 필요).',
+      '--wordlist로 경로 존재 탐색도 같이 가능 -- "common.txt"는 위 오프라인 올인원 패키지에 포함, 그 외는 직접 지정 필요.',
     ],
     files: [
       { filename: 'crawler.py' },

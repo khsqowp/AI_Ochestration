@@ -429,7 +429,10 @@ class FallbackBaseline:
     body_hash: str | None
 
 
-def detect_spa_fallback_baseline(base_url: str, timeout: int, user_agent: str, max_retries: int) -> FallbackBaseline | None:
+def detect_spa_fallback_baseline(
+    base_url: str, timeout: int, user_agent: str, max_retries: int,
+    extra_headers: dict[str, str] | None = None,
+) -> FallbackBaseline | None:
     """Probes one random, almost-certainly-nonexistent path so later
     candidate checks can recognize a SPA's catch-all response instead of
     reporting it as a real discovery. Returns None only if the probe itself
@@ -437,7 +440,7 @@ def detect_spa_fallback_baseline(base_url: str, timeout: int, user_agent: str, m
     skipped entirely rather than guessed at."""
     probe_path = f"__nx_{uuid.uuid4().hex[:16]}__"
     url = urljoin(base_url.rstrip("/") + "/", probe_path)
-    result = fetch_page(url, depth=-1, timeout=timeout, user_agent=user_agent, max_retries=max_retries, want_hash=True)
+    result = fetch_page(url, depth=-1, timeout=timeout, user_agent=user_agent, max_retries=max_retries, want_hash=True, extra_headers=extra_headers)
     if result.error:
         return None
     return FallbackBaseline(
@@ -487,6 +490,7 @@ def collect_js_bundle_candidates(
     user_agent: str,
     max_retries: int,
     bundle_limit: int,
+    extra_headers: dict[str, str] | None = None,
 ) -> tuple[list[str], int]:
     """Downloads up to `bundle_limit` same-origin, non-source-map JS bundles
     (each capped at MAX_JS_BUNDLE_BYTES) and extracts path candidates from
@@ -502,7 +506,8 @@ def collect_js_bundle_candidates(
     seen: set[str] = set()
     for bundle_url in bundles:
         try:
-            req = urllib.request.Request(bundle_url, headers={"User-Agent": user_agent, "Accept": "*/*"})
+            headers = {"User-Agent": user_agent, "Accept": "*/*", **(extra_headers or {})}
+            req = urllib.request.Request(bundle_url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - scheme validated above
                 raw = resp.read(MAX_JS_BUNDLE_BYTES + 1)
         except Exception as exc:  # noqa: BLE001 -- one unreachable bundle must not abort the rest
@@ -619,6 +624,7 @@ def probe_wordlist(
     max_retries: int,
     user_agent: str,
     respect_robots: bool,
+    extra_headers: dict[str, str] | None = None,
 ) -> list[PageResult]:
     parsed = urlparse(normalize_url(base_url))
     origin = f"{parsed.scheme}://{parsed.netloc}/"
@@ -627,7 +633,7 @@ def probe_wordlist(
     rate_limiter = HostRateLimiter(min_interval_seconds)
     robots = RobotsCache(user_agent, timeout, respect_robots)
     logger.info("Probing %d wordlist path(s) against %s", len(urls), origin)
-    results = _fetch_batch(urls, 0, rate_limiter, robots, max_workers, timeout, max_retries, user_agent)
+    results = _fetch_batch(urls, 0, rate_limiter, robots, max_workers, timeout, max_retries, user_agent, extra_headers=extra_headers)
     for r in results:
         r.source = "wordlist"
     return results
@@ -648,6 +654,7 @@ def crawl(
     allow_external: bool,
     respect_robots: bool,
     max_pages: int,
+    extra_headers: dict[str, str] | None = None,
 ) -> tuple[list[PageResult], CrawlStats]:
     start_url = normalize_url(start_url)
     rate_limiter = HostRateLimiter(min_interval_seconds)
@@ -677,7 +684,7 @@ def crawl(
         budget = effective_max_pages - len(results)
         batch = current_level[:budget]
 
-        batch_results = _fetch_batch(batch, depth, rate_limiter, robots, max_workers, timeout, max_retries, user_agent)
+        batch_results = _fetch_batch(batch, depth, rate_limiter, robots, max_workers, timeout, max_retries, user_agent, extra_headers=extra_headers)
         robots_disallowed = 0
         other_errors = 0
         for result in batch_results:
@@ -862,6 +869,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-external", action="store_true", help="Follow links to other hosts too (default: same-host only)")
     parser.add_argument("--ignore-robots", action="store_true", help="Do not consult robots.txt (default: respected)")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT, help="Custom User-Agent string")
+    parser.add_argument("--cookies", default=None, help="Cookie header sent with every request across the whole run (crawl, --wordlist, --spa-assist, --extra-urls), 'k=v; k2=v2' style (e.g. session auth)")
+    parser.add_argument("--headers", action="append", default=[], help="Extra header 'Name: value' sent with every request across the whole run, repeatable")
     parser.add_argument(
         "--wordlist",
         default=None,
@@ -899,25 +908,68 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--extra-header", action="append", default=[],
-        help="'Name: value' header applied only to --extra-urls verification requests (e.g. a session cookie "
-        "carried over from Burp History) -- repeatable. Never applied to the normal crawl or wordlist probing.",
+        help="'Name: value' header applied ONLY to --extra-urls verification requests, on top of --cookies/--headers "
+        "which already apply everywhere -- e.g. a one-off header carried over from Burp History that shouldn't "
+        "also go to the normal crawl or wordlist probing. Repeatable.",
     )
     parser.add_argument("--force", action="store_true", help=f"Allow depth greater than the default safety ceiling ({MAX_ALLOWED_DEPTH})")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     return parser
 
 
-def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
-    """Number-driven interactive menu: builds an argv list from the parser's own
-    option definitions, so it stays in sync automatically as options change."""
+def _ask_yes_no(prompt: str, default: bool = False) -> bool:
+    suffix = "Y/n" if default else "y/N"
+    v = input(f"{prompt} ({suffix}): ").strip().lower()
+    if not v:
+        return default
+    return v in ("y", "yes")
+
+
+def _ask_int_range(prompt: str, lo: int, hi: int, default: int) -> int:
+    while True:
+        v = input(f"{prompt} [{lo}~{hi}, 기본 {default}]: ").strip()
+        if not v:
+            return default
+        try:
+            n = int(v)
+        except ValueError:
+            print(f"  정수를 입력하세요 ({lo}~{hi}).")
+            continue
+        if not (lo <= n <= hi):
+            print(f"  {lo}~{hi} 범위 안에서 입력하세요.")
+            continue
+        return n
+
+
+def _ask_float_range(prompt: str, lo: float, hi: float, default: float) -> float:
+    while True:
+        v = input(f"{prompt} [{lo}~{hi}, 기본 {default}]: ").strip()
+        if not v:
+            return default
+        try:
+            n = float(v)
+        except ValueError:
+            print(f"  숫자를 입력하세요 ({lo}~{hi}).")
+            continue
+        if not (lo <= n <= hi):
+            print(f"  {lo}~{hi} 범위 안에서 입력하세요.")
+            continue
+        return n
+
+
+def _interactive_menu_loop(
+    parser: argparse.ArgumentParser, pos_values: dict[str, str], opt_values: dict[str, object],
+) -> tuple[dict[str, str], dict[str, object]] | None:
+    """Number-driven advanced menu: builds on whatever pos_values/opt_values the
+    caller already collected (empty dicts for a cold start, or the 간단 모드
+    wizard's answers when the user asks to fine-tune further) -- stays in sync
+    with the parser's own option definitions automatically as options change."""
     positionals = [a for a in parser._actions if not a.option_strings]
     optionals = [a for a in parser._actions if a.option_strings and a.dest != "help"]
 
-    print(f"\n=== {parser.prog} 대화형 모드 ===")
-    print("(필수 값부터 입력 -> 옵션은 번호로 설정/토글 -> 0=실행, q=취소)\n")
-
-    pos_values: dict[str, str] = {}
     for act in positionals:
+        if act.dest in pos_values:
+            continue
         optional_pos = act.nargs == "?"
         suffix = " [선택, Enter=생략]" if optional_pos else ""
         label = f"{act.dest}" + (f" ({act.help})" if act.help else "") + suffix
@@ -930,7 +982,6 @@ def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
                 break
             print("  필수 입력값입니다.")
 
-    opt_values: dict[str, object] = {}
     while True:
         print("\n-- 옵션 목록 --")
         for i, act in enumerate(optionals, start=1):
@@ -982,6 +1033,12 @@ def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
             else:
                 opt_values.pop(act.dest, None)
 
+    return pos_values, opt_values
+
+
+def _argv_from_values(parser: argparse.ArgumentParser, pos_values: dict[str, str], opt_values: dict[str, object]) -> list[str]:
+    positionals = [a for a in parser._actions if not a.option_strings]
+    optionals = [a for a in parser._actions if a.option_strings and a.dest != "help"]
     argv: list[str] = [pos_values[a.dest] for a in positionals if a.dest in pos_values]
     for act in optionals:
         if act.dest not in opt_values:
@@ -1000,6 +1057,68 @@ def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
         else:
             argv += [act.option_strings[0], str(val)]
     return argv
+
+
+def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
+    """Full numbered menu covering every CLI flag -- kept as the '고급' path
+    reachable from _guided_wizard(), and still usable stand-alone."""
+    result = _interactive_menu_loop(parser, {}, {})
+    if result is None:
+        return None
+    return _argv_from_values(parser, *result)
+
+
+def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
+    """간단 모드: 경로는 링크를 따라가며 자동 수집되므로 물어볼 필요가 없고, 실제로
+    매번 달라지는 값(시작 URL, 인증 쿠키/헤더, 크롤링 깊이, 요청 속도)만 순서대로
+    묻는다. 고급 옵션이 더 필요하면 마지막에 기존 번호 메뉴로 이어간다."""
+    print(f"\n=== {parser.prog} 간단 모드 ===")
+    print("(URL과 필요한 항목만 순서대로 입력 -> 마지막에 실행 여부 확인)\n")
+
+    url = ""
+    while not url:
+        url = input("시작 URL: ").strip()
+        if not url:
+            print("  필수 입력값입니다.")
+
+    pos_values: dict[str, str] = {"url": url}
+    opt_values: dict[str, object] = {}
+
+    cookie = input("세션 쿠키 (로그인 후 크롤링 시, 없으면 Enter): ").strip()
+    if cookie:
+        opt_values["cookies"] = cookie
+
+    print("추가 헤더 (예: X-Api-Key: abc123), 없으면 그냥 Enter로 넘어가기 -- 여러 개면 반복, 빈 줄=종료")
+    headers: list[str] = []
+    while True:
+        h = input("  헤더: ").strip()
+        if not h:
+            break
+        headers.append(h)
+    if headers:
+        opt_values["headers"] = headers
+
+    depth = _ask_int_range("몇 단계까지 링크를 따라갈까요? (0=시작 페이지만)", 0, 5, 1)
+    if depth != 1:
+        opt_values["depth"] = depth
+
+    if _ask_yes_no("다른 도메인/서브도메인으로 나가는 링크도 따라갈까요?"):
+        opt_values["allow_external"] = True
+
+    interval = _ask_float_range("요청 간격(초, 같은 서버 기준)", 0.05, 5, 0.5)
+    if interval != 0.5:
+        opt_values["min_interval"] = interval
+    workers = _ask_int_range("동시 요청 수", 1, 10, 3)
+    if workers != 3:
+        opt_values["workers"] = workers
+
+    if _ask_yes_no("고급 옵션(워드리스트 병행 탐색, SPA 보조 탐지, 총 페이지 상한 등)을 더 조정할까요?"):
+        result = _interactive_menu_loop(parser, pos_values, opt_values)
+        if result is None:
+            return None
+        pos_values, opt_values = result
+
+    return _argv_from_values(parser, pos_values, opt_values)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1051,6 +1170,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    extra_headers: dict[str, str] = {}
+    if args.cookies:
+        extra_headers["Cookie"] = args.cookies
+    for h in args.headers:
+        if ":" in h:
+            k, v = h.split(":", 1)
+            extra_headers[k.strip()] = v.strip()
+
     results, stats = crawl(
         args.url,
         args.depth,
@@ -1062,6 +1189,7 @@ def main(argv: list[str] | None = None) -> int:
         allow_external=args.allow_external,
         respect_robots=not args.ignore_robots,
         max_pages=args.max_pages,
+        extra_headers=extra_headers,
     )
 
     if args.wordlist:
@@ -1082,6 +1210,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_retries=args.retries,
                 user_agent=args.user_agent,
                 respect_robots=not args.ignore_robots,
+                extra_headers=extra_headers,
             )
         )
 
@@ -1093,7 +1222,7 @@ def main(argv: list[str] | None = None) -> int:
         nonlocal spa_baseline, spa_baseline_attempted
         if not spa_baseline_attempted:
             spa_baseline_attempted = True
-            spa_baseline = detect_spa_fallback_baseline(args.url, args.timeout, args.user_agent, args.retries)
+            spa_baseline = detect_spa_fallback_baseline(args.url, args.timeout, args.user_agent, args.retries, extra_headers)
             if spa_baseline is None:
                 logger.info("SPA fallback baseline probe failed (network error) -- proceeding without it")
         return spa_baseline
@@ -1112,6 +1241,7 @@ def main(argv: list[str] | None = None) -> int:
                 script_srcs, args.url,
                 allow_external=args.allow_external, timeout=args.timeout, user_agent=args.user_agent,
                 max_retries=args.retries, bundle_limit=min(args.js_bundle_limit, max(budget, 0)),
+                extra_headers=extra_headers,
             )
             budget -= bundles_fetched
             logger.info("SPA-assist: %d bundle(s) fetched, %d candidate path(s) extracted", bundles_fetched, len(candidates))
@@ -1122,6 +1252,7 @@ def main(argv: list[str] | None = None) -> int:
                     candidates, rate_limiter=rate_limiter, robots=robots, max_workers=args.workers,
                     timeout=args.timeout, max_retries=args.retries, user_agent=args.user_agent,
                     baseline=baseline, limit=min(args.spa_candidate_limit, budget),
+                    extra_headers=extra_headers,
                 )
                 results.extend(verified)
 
@@ -1136,18 +1267,18 @@ def main(argv: list[str] | None = None) -> int:
         else:
             baseline = _get_spa_baseline()
             budget -= 0 if spa_baseline_attempted and args.spa_assist else 1  # avoid double-charging the same probe
-            extra_headers = {}
+            burp_headers = dict(extra_headers)  # global --cookies/--headers apply here too, plus burp-only additions below
             for h in args.extra_header:
                 if ":" in h:
                     k, v = h.split(":", 1)
-                    extra_headers[k.strip()] = v.strip()
+                    burp_headers[k.strip()] = v.strip()
             rate_limiter = HostRateLimiter(args.min_interval)
             robots = RobotsCache(args.user_agent, args.timeout, not args.ignore_robots)
             verified = verify_spa_candidates(
                 extra_urls, rate_limiter=rate_limiter, robots=robots, max_workers=args.workers,
                 timeout=args.timeout, max_retries=args.retries, user_agent=args.user_agent,
                 baseline=baseline, limit=min(len(extra_urls), max(budget, 0)),
-                source_label="burp-history", extra_headers=extra_headers or None,
+                source_label="burp-history", extra_headers=burp_headers or None,
             )
             logger.info("Burp History candidates: %d verified", len(verified))
             results.extend(verified)
@@ -1174,7 +1305,7 @@ if __name__ == "__main__":
         except (AttributeError, ValueError):
             pass
     if len(sys.argv) == 1:
-        _argv = _interactive_argv(build_arg_parser())
+        _argv = _guided_wizard(build_arg_parser())
         if _argv is None:
             print("취소됨.")
             raise SystemExit(0)

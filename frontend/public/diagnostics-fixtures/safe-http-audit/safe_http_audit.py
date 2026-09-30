@@ -14,6 +14,7 @@ import random
 import re
 import socket
 import string
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -294,19 +295,94 @@ def run_check(target: str, check: str, max_candidates: int = 20) -> dict:
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Read-only safe HTTP configuration audit")
+ALL_CHECK_IDS = [*SAFE_CHECKS, "subdomain_discovery", "virtual_host_isolation"]
+
+
+def run_all_checks(target: str, max_candidates: int = 20) -> dict:
+    """Runs every check in sequence and aggregates them into one report --
+    the guided wizard's "전체 점검" answer, and CLI --check all, both use
+    this instead of requiring the caller to pick one category up front."""
+    started = time.time()
+    by_check: dict[str, dict] = {}
+    for check in ALL_CHECK_IDS:
+        try:
+            by_check[check] = run_check(target, check, max_candidates)
+        except Exception as exc:  # noqa: BLE001 -- one check failing (e.g. IP target for a domain-only check) must not abort the rest
+            by_check[check] = {"check": check, "target": target, "status": "error", "error": str(exc)}
+    findings = [f for r in by_check.values() for f in r.get("findings", [])]
+    observations = [o for r in by_check.values() for o in r.get("observations", [])]
+    return {
+        "check": "all", "target": target, "status": "completed",
+        "summary": {"finding_count": len(findings), "observation_count": len(observations)},
+        "by_check": by_check, "findings": findings, "observations": observations,
+        "duration_seconds": round(time.time() - started, 3),
+    }
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="safe_http_audit", description="Read-only safe HTTP configuration audit")
     parser.add_argument("target")
-    parser.add_argument("--check", required=True, choices=[*SAFE_CHECKS, "subdomain_discovery", "virtual_host_isolation"])
+    parser.add_argument("--check", required=True, choices=[*ALL_CHECK_IDS, "all"], help="'all' runs every check and aggregates the results")
     parser.add_argument("--max-candidates", type=int, default=20)
-    args = parser.parse_args()
+    return parser
+
+
+def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
+    """간단 모드: 이 도구는 서버의 기본/전역 설정만 읽기 전용(GET/HEAD/OPTIONS)으로
+    확인하는 도구라 -- 쿠키 세션을 넣어도 결과가 달라질 이유가 없어(설계상 의도적으로
+    쿠키/리다이렉트/상태변경 요청을 지원하지 않음) 물어보지 않는다. 실제로 필요한 건
+    대상과 어떤 점검을 돌릴지뿐."""
+    print(f"\n=== {parser.prog} 간단 모드 ===")
+    print("(이 도구는 쿠키 없이 서버 기본 설정만 읽기 전용으로 확인함 -- 대상과 점검 종류만 고르면 됨)\n")
+
+    target = ""
+    while not target:
+        target = input("대상 URL 또는 도메인: ").strip()
+        if not target:
+            print("  필수 입력값입니다.")
+
+    labels = {
+        "error_page_disclosure": "에러 페이지에서 서버/프레임워크 정보 노출",
+        "http_methods": "위험한 HTTP 메서드 허용 여부",
+        "directory_listing": "디렉터리 리스팅 노출",
+        "server_header": "Server 헤더로 버전 노출",
+        "security_headers": "보안 헤더 누락",
+        "subdomain_discovery": "서브도메인 탐색 (도메인 대상만)",
+        "virtual_host_isolation": "가상 호스트 격리 점검 (도메인 대상만, http만)",
+    }
+    print("어떤 점검을 할까요?")
+    print("  0. 전체 점검 (기본)")
+    for i, check in enumerate(ALL_CHECK_IDS, start=1):
+        print(f"  {i}. {labels.get(check, check)}")
+    choice = input("번호 선택 [0~%d, 기본 0]: " % len(ALL_CHECK_IDS)).strip()
+    if not choice or choice == "0":
+        check = "all"
+    elif choice.isdigit() and 1 <= int(choice) <= len(ALL_CHECK_IDS):
+        check = ALL_CHECK_IDS[int(choice) - 1]
+    else:
+        print("  잘못된 번호 -- 전체 점검으로 진행합니다.")
+        check = "all"
+
+    return [target, "--check", check]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
     try:
-        print(json.dumps(run_check(args.target, args.check, args.max_candidates), ensure_ascii=False, indent=2))
+        report = run_all_checks(args.target, args.max_candidates) if args.check == "all" else run_check(args.target, args.check, args.max_candidates)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     except Exception as exc:  # noqa: BLE001
-        print(str(exc), file=__import__("sys").stderr)
+        print(str(exc), file=sys.stderr)
         return 2
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        _argv = _guided_wizard(build_arg_parser())
+        if _argv is None:
+            print("취소됨.")
+            raise SystemExit(0)
+        raise SystemExit(main(_argv))
     raise SystemExit(main())

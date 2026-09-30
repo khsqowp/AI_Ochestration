@@ -826,6 +826,7 @@
 /* 진단/치트시트 단일 도구 모달 */
 .tool-modal-body { min-height:0; }
 .diag-warning { margin:0; padding:10px 13px; border-radius:10px; background:#fff2e0; border:1px solid #eec48a; color:#8a5a10; font-size:11.5px; line-height:1.5; flex:0 0 auto; }
+.diag-offline-bundle { margin-top:10px; flex:0 0 auto; }
 .diag-tabs { flex:0 0 auto; flex-wrap:wrap; }
 .diag-block { margin-bottom:18px; }
 .diag-bullet-list, .diag-checklist { margin:0; padding:0; list-style:none; display:grid; gap:7px; }

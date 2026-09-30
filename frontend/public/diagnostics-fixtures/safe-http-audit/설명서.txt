@@ -13,14 +13,23 @@ GET/HEAD/OPTIONS만 사용, 리다이렉트 안 따라감, 쿠키/세션 없음,
 
 기본 사용법
 ----------
+python safe_http_audit.py http://target.example --check all
 python safe_http_audit.py http://target.example --check security_headers
 python safe_http_audit.py http://target.example --check directory_listing
 python safe_http_audit.py http://target.example --check allowed-methods
 python safe_http_audit.py https://target.example.com --check subdomain_discovery
 python safe_http_audit.py http://target.example.com --check virtual_host_isolation
 
+대화형(간단) 모드
+----------------
+인자 없이 실행하면(더블클릭 포함) 대상과 점검 종류(번호, 기본 0=전체)만
+물어봄. 이 도구는 쿠키 없이 서버 기본 설정만 GET/HEAD/OPTIONS로 읽기만
+하는 설계라 로그인 세션을 넣어도 결과가 달라지지 않음 -- 그래서 쿠키는
+아예 물어보지 않음.
+
 --check 옵션
 -----------
+all                       위 7종 전부 순서대로 실행해서 하나의 리포트로 합침 (간단 모드 기본값)
 error_page_disclosure     에러 페이지에서 스택트레이스/버전정보 노출 확인
 http_methods (allowed-methods) 허용된 HTTP 메서드 확인(TRACE 등 위험 메서드)
 directory_listing         디렉터리 목록화 노출 확인(본문 시그니처까지 확인, 오탐 방지)
@@ -35,7 +44,8 @@ virtual_host_isolation     같은 IP에 물린 서브도메인의 vhost 분리 �
 출력
 ----
 JSON 하나로: findings(문제로 판단된 것), observations(참고 정보),
-raw(실제 요청/응답 원본), summary(개수).
+raw(실제 요청/응답 원본), summary(개수). --check all이면 by_check에
+점검별 결과가 각각 더 들어가고, findings/observations는 전체 합산.
 
 주의
 ----

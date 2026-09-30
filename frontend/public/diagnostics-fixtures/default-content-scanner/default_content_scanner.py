@@ -207,13 +207,17 @@ def load_traversal_payloads(target_os: str, limit: int) -> list[tuple[str, str]]
 # ---------------------------------------------------------------------------
 # Fetching
 # ---------------------------------------------------------------------------
-def fetch(url: str, timeout: int, user_agent: str, max_retries: int, want_body: bool) -> tuple[int | None, int | None, float, bytes, str | None]:
+def fetch(
+    url: str, timeout: int, user_agent: str, max_retries: int, want_body: bool,
+    extra_headers: dict[str, str] | None = None,
+) -> tuple[int | None, int | None, float, bytes, str | None]:
     attempt = 0
     last_error: str | None = None
     while attempt <= max_retries:
         start = time.monotonic()
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+            headers = {"User-Agent": user_agent, **(extra_headers or {})}
+            req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
                 status = resp.getcode()
                 body = resp.read(MAX_BODY_BYTES) if want_body else b""
@@ -232,7 +236,10 @@ def fetch(url: str, timeout: int, user_agent: str, max_retries: int, want_body: 
     return None, None, 0.0, b"", f"Request failed after {max_retries + 1} attempt(s): {last_error}"
 
 
-def detect_fallback_baseline(base_url: str, timeout: int, user_agent: str, max_retries: int) -> tuple[int, int] | None:
+def detect_fallback_baseline(
+    base_url: str, timeout: int, user_agent: str, max_retries: int,
+    extra_headers: dict[str, str] | None = None,
+) -> tuple[int, int] | None:
     """Some apps (SPAs with client-side routing, e.g. Angular/React with a
     catch-all server route) return 200 with the *same* body for literally
     any unknown path instead of a real 404 -- probe one definitely-bogus
@@ -241,7 +248,7 @@ def detect_fallback_baseline(base_url: str, timeout: int, user_agent: str, max_r
     Returns None if the probe itself failed (network error etc.)."""
     probe_path = f"__nx_{uuid.uuid4().hex[:16]}__"
     url = urljoin(base_url.rstrip("/") + "/", probe_path)
-    status, length, _elapsed, _body, error = fetch(url, timeout, user_agent, max_retries, want_body=False)
+    status, length, _elapsed, _body, error = fetch(url, timeout, user_agent, max_retries, want_body=False, extra_headers=extra_headers)
     if error or status is None:
         return None
     return status, length or 0
@@ -265,6 +272,7 @@ def _fetch_batch(
     user_agent: str,
     want_body: bool,
     signature_check: bool,
+    extra_headers: dict[str, str] | None = None,
 ) -> list[ProbeResult]:
     def _one(job: tuple[str, str, str | None]) -> ProbeResult:
         category, url, payload = job
@@ -272,7 +280,7 @@ def _fetch_batch(
             return ProbeResult(category=category, url=url, error="Disallowed by robots.txt", payload=payload)
         host_key = urlparse(url).hostname or url
         rate_limiter.wait(host_key)
-        status, length, elapsed_ms, body, error = fetch(url, timeout, user_agent, max_retries, want_body)
+        status, length, elapsed_ms, body, error = fetch(url, timeout, user_agent, max_retries, want_body, extra_headers)
         matched = None
         if signature_check and body:
             text = body.decode("utf-8", errors="replace")
@@ -370,6 +378,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-requests", type=int, default=1000, help="Hard cap on total requests across all modes (default 1000, ceiling 3000 unless --force)")
     parser.add_argument("--ignore-robots", action="store_true", help="Do not consult robots.txt")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT, help="Custom User-Agent string")
+    parser.add_argument("--cookies", default=None, help="Cookie header sent with every request, 'k=v; k2=v2' style (e.g. session auth for an admin-only path)")
+    parser.add_argument("--headers", action="append", default=[], help="Extra header 'Name: value' sent with every request, repeatable")
     parser.add_argument("--output", choices=["console", "json"], default="console", help="Report format (default console)")
     parser.add_argument("--output-file", default=None, help="Write JSON report to this path")
     parser.add_argument("--force", action="store_true", help="Override safety ceilings")
@@ -381,17 +391,59 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
-    """Number-driven interactive menu: builds an argv list from the parser's own
-    option definitions, so it stays in sync automatically as options change."""
+def _ask_yes_no(prompt: str, default: bool = False) -> bool:
+    suffix = "Y/n" if default else "y/N"
+    v = input(f"{prompt} ({suffix}): ").strip().lower()
+    if not v:
+        return default
+    return v in ("y", "yes")
+
+
+def _ask_float_range(prompt: str, lo: float, hi: float, default: float) -> float:
+    while True:
+        v = input(f"{prompt} [{lo}~{hi}, 기본 {default}]: ").strip()
+        if not v:
+            return default
+        try:
+            n = float(v)
+        except ValueError:
+            print(f"  숫자를 입력하세요 ({lo}~{hi}).")
+            continue
+        if not (lo <= n <= hi):
+            print(f"  {lo}~{hi} 범위 안에서 입력하세요.")
+            continue
+        return n
+
+
+def _ask_int_range(prompt: str, lo: int, hi: int, default: int) -> int:
+    while True:
+        v = input(f"{prompt} [{lo}~{hi}, 기본 {default}]: ").strip()
+        if not v:
+            return default
+        try:
+            n = int(v)
+        except ValueError:
+            print(f"  정수를 입력하세요 ({lo}~{hi}).")
+            continue
+        if not (lo <= n <= hi):
+            print(f"  {lo}~{hi} 범위 안에서 입력하세요.")
+            continue
+        return n
+
+
+def _interactive_menu_loop(
+    parser: argparse.ArgumentParser, pos_values: dict[str, str], opt_values: dict[str, object],
+) -> tuple[dict[str, str], dict[str, object]] | None:
+    """Number-driven advanced menu: builds on whatever pos_values/opt_values the
+    caller already collected (empty dicts for a cold start, or the 간단 모드
+    wizard's answers when the user asks to fine-tune further) -- stays in sync
+    with the parser's own option definitions automatically as options change."""
     positionals = [a for a in parser._actions if not a.option_strings]
     optionals = [a for a in parser._actions if a.option_strings and a.dest != "help"]
 
-    print(f"\n=== {parser.prog} 대화형 모드 ===")
-    print("(필수 값부터 입력 -> 옵션은 번호로 설정/토글 -> 0=실행, q=취소)\n")
-
-    pos_values: dict[str, str] = {}
     for act in positionals:
+        if act.dest in pos_values:
+            continue
         optional_pos = act.nargs == "?"
         suffix = " [선택, Enter=생략]" if optional_pos else ""
         label = f"{act.dest}" + (f" ({act.help})" if act.help else "") + suffix
@@ -404,7 +456,6 @@ def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
                 break
             print("  필수 입력값입니다.")
 
-    opt_values: dict[str, object] = {}
     while True:
         print("\n-- 옵션 목록 --")
         for i, act in enumerate(optionals, start=1):
@@ -456,6 +507,12 @@ def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
             else:
                 opt_values.pop(act.dest, None)
 
+    return pos_values, opt_values
+
+
+def _argv_from_values(parser: argparse.ArgumentParser, pos_values: dict[str, str], opt_values: dict[str, object]) -> list[str]:
+    positionals = [a for a in parser._actions if not a.option_strings]
+    optionals = [a for a in parser._actions if a.option_strings and a.dest != "help"]
     argv: list[str] = [pos_values[a.dest] for a in positionals if a.dest in pos_values]
     for act in optionals:
         if act.dest not in opt_values:
@@ -474,6 +531,73 @@ def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
         else:
             argv += [act.option_strings[0], str(val)]
     return argv
+
+
+def _interactive_argv(parser: argparse.ArgumentParser) -> list[str] | None:
+    """Full numbered menu covering every CLI flag -- kept as the '고급' path
+    reachable from _guided_wizard(), and still usable stand-alone."""
+    result = _interactive_menu_loop(parser, {}, {})
+    if result is None:
+        return None
+    return _argv_from_values(parser, *result)
+
+
+def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
+    """간단 모드: 경로/메서드는 이미 내장 워드리스트 기반 GET이라 물어볼 필요가 없고,
+    실제로 매번 달라지는 값(대상 URL, 인증 쿠키/헤더, 어떤 모드를 켤지, 요청 속도)만
+    순서대로 묻는다. 고급 옵션이 더 필요하면 마지막에 기존 번호 메뉴로 이어간다."""
+    print(f"\n=== {parser.prog} 간단 모드 ===")
+    print("(URL과 필요한 항목만 순서대로 입력 -> 마지막에 실행 여부 확인)\n")
+
+    url = ""
+    while not url:
+        url = input("대상 URL: ").strip()
+        if not url:
+            print("  필수 입력값입니다.")
+
+    pos_values: dict[str, str] = {"url": url}
+    opt_values: dict[str, object] = {}
+
+    cookie = input("세션 쿠키 (로그인 후 검사 시, 없으면 Enter): ").strip()
+    if cookie:
+        opt_values["cookies"] = cookie
+
+    print("추가 헤더 (예: X-Api-Key: abc123), 없으면 그냥 Enter로 넘어가기 -- 여러 개면 반복, 빈 줄=종료")
+    headers: list[str] = []
+    while True:
+        h = input("  헤더: ").strip()
+        if not h:
+            break
+        headers.append(h)
+    if headers:
+        opt_values["headers"] = headers
+
+    if _ask_yes_no("백업 파일 변형(.bak/.old/~ 등)도 확인할까요?"):
+        opt_values["mutate"] = True
+
+    if _ask_yes_no("경로순회(디렉터리 트래버설)도 확인할까요?"):
+        opt_values["traversal"] = True
+        param = ""
+        while not param:
+            param = input("  트래버설 페이로드를 넣을 쿼리 파라미터명 (예: file): ").strip()
+            if not param:
+                print("    필수 입력값입니다.")
+        opt_values["param"] = param
+
+    interval = _ask_float_range("요청 간격(초, 같은 서버 기준)", 0.05, 5, 0.5)
+    if interval != 0.5:
+        opt_values["min_interval"] = interval
+    workers = _ask_int_range("동시 요청 수", 1, 10, 3)
+    if workers != 3:
+        opt_values["workers"] = workers
+
+    if _ask_yes_no("고급 옵션(대상 기술 스택, 트래버설 대상 OS, 총 요청 상한 등)을 더 조정할까요?"):
+        result = _interactive_menu_loop(parser, pos_values, opt_values)
+        if result is None:
+            return None
+        pos_values, opt_values = result
+
+    return _argv_from_values(parser, pos_values, opt_values)
 
 
 _UNLIMITED_BUDGET = 10**9  # sentinel for --max-requests 0 ("전체 사용") -- an
@@ -587,6 +711,13 @@ def main(argv: list[str] | None = None) -> int:
 
     rate_limiter = HostRateLimiter(args.min_interval)
     robots = RobotsCache(args.user_agent, args.timeout, not args.ignore_robots)
+    extra_headers: dict[str, str] = {}
+    if args.cookies:
+        extra_headers["Cookie"] = args.cookies
+    for h in args.headers:
+        if ":" in h:
+            k, v = h.split(":", 1)
+            extra_headers[k.strip()] = v.strip()
 
     if args.mutate_paths:
         # Standalone backup-mutation run against a caller-supplied base path
@@ -606,7 +737,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         logger.info("Backup-mutation mode (standalone): probing %d variant(s) of %d base path(s)", len(mutate_jobs), len(base_urls))
-        results = _fetch_batch(mutate_jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=False, signature_check=False)
+        results = _fetch_batch(mutate_jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=False, signature_check=False, extra_headers=extra_headers)
         if args.output == "json":
             if args.output_file:
                 write_json_report(results, args.output_file)
@@ -625,7 +756,7 @@ def main(argv: list[str] | None = None) -> int:
     baseline: tuple[int, int] | None = None
 
     if not args.no_fingerprint:
-        baseline = detect_fallback_baseline(args.url, args.timeout, args.user_agent, args.retries)
+        baseline = detect_fallback_baseline(args.url, args.timeout, args.user_agent, args.retries, extra_headers)
         budget -= 1
         if baseline and baseline[0] != 404:
             logger.warning(
@@ -646,7 +777,7 @@ def main(argv: list[str] | None = None) -> int:
             " (제한값 0 = 전체)" if args.max_requests == 0 else "",
         )
         logger.info("Fingerprint mode: probing %d path(s) across tech(es) %s", len(jobs), ", ".join(techs) + (", generic" if not args.no_generic else ""))
-        fp_results = _fetch_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=False, signature_check=False)
+        fp_results = _fetch_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=False, signature_check=False, extra_headers=extra_headers)
         all_results.extend(fp_results)
         budget -= len(fp_results)
 
@@ -658,7 +789,7 @@ def main(argv: list[str] | None = None) -> int:
                 mutate_jobs = mutate_jobs[:budget]
             if mutate_jobs:
                 logger.info("Backup-mutation mode: probing %d variant(s) of %d discovered path(s)", len(mutate_jobs), len(hits))
-                mut_results = _fetch_batch(mutate_jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=False, signature_check=False)
+                mut_results = _fetch_batch(mutate_jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=False, signature_check=False, extra_headers=extra_headers)
                 all_results.extend(mut_results)
                 budget -= len(mut_results)
 
@@ -670,7 +801,7 @@ def main(argv: list[str] | None = None) -> int:
             sep = "&" if "?" in args.url else "?"
             jobs = [("traversal", f"{args.url}{sep}{args.param}={payload}", payload) for _, payload in payload_pairs]
         logger.info("Traversal mode: probing %d payload(s)", len(jobs))
-        trav_results = _fetch_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=True, signature_check=True)
+        trav_results = _fetch_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, want_body=True, signature_check=True, extra_headers=extra_headers)
         all_results.extend(trav_results)
 
     if args.output == "json":
@@ -695,7 +826,7 @@ if __name__ == "__main__":
         except (AttributeError, ValueError):
             pass
     if len(sys.argv) == 1:
-        _argv = _interactive_argv(build_arg_parser())
+        _argv = _guided_wizard(build_arg_parser())
         if _argv is None:
             print("취소됨.")
             raise SystemExit(0)
