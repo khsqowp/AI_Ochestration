@@ -1976,30 +1976,32 @@
 
 
   // ============================================================
-  // PARAMETER MINING (히든 파라미터 탐지 -- Param Miner 이분탐색)
+  // PARAMETER MINING (히든 파라미터 탐지 -- Param Miner 방식)
   // ============================================================
+  //
+  // 묶음(chunk) 안의 후보 이름마다 전부 다른 xsstest 마커+SPECIAL 페이로드를
+  // 동시에 실어 요청 1번으로 보낸다. 임의값 하나를 공유해서 "뭔가 영향은
+  // 있다"만 먼저 확인하고 나중에 진짜 XSS 마커로 또 테스트하는 2단계 방식은
+  // 반사가 확인된 이름마다 요청이 2배로 들었다 -- 처음부터 실제 테스트
+  // 페이로드를 쓰면 반사가 보이는 순간 그 자리에서 컨텍스트/문자별 변환까지
+  // 포함한 완전한 결과가 나오므로 추가 요청이 필요 없다. 묶음 중 아무 마커도
+  // 안 나타났는데 응답은 기준과 다르면(반사 없이 영향만 주는 숨은 파라미터)
+  // 그 때만 이분탐색으로 범위를 좁힌다 -- 이 경로는 마커로 직접 증명이 안 되는
+  // 경우라 어차피 PARAMETER LOOP에서 한 번 더 확인해야 한다.
 
-  function buildMineProbeURL(baseOriginalURL, paramNames, probeValue) {
+  function buildMineProbeURL(baseOriginalURL, paramPayloads) {
 
     const url = new URL(baseOriginalURL);
 
-    for (const name of paramNames) {
-      url.searchParams.set(name, probeValue);
+    for (const [name, payload] of paramPayloads) {
+      url.searchParams.set(name, payload);
     }
 
     return url;
   }
 
 
-  function mineProbeDiffersFromBaseline(baseline, probe, probeValue) {
-
-    // probeValue는 랜덤 생성이라 우연히 기준 응답에 이미 들어있을 수 없다 -- 응답에
-    // 그대로 나타나면 그 자체로 해당 파라미터가 실제로 읽혀서 반사됐다는 확실한
-    // 증거다. 길이 임계값(LENGTH_DIFF_THRESHOLD)에 기대면 "파라미터 값이 HTML
-    // 주석 한 줄처럼 작게만 반사되는" 흔한 케이스를 놓친다 -- 그 임계값은 원래
-    // XSS mutation 루프에서 노이즈를 거르려고 500바이트로 잡은 것이라 마이닝처럼
-    // 작은 반사를 잡아내야 하는 용도에는 너무 둔감하다.
-    if (probe.body.includes(probeValue)) return true;
+  function mineProbeDiffersFromBaseline(baseline, probe) {
 
     if (probe.status !== baseline.status) return true;
     if (probe.statusClass !== baseline.statusClass) return true;
@@ -2008,14 +2010,73 @@
     return getLengthAnalysis(baseline.length, probe.length).significant;
   }
 
+
+  function buildMineHitResult({ target, baseline, tested, parameter, marker, payload, testURL }) {
+
+    const markerPositions = findMarkerPositions(tested.body, marker);
+    const reflectionAnalyses = markerPositions.map(position => analyzeReflectionAt(tested.body, marker, position));
+    const transformationType = classifyTransformation(reflectionAnalyses);
+    const charMap = aggregateCharMap(reflectionAnalyses);
+    const characterSummary = getCharacterSummary(reflectionAnalyses);
+    const resyncCount = reflectionAnalyses.reduce((sum, analysis) => sum + analysis.resyncCount, 0);
+    const contextType = classifyContext(tested.body, marker, tested.contentType);
+    const contentTypeTransition = getContentTypeTransition(baseline.contentType, tested.contentType);
+    const lengthAnalysis = getLengthAnalysis(baseline.length, tested.length);
+    const exact = tested.body.includes(payload);
+    const resultType = classifyResult({ baseline, tested, reflected: true, exact, lengthAnalysis });
+
+    return {
+      Source: target.source,
+      Origin: target.sameOrigin ? 'SAME' : 'CROSS',
+      ObservedMethod: target.observedMethod,
+      ReplayMethod: 'GET',
+      Host: target.url.hostname,
+      Path: target.url.pathname,
+      Parameter: parameter,
+      ParamSource: 'PARAM_MINED',
+      Payload: payload,
+      Original: '',
+      OriginalType: 'EMPTY',
+      HTTP: `${baseline.status}→${tested.status}`,
+      BaselineClass: baseline.statusClass,
+      ResponseClass: tested.statusClass,
+      StatusChanged: tested.status !== baseline.status,
+      StatusClassChanged: tested.statusClass !== baseline.statusClass,
+      BaselineContentType: baseline.normalizedContentType,
+      ResponseContentType: tested.normalizedContentType,
+      ContentTypeChanged: contentTypeTransition !== 'STABLE',
+      ContentTypeTransition: contentTypeTransition,
+      Reflected: true,
+      Occurrences: markerPositions.length,
+      Exact: exact,
+      Transformation: transformationType,
+      CharacterMap: charMap,
+      CharacterSummary: characterSummary,
+      ResyncCount: resyncCount,
+      ReflectionAnalyses: reflectionAnalyses,
+      ContextType: contextType,
+      BaselineLength: baseline.length,
+      ResponseLength: tested.length,
+      LengthDiff: lengthAnalysis.diff,
+      LengthDiffRatio: Number(lengthAnalysis.ratio.toFixed(4)),
+      SignificantLengthChange: lengthAnalysis.significant,
+      Result: resultType,
+      Context: getContext(tested.body, marker),
+      URL: testURL.href,
+    };
+  }
+
   /*
-   * paramNames 묶음 전체를 한 요청에 실어 기준과 diff -- 변화 없으면 요청 1번으로
-   * 그 묶음 전체를 "영향 없음"으로 확정하고 끝낸다. 변화가 있으면(묶음 중 누군가가
-   * 영향을 줬다는 뜻) 반으로 쪼개 재귀 -- 결국 실제 영향 있는 이름 하나하나까지
-   * O(log n) 요청으로 좁혀진다. budget은 대상 하나당 전체 마이닝 요청 수 상한을
-   * 모든 재귀 호출이 공유하는 카운터다.
+   * paramNames 묶음에 이름마다 다른 xsstest 마커를 동시에 실어 요청 1번으로
+   * 보낸다. 마커가 나타난 이름은 그 자리에서 바로 완전한 결과를 만들어
+   * confirmedResults에 쌓는다(추가 요청 없음, PARAMETER LOOP에서 다시
+   * 테스트하지 않음). 아무 마커도 안 나타났는데 응답이 기준과 다르면 반사
+   * 없이 영향만 주는 이름이 섞여있다는 뜻이라 그 때만 반으로 쪼개 재귀 --
+   * 이렇게 좁혀진 이름은 "후보"로만 반환하고 실제 확인은 PARAMETER LOOP에
+   * 맡긴다(마커 직접 증거가 없는 경우라서). budget은 대상 하나당 전체 마이닝
+   * 요청 수 상한을 모든 재귀 호출이 공유하는 카운터다.
    */
-  async function mineParamChunk(baseOriginalURL, baseline, paramNames, probeValue, budget) {
+  async function mineParamChunk(target, baseline, paramNames, budget, confirmedResults) {
 
     if (!paramNames.length || budget.remaining <= 0) {
       return [];
@@ -2023,15 +2084,25 @@
 
     budget.remaining--;
 
-    let probe;
+    const markerByName = new Map();
+
+    for (const name of paramNames) {
+      markerCounter++;
+      const marker = `xsstest${markerCounter}`;
+      markerByName.set(name, { marker, payload: marker + CONFIG.SPECIAL });
+    }
+
+    const testURL = buildMineProbeURL(
+      target.originalURL,
+      [...markerByName].map(([name, info]) => [name, info.payload])
+    );
+
+    let tested;
 
     try {
 
-      const response = await fetchGET(
-        buildMineProbeURL(baseOriginalURL, paramNames, probeValue).href
-      );
-
-      probe = await readResponse(response);
+      const response = await fetchGET(testURL.href);
+      tested = await readResponse(response);
 
     } catch {
 
@@ -2039,24 +2110,42 @@
       return [];
     }
 
-    if (!mineProbeDiffersFromBaseline(baseline, probe, probeValue)) {
+    const reflectedNames = [];
+
+    for (const [name, { marker, payload }] of markerByName) {
+      if (tested.body.includes(marker)) {
+        reflectedNames.push(name);
+        confirmedResults.push(
+          buildMineHitResult({ target, baseline, tested, parameter: name, marker, payload, testURL })
+        );
+      }
+    }
+
+    if (reflectedNames.length) {
+      // 반사 확인된 이름은 이미 완전한 결과로 등록됐다. 같은 묶음에 반사
+      // 없이 영향만 주는 이름이 "동시에" 더 섞여있는 극히 드문 경우까지는
+      // 추가 요청을 들여 가리지 않는다.
+      return [];
+    }
+
+    if (!mineProbeDiffersFromBaseline(baseline, tested)) {
       return [];
     }
 
     if (paramNames.length === 1) {
-      return [paramNames[0]];
+      return paramNames;
     }
 
     const mid = Math.ceil(paramNames.length / 2);
 
-    const left = await mineParamChunk(baseOriginalURL, baseline, paramNames.slice(0, mid), probeValue, budget);
-    const right = await mineParamChunk(baseOriginalURL, baseline, paramNames.slice(mid), probeValue, budget);
+    const left = await mineParamChunk(target, baseline, paramNames.slice(0, mid), budget, confirmedResults);
+    const right = await mineParamChunk(target, baseline, paramNames.slice(mid), budget, confirmedResults);
 
     return [...left, ...right];
   }
 
 
-  async function mineHiddenParameters(target, baseline) {
+  async function mineHiddenParameters(target, baseline, confirmedResults) {
 
     if (!CONFIG.PARAM_MINING_ENABLED) {
       return [];
@@ -2070,11 +2159,9 @@
       return [];
     }
 
-    const probeValue = 'pm' + Math.random().toString(36).slice(2, 10);
-
     const budget = { remaining: CONFIG.PARAM_MINE_MAX_REQUESTS };
 
-    const found = new Set();
+    const candidateNames = new Set();
 
     for (let i = 0; i < candidates.length; i += CONFIG.PARAM_MINE_CHUNK_SIZE) {
 
@@ -2089,12 +2176,12 @@
 
       const chunk = candidates.slice(i, i + CONFIG.PARAM_MINE_CHUNK_SIZE);
 
-      const hits = await mineParamChunk(target.originalURL, baseline, chunk, probeValue, budget);
+      const remaining = await mineParamChunk(target, baseline, chunk, budget, confirmedResults);
 
-      for (const hit of hits) found.add(hit);
+      for (const name of remaining) candidateNames.add(name);
     }
 
-    return [...found];
+    return [...candidateNames];
   }
 
 
@@ -2531,6 +2618,8 @@
 
   let minedParameterTotal = 0;
 
+  let minedConfirmedTotal = 0;
+
   let noParamMiningTargetsUsed = 0;
 
   let markerCounter = 0;
@@ -2769,13 +2858,39 @@
     }
 
 
+    const minedConfirmedResults =
+      [];
+
+
     const minedParams =
       noParamMiningBudgetLeft
         ? await mineHiddenParameters(
             target,
-            baseline
+            baseline,
+            minedConfirmedResults
           )
         : [];
+
+
+    if (
+      minedConfirmedResults.length
+    ) {
+
+      minedConfirmedTotal +=
+        minedConfirmedResults.length;
+
+      results.push(
+        ...minedConfirmedResults
+      );
+
+      console.log(
+        '[히든 파라미터 확인됨 -- 반사됨]',
+        minedConfirmedResults.map(result => result.Parameter).join(', '),
+        '--',
+        target.url.pathname,
+        '(마이닝 단계에서 이미 완전히 테스트됨, 추가 요청 없음)'
+      );
+    }
 
 
     if (
@@ -2811,6 +2926,9 @@
           숨은파라미터후보:
             name,
 
+          사유:
+            '마커 반사는 없었지만 응답이 기준과 다름(상태/타입/길이) -- 반사 없이 영향만 주는 유형이라 확정 아님',
+
           기준URL:
             target.originalURL
         });
@@ -2818,7 +2936,7 @@
 
 
       console.log(
-        '[히든 파라미터 후보]',
+        '[히든 파라미터 후보 -- 반사 미확인, 추가 확인 필요]',
         minedParams.join(', '),
         '--',
         target.url.pathname
@@ -3917,7 +4035,7 @@
 
 
     console.log(
-      '위 파라미터들은 링크/폼 어디에도 안 보였지만 요청에 실어보니 응답이 달라짐(상태/타입/길이) -- 주의: 페이지가 원래 동적이면(타임스탬프/CSRF 토큰/광고 등) 같은 신호로 오탐될 수 있어 "후보"일 뿐 확정 아님. 아래 "전체 테스트 결과"에서 파라미터출처=PARAM_MINED_CANDIDATE 행으로 실제 반사/XSS 여부까지 테스트됨 -- 그 결과도 함께 확인할 것.'
+      '위 파라미터들은 마이닝 단계에서 마커가 반사되지 않고 응답만 달라졌던(상태/타입/길이) 경우라 "후보"일 뿐 확정 아님 -- 페이지가 원래 동적이면(타임스탬프/CSRF 토큰/광고 등) 같은 신호로 오탐될 수 있음. 아래 "전체 테스트 결과"에서 파라미터출처=PARAM_MINED_CANDIDATE 행으로 실제 반사/XSS 여부까지 한 번 더 테스트됨. 마커가 바로 반사돼 확정된 히든 파라미터는 파라미터출처=PARAM_MINED 행으로 따로 들어가며(마이닝 단계에서 이미 완전히 확인됨, 추가 요청 없었음) HIGH/MEDIUM 테이블에 같이 뜸.'
     );
   }
 
@@ -4013,7 +4131,10 @@
     테스트한파라미터수:
       results.length,
 
-    히든파라미터후보수:
+    히든파라미터확정반사수:
+      minedConfirmedTotal,
+
+    히든파라미터미확정후보수:
       minedParameterTotal,
 
     반사발견:
@@ -4077,6 +4198,8 @@
     minedParameterFindings,
 
     minedParameterTotal,
+
+    minedConfirmedTotal,
 
     results,
 
@@ -5555,9 +5678,52 @@ window.__XSS_SCOUT_V33__ = {
     };
   },
 };
-console.log('[XSS Scout v3.3] 통합 분석 완료:', 'window.__XSS_SCOUT_V33__');
-console.log('[XSS Scout v3.3] 가장 먼저 window.__XSS_SCOUT_V33__.highSignal 테이블부터 확인할 것 -- 경로/파라미터/페이로드/발견된 응답 조각이 전부 들어있음.');
+console.log('[XSS Scout v3.3] 통합 분석 완료. 스캔 범위/같은오리진 등 메타정보는 window.__XSS_SCOUT_V33__.coverage 로 조회.');
 console.log('[XSS Scout v3.3] DOM/요청 관찰기 계속 동작 중. 필요하면 폼에 무해한 XSSSCOUT_* 마커를 입력한 뒤 window.__XSS_SCOUT_V33__.domObserver.summary() 실행.');
-console.table([__xssScoutCoverage]);
+
+// ============================================================
+// FINAL VERDICT -- 이게 진짜 마지막에 봐야 할 것: 어떤 URL/동작에서
+// 취약점일 가능성이 있는 반응이 나왔는가. 엔드포인트 통계나 같은오리진
+// 집계 같은 메타정보는 위 .coverage getter로 빠지고, 여기는 "실제로
+// 터졌을 수도 있는 것"만 압축해서 보여준다.
+// ============================================================
+
+const __xssScoutFinalGetHigh = window.__XSS_SCOUT_V33__.highSignal;
+const __xssScoutFinalDomHigh = __xssScoutDomSummary.high;
+
+console.log('');
+console.log('================ 최종 확인: 취약점 가능성 (URL별) ================');
+
+if (__xssScoutFinalGetHigh.length) {
+  console.table(
+    __xssScoutFinalGetHigh.map(row => ({
+      전체요청URL: row.URL,
+      파라미터: row.Parameter,
+      파라미터출처: row.ParamSource,
+      주입한페이로드: row.Payload,
+      '발견된조각(응답내용)': row.Context,
+      판정근거: row.SignalReason,
+    }))
+  );
+} else {
+  console.log('[XSS Scout v3.3] GET 파라미터 반사 기준 HIGH 없음. MEDIUM', window.__XSS_SCOUT_V33__.mediumSignal.length, '건은 window.__XSS_SCOUT_V33__.mediumSignal 에서 수동 검토.');
+}
+
+if (__xssScoutFinalDomHigh.length) {
+  console.log('');
+  console.log('================ 최종 확인: DOM 싱크로 실제 실행된 흔적 (HIGH) ================');
+  console.table(
+    __xssScoutFinalDomHigh.map(row => ({
+      싱크종류: row.Kind,
+      대상엘리먼트: row.Target,
+      관측된값: row.Value,
+      시각: row.Time,
+    }))
+  );
+}
+
+if (!__xssScoutFinalGetHigh.length && !__xssScoutFinalDomHigh.length) {
+  console.log('[XSS Scout v3.3] 이번 스캔에서 확인된 취약점 가능성(HIGH) 없음.');
+}
 
 })();
