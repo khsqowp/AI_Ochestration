@@ -945,7 +945,7 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .diag-guided-summary-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
 .diag-guided-crumb { margin:0 0 12px; font-size:11.8px; color:#8a8591; padding-bottom:10px; border-bottom:1px dashed #eceaf0; }
 .diag-scanner-list { display:flex; flex-direction:column; gap:10px; }
-.diag-scanner-card { margin:0; border:1px solid #eceaf0; border-radius:12px; padding:0; overflow:hidden; }
+.diag-scanner-card { flex:none; margin:0; border:1px solid #eceaf0; border-radius:12px; padding:0; overflow:hidden; }
 .diag-scanner-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 16px; background:#faf9fc; text-align:left; }
 .diag-scanner-head:hover { background:#f1eff5; }
 .diag-scanner-head strong { display:block; font-size:13px; }
