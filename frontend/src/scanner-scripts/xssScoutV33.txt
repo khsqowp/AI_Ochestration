@@ -5283,49 +5283,28 @@
     highSignal.length
   ) {
 
-    console.table(
+    // 표(console.table)는 환경에 따라 접힌 객체/배열 미리보기로만 보이고
+    // 펼쳐 눌러야 내용이 나오는 경우가 있다 -- 경로/파라미터/특수문자별
+    // 반응을 클릭 없이 바로 읽을 수 있게 전부 텍스트 줄로 찍는다.
+    for (const row of highSignal) {
 
-      highSignal.map(
-        row => ({
-
-          경로:
-            row.Path,
-
-          파라미터:
-            row.Parameter,
-
-          파라미터출처:
-            row.ParamSource,
-
-          주입한페이로드:
-            row.Payload,
-
-          '발견된조각(응답내용)':
-            row.Context,
-
-          'HTTP(기준→테스트)':
-            row.HTTP,
-
-          판정근거:
-            row.SignalReason,
-
-          인코딩변환:
-            row.Transformation,
-
-          반사위치유형:
-            row.ContextType,
-
-          문자별변환요약:
-            row.CharacterSummary,
-
-          판정:
-            row.Result,
-
-          전체요청URL:
-            row.URL
-        })
-      )
-    );
+      console.log(
+        `[HIGH] ${row.Path}  파라미터=${row.Parameter}(${row.ParamSource})  페이로드=${row.Payload}`
+      );
+      console.log(
+        `  문자별반응: ${row.CharacterSummary}`
+      );
+      console.log(
+        `  발견된조각: ${row.Context}`
+      );
+      console.log(
+        `  반사위치=${row.ContextType}  인코딩변환=${row.Transformation}  판정=${row.Result}  판정근거=${row.SignalReason}  HTTP=${row.HTTP}`
+      );
+      console.log(
+        `  URL: ${row.URL}`
+      );
+      console.log('');
+    }
 
   } else {
 
@@ -5350,43 +5329,25 @@
     );
 
 
-    console.table(
+    for (const row of mediumSignal) {
 
-      mediumSignal.map(
-        row => ({
-
-          경로:
-            row.Path,
-
-          파라미터:
-            row.Parameter,
-
-          주입한페이로드:
-            row.Payload,
-
-          '발견된조각(응답내용)':
-            row.Context,
-
-          'HTTP(기준→테스트)':
-            row.HTTP,
-
-          판정근거:
-            row.SignalReason,
-
-          인코딩변환:
-            row.Transformation,
-
-          반사위치유형:
-            row.ContextType,
-
-          판정:
-            row.Result,
-
-          전체요청URL:
-            row.URL
-        })
-      )
-    );
+      console.log(
+        `[MEDIUM] ${row.Path}  파라미터=${row.Parameter}(${row.ParamSource})  페이로드=${row.Payload}`
+      );
+      console.log(
+        `  문자별반응: ${row.CharacterSummary}`
+      );
+      console.log(
+        `  발견된조각: ${row.Context}`
+      );
+      console.log(
+        `  반사위치=${row.ContextType}  인코딩변환=${row.Transformation}  판정=${row.Result}  판정근거=${row.SignalReason}  HTTP=${row.HTTP}`
+      );
+      console.log(
+        `  URL: ${row.URL}`
+      );
+      console.log('');
+    }
   }
 
 
@@ -5695,16 +5656,16 @@ console.log('');
 console.log('================ 최종 확인: 취약점 가능성 (URL별) ================');
 
 if (__xssScoutFinalGetHigh.length) {
-  console.table(
-    __xssScoutFinalGetHigh.map(row => ({
-      전체요청URL: row.URL,
-      파라미터: row.Parameter,
-      파라미터출처: row.ParamSource,
-      주입한페이로드: row.Payload,
-      '발견된조각(응답내용)': row.Context,
-      판정근거: row.SignalReason,
-    }))
-  );
+  // 접히는 테이블/객체 미리보기 대신, 클릭해서 펼칠 필요 없는 텍스트 줄로
+  // 경로/파라미터/특수문자별 반응을 전부 그대로 찍는다.
+  for (const row of __xssScoutFinalGetHigh) {
+    console.log(`[HIGH] ${row.Path}  파라미터=${row.Parameter}(${row.ParamSource})  페이로드=${row.Payload}`);
+    console.log(`  문자별반응: ${row.CharacterSummary}`);
+    console.log(`  발견된조각: ${row.Context}`);
+    console.log(`  판정근거=${row.SignalReason}  판정=${row.Result}`);
+    console.log(`  URL: ${row.URL}`);
+    console.log('');
+  }
 } else {
   console.log('[XSS Scout v3.3] GET 파라미터 반사 기준 HIGH 없음. MEDIUM', window.__XSS_SCOUT_V33__.mediumSignal.length, '건은 window.__XSS_SCOUT_V33__.mediumSignal 에서 수동 검토.');
 }
@@ -5712,14 +5673,12 @@ if (__xssScoutFinalGetHigh.length) {
 if (__xssScoutFinalDomHigh.length) {
   console.log('');
   console.log('================ 최종 확인: DOM 싱크로 실제 실행된 흔적 (HIGH) ================');
-  console.table(
-    __xssScoutFinalDomHigh.map(row => ({
-      싱크종류: row.Kind,
-      대상엘리먼트: row.Target,
-      관측된값: row.Value,
-      시각: row.Time,
-    }))
-  );
+  for (const row of __xssScoutFinalDomHigh) {
+    console.log(`[HIGH] ${row.Kind}  대상=${row.Target}`);
+    console.log(`  관측된값: ${row.Value}`);
+    console.log(`  시각: ${row.Time}`);
+    console.log('');
+  }
 }
 
 if (!__xssScoutFinalGetHigh.length && !__xssScoutFinalDomHigh.length) {
