@@ -4627,12 +4627,6 @@
 
   function classifySignal(result) {
 
-    const endpoint =
-      endpointLookup.get(
-        endpointKey(result)
-      );
-
-
     if (
       !result.Reflected
     ) {
@@ -4744,88 +4738,74 @@
 
 
     // ----------------------------------------------------------
-    // SCRIPT: raw 구분자 생존 여부가 먼저
+    // SCRIPT: 문자 단위 검사만으론 실제 JS 문자열을 벗어났는지 확인 불가
     //
-    // ", ', < 중 하나라도 raw로 살아남았으면 문자열을 깨고 나가거나(따옴표)
-    // </script>로 태그 자체를 닫을(< ) primitive가 있다는 뜻이라 HIGH. 그게
-    // 아니고 필터/인코딩 흔적만 있으면 수동 검토 대상(MEDIUM)으로만 본다 --
-    // "SCRIPT"는 직렬화된 부트스트랩 데이터도 포함하므로 변환 흔적만으로
-    // 실행 가능한 JS라고 단정할 수 없다.
+    // (피드백 반영) 이전엔 ", ', < 중 하나가 raw로 살아남으면 HIGH를 줬는데
+    // 과한 판정이었다 -- 반사된 따옴표가 실제로 감싸는 문자열의 구분자와
+    // 같은 종류인지, 주석/정규식/템플릿 리터럴 안인지는 raw 문자 존재
+    // 여부만으론 모른다(AST 파싱 없이는 확인 불가). "SCRIPT"는 직렬화된
+    // 부트스트랩 데이터도 포함하므로 더더욱 실행 가능한 JS라고 단정할 수
+    // 없다 -- raw 구분자 생존 여부와 무관하게 항상 "문법 확인 후보"
+    // (MEDIUM)로만 분류한다.
     // ----------------------------------------------------------
-
-    const rawChar = character => (result.CharacterMap?.[character]?.RAW || 0) > 0;
 
     if (result.ContextType === 'SCRIPT') {
 
-      if (rawChar('"') || rawChar("'") || rawChar('<')) {
-
-        return {
-          Signal:
-            'HIGH',
-
-          Reason:
-            'RAW_SCRIPT_DELIMITER'
-        };
-      }
-
-      if (
-        result.Transformation === 'PARTIAL_FILTERED' ||
-        result.Transformation === 'PARTIAL_ENCODED'
-      ) {
-
-        return {
-          Signal:
-            'MEDIUM',
-
-          Reason:
-            'SCRIPT_TRANSFORM_REVIEW'
-        };
-      }
-    }
-
-
-    // ----------------------------------------------------------
-    // FILTERING / CHARACTER REMOVAL
-    //
-    // 문자가 통째로 사라지거나(MISSING) 필터링된 흔적은 컨텍스트와 무관하게
-    // 그 자체로 중요한 신호다 -- 응답이 실제로 입력을 걸러내고 있다는 뜻이고,
-    // 우회(bypass) 조사 대상이 된다. SCRIPT 컨텍스트는 위에서 이미 갈렸으므로
-    // 여기 도달하는 건 그 외 컨텍스트뿐이다.
-    // ----------------------------------------------------------
-
-    if (
-      isFilteredTransform(
-        result
-      ) ||
-      hasMissingCharacter(
-        result
-      )
-    ) {
-
       return {
         Signal:
-          'HIGH',
+          'MEDIUM',
 
         Reason:
-          'CHARACTER_FILTERING'
+          'SCRIPT_SYNTAX_REVIEW'
+      };
+    }
+
+    if (
+      result.ContextType === 'TEXT' ||
+      result.ContextType === 'UNKNOWN' ||
+      result.ContextType === 'STYLE'
+    ) {
+
+      // HTML 파싱 컨텍스트가 아니다(text/plain 응답, <style> 안 CSS 등) --
+      // raw로 반사돼도 그 자체로는 실행되지 않는다.
+      return {
+        Signal:
+          'LOW',
+
+        Reason:
+          'NON_HTML_OR_DATA_REFLECTION'
       };
     }
 
 
     // ----------------------------------------------------------
     // 컨텍스트별 정밀 판정: 이 반사 위치를 실제로 벗어나는 데 필요한 구분자
-    // 문자 하나가 raw로 살아남았는지만 본다.
+    // 문자 하나가 raw로 살아남았는지만 본다. HTML_TEXT의 '<'와 속성의
+    // 매칭 따옴표, 이 둘만 문자 단위 관찰로도 파서 레벨 컨텍스트 이탈을
+    // 확신할 수 있는 경우라서 여기서만 HIGH를 준다 -- 그 외(SCRIPT 등)는
+    // 위에서 이미 갈렸다.
     //
-    // 예전 방식(Transformation === 'RAW')은 SPECIAL 7개 문자 전부가 raw여야
-    // 통과했는데, 그 컨텍스트와 무관한 문자(예: HTML_TEXT인데 ';'만 인코딩돼도
-    // 전체가 RAW 판정에서 탈락)까지 전부 raw를 요구해서 과소 탐지였다 -- 실제로
-    // 깨고 나가는 데 필요한 문자 하나만 raw로 남아 있으면 그걸로 충분하다.
+    // 구분자가 raw로 안 남았어도 다른 문자가 필터링/제거(MISSING)된 흔적이
+    // 있으면 "여기선 못 깼지만 서버가 입력을 거르고 있다"는 정황 증거라
+    // LOW 대신 MEDIUM까지 올린다 -- 확정 증거는 아니라서 HIGH는 아니다
+    // (이전엔 필터링 흔적만으로 HIGH를 줬는데, SCRIPT 판정과 같은 이유로
+    // 같이 낮췄다: 문자 단위 관찰만으론 실제 실행 가능 여부를 확정 못 한다).
     // ----------------------------------------------------------
+
+    const rawChar = character => (result.CharacterMap?.[character]?.RAW || 0) > 0;
+
+    const filteringObserved =
+      isFilteredTransform(result) ||
+      hasMissingCharacter(result);
 
     if (result.ContextType === 'HTML_TEXT') {
 
-      return rawChar('<')
-        ? { Signal: 'HIGH', Reason: 'RAW_HTML_TAG_DELIMITER' }
+      if (rawChar('<')) {
+        return { Signal: 'HIGH', Reason: 'RAW_HTML_TAG_DELIMITER' };
+      }
+
+      return filteringObserved
+        ? { Signal: 'MEDIUM', Reason: 'CHARACTER_FILTERING' }
         : { Signal: 'LOW', Reason: 'HTML_TEXT_TAG_DELIMITER_ENCODED' };
     }
 
@@ -4836,91 +4816,23 @@
 
       const delimiter = result.ContextType === 'HTML_ATTRIBUTE_DQ' ? '"' : "'";
 
-      return rawChar(delimiter)
-        ? { Signal: 'HIGH', Reason: 'RAW_ATTRIBUTE_DELIMITER' }
+      if (rawChar(delimiter)) {
+        return { Signal: 'HIGH', Reason: 'RAW_ATTRIBUTE_DELIMITER' };
+      }
+
+      return filteringObserved
+        ? { Signal: 'MEDIUM', Reason: 'CHARACTER_FILTERING' }
         : { Signal: 'LOW', Reason: 'ATTRIBUTE_DELIMITER_ENCODED' };
     }
 
-    if (result.ContextType === 'HTML_ATTRIBUTE_UNQUOTED') {
-
-      // 공백 하나로도 새 속성을 주입해 깰 수 있는 컨텍스트라 SPECIAL 문자셋
-      // 만으론 판단 불가 -- 항상 수동 검토 대상으로만 본다.
-      return {
-        Signal:
-          'MEDIUM',
-
-        Reason:
-          'UNQUOTED_ATTRIBUTE_REVIEW'
-      };
-    }
-
-
-    // ----------------------------------------------------------
-    // 안전망: 위 컨텍스트별 분기 어디에도 안 걸린 나머지(TEXT/UNKNOWN/STYLE,
-    // 또는 SCRIPT인데 raw 구분자도 PARTIAL_FILTERED/PARTIAL_ENCODED도 아닌 경우)
-    // ----------------------------------------------------------
-
-    if (
-      endpoint &&
-      endpoint.HomogeneousUrlEncoding &&
-      isFullUrlEncoded(result)
-    ) {
-
-      return {
-        Signal:
-          'LOW',
-
-        Reason:
-          'SATURATED_FULL_URL_ENCODING'
-      };
-    }
-
-    if (
-      isFullUrlEncoded(
-        result
-      )
-    ) {
-
-      return {
-        Signal:
-          'LOW',
-
-        Reason:
-          'FULL_URL_ENCODING'
-      };
-    }
-
-    if (
-      result.Transformation ===
-        'HTML_ENTITY' ||
-
-      result.Transformation ===
-        'JSON_ESCAPE' ||
-
-      result.Transformation ===
-        'FULL_ENCODED_MIXED'
-    ) {
-
-      return {
-        Signal:
-          'MEDIUM',
-
-        Reason:
-          'CONTEXT_ENCODING'
-      };
-    }
-
-
-    // ----------------------------------------------------------
-    // DEFAULT REFLECTION
-    // ----------------------------------------------------------
-
+    // HTML_ATTRIBUTE_UNQUOTED: 공백 하나로도 새 속성을 주입해 깰 수 있는
+    // 컨텍스트라 SPECIAL 문자셋만으론 판단 불가 -- 항상 수동 검토 대상.
     return {
       Signal:
         'MEDIUM',
 
       Reason:
-        'REFLECTION_REVIEW'
+        'UNQUOTED_ATTRIBUTE_REVIEW'
     };
   }
 
