@@ -2236,17 +2236,17 @@
   console.log('');
 
   console.log(
-    '================ XSS SCOUT v2.8 ================'
+    '================ XSS Scout -- GET 파라미터 반사 스캔 시작 ================'
   );
 
 
   console.log(
-    `[Raw Sources] ${rawSources.length}`
+    `[원본 수집 소스] ${rawSources.length}개`
   );
 
 
   console.log(
-    `[Candidates] ${targets.length}`
+    `[테스트 대상 후보] ${targets.length}개 (경로+파라미터 조합, 중복 제거됨)`
   );
 
 
@@ -2255,30 +2255,30 @@
     targets.map(
       (target, index) => ({
 
-        No:
+        번호:
           index + 1,
 
-        Source:
+        수집출처:
           target.source,
 
-        ObservedMethod:
+        관측된메서드:
           target.observedMethod,
 
-        Origin:
+        '출처(동일/교차)':
           target.sameOrigin
             ? 'SAME'
             : 'CROSS',
 
-        Host:
+        호스트:
           target.url.hostname,
 
-        Path:
+        경로:
           target.url.pathname,
 
-        Parameters:
+        파라미터목록:
           target.params.join(', '),
 
-        Initiator:
+        발견경로:
           target.initiatorType
       })
     )
@@ -2322,7 +2322,7 @@
 
 
     console.log(
-      `[TARGET ${targetIndex + 1}/${targets.length}]`,
+      `[대상 ${targetIndex + 1}/${targets.length}]`,
       `[${target.source}]`,
       target.url.pathname
     );
@@ -2338,7 +2338,7 @@
     try {
 
       console.log(
-        '[GET PROBE]',
+        '[기준 요청(GET)]',
         target.originalURL
       );
 
@@ -2356,10 +2356,10 @@
 
 
       console.log(
-        '[BASELINE]',
+        '[기준 응답]',
         `HTTP=${baseline.status}`,
-        `Class=${baseline.statusClass}`,
-        `Length=${baseline.length}`,
+        `클래스=${baseline.statusClass}`,
+        `길이=${baseline.length}`,
         `Type=${baseline.normalizedContentType}`
       );
 
@@ -2368,37 +2368,37 @@
 
       unreplayableTargets.push({
 
-        Source:
+        수집출처:
           target.source,
 
-        Origin:
+        '출처(동일/교차)':
           target.sameOrigin
             ? 'SAME'
             : 'CROSS',
 
-        Host:
+        호스트:
           target.url.hostname,
 
-        Path:
+        경로:
           target.url.pathname,
 
-        ObservedMethod:
+        관측된메서드:
           target.observedMethod,
 
-        ProbeMethod:
+        probe메서드:
           'GET',
 
-        Reason:
-          'NETWORK_OR_CORS',
+        사유:
+          '네트워크 오류 또는 CORS 차단',
 
-        Error:
+        오류내용:
           String(error)
       });
 
 
       console.warn(
-        '[UNREPLAYABLE]',
-        'NETWORK_OR_CORS',
+        '[재현 불가]',
+        '네트워크 오류 또는 CORS 차단',
         target.url.pathname
       );
 
@@ -2419,40 +2419,40 @@
 
       unreplayableTargets.push({
 
-        Source:
+        수집출처:
           target.source,
 
-        Origin:
+        '출처(동일/교차)':
           target.sameOrigin
             ? 'SAME'
             : 'CROSS',
 
-        Host:
+        호스트:
           target.url.hostname,
 
-        Path:
+        경로:
           target.url.pathname,
 
-        ObservedMethod:
+        관측된메서드:
           target.observedMethod,
 
-        ProbeMethod:
+        probe메서드:
           'GET',
 
         HTTP:
           baseline.status,
 
-        BaselineClass:
+        기준클래스:
           baseline.statusClass,
 
-        Reason:
-          'METHOD_REJECTED'
+        사유:
+          '서버가 메서드를 거부함(405/501)'
       });
 
 
       console.warn(
-        '[UNREPLAYABLE]',
-        `METHOD_REJECTED ${baseline.status}`,
+        '[재현 불가]',
+        `메서드 거부됨 HTTP=${baseline.status}`,
         target.url.pathname
       );
 
@@ -2473,31 +2473,31 @@
 
       staticTargets.push({
 
-        Source:
+        수집출처:
           target.source,
 
-        Host:
+        호스트:
           target.url.hostname,
 
-        Path:
+        경로:
           target.url.pathname,
 
         HTTP:
           baseline.status,
 
-        BaselineClass:
+        기준클래스:
           baseline.statusClass,
 
-        ContentType:
+        'Content-Type':
           baseline.normalizedContentType,
 
-        Reason:
-          'STATIC_RESPONSE'
+        사유:
+          '정적 리소스 응답(CSS/이미지/폰트 등)'
       });
 
 
       console.log(
-        '[STATIC]',
+        '[정적 응답]',
         baseline.normalizedContentType,
         target.url.pathname
       );
@@ -2513,36 +2513,36 @@
 
     replayableTargets.push({
 
-      Source:
+      수집출처:
         target.source,
 
-      Origin:
+      '출처(동일/교차)':
         target.sameOrigin
           ? 'SAME'
           : 'CROSS',
 
-      Host:
+      호스트:
         target.url.hostname,
 
-      Path:
+      경로:
         target.url.pathname,
 
-      ObservedMethod:
+      관측된메서드:
         target.observedMethod,
 
-      ReplayMethod:
+      재현메서드:
         'GET',
 
-      BaselineHTTP:
+      기준HTTP:
         baseline.status,
 
-      BaselineClass:
+      기준클래스:
         baseline.statusClass,
 
-      ContentType:
+      'Content-Type':
         baseline.normalizedContentType,
 
-      Parameters:
+      파라미터목록:
         target.params.join(', ')
     });
 
@@ -2602,9 +2602,10 @@
       console.log('');
 
       console.log(
-        `[TEST ${markerCounter}]`,
-        parameter,
-        `OriginalType=${valueType}`
+        `[테스트 ${markerCounter}]`,
+        `파라미터=${parameter}`,
+        `페이로드=${payload}`,
+        `원본타입=${valueType}`
       );
 
 
@@ -2780,6 +2781,9 @@
           Parameter:
             parameter,
 
+          Payload:
+            payload,
+
           Original:
             originalValue,
 
@@ -2875,16 +2879,16 @@
 
 
         console.log(
-          '[RECV]',
-          `${baseline.status}→${tested.status}`,
-          `${baseline.statusClass}→${tested.statusClass}`,
-          `Reflection=${reflected}`,
-          `Count=${markerPositions.length}`,
-          `Transform=${transformationType}`,
-          `Context=${contextType}`,
-          `Resync=${resyncCount}`,
-          `Type=${contentTypeTransition}`,
-          `Result=${resultType}`
+          '[응답 수신]',
+          `HTTP ${baseline.status}→${tested.status}`,
+          `클래스 ${baseline.statusClass}→${tested.statusClass}`,
+          `반사여부=${reflected}`,
+          `반사횟수=${markerPositions.length}`,
+          `변환=${transformationType}`,
+          `반사위치유형=${contextType}`,
+          `리싱크=${resyncCount}`,
+          `ContentType변화=${contentTypeTransition}`,
+          `판정=${resultType}`
         );
 
 
@@ -2893,7 +2897,12 @@
         ) {
 
           console.log(
-            '[CHAR MAP]',
+            '[발견된 응답 조각]',
+            getContext(tested.body, marker)
+          );
+
+          console.log(
+            '[문자별 변환 맵]',
             characterSummary
           );
         }
@@ -2925,6 +2934,9 @@
 
           Parameter:
             parameter,
+
+          Payload:
+            payload,
 
           Original:
             originalValue,
@@ -3122,7 +3134,7 @@
   console.log('');
 
   console.log(
-    '================ ACTIVE RESULTS ================'
+    '================ 전체 테스트 결과 (파라미터별) ================'
   );
 
 
@@ -3135,41 +3147,50 @@
       results.map(
         result => ({
 
-          Origin:
+          출처:
             result.Origin,
 
-          Path:
+          경로:
             result.Path,
 
-          Parameter:
+          파라미터:
             result.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            result.Payload,
+
+          '발견된조각(응답내용)':
+            result.Context,
+
+          'HTTP(기준→테스트)':
             result.HTTP,
 
-          State:
+          상태클래스변화:
             `${result.BaselineClass}→${result.ResponseClass}`,
 
-          Reflected:
+          반사여부:
             result.Reflected,
 
-          Count:
+          반사횟수:
             result.Occurrences,
 
-          Transform:
+          인코딩변환:
             result.Transformation,
 
-          Context:
+          반사위치유형:
             result.ContextType,
 
-          Resync:
+          리싱크횟수:
             result.ResyncCount,
 
-          Type:
+          'Content-Type변화':
             result.ContentTypeTransition,
 
-          Result:
-            result.Result
+          판정:
+            result.Result,
+
+          전체요청URL:
+            result.URL
         })
       )
     );
@@ -3189,7 +3210,7 @@
   console.log('');
 
   console.log(
-    '================ REFLECTION CANDIDATES ================'
+    '================ 반사(Reflection) 발견 후보 ================'
   );
 
 
@@ -3202,44 +3223,53 @@
       reflectionCandidates.map(
         result => ({
 
-          Origin:
+          출처:
             result.Origin,
 
-          Path:
+          경로:
             result.Path,
 
-          Parameter:
+          파라미터:
             result.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            result.Payload,
+
+          '발견된조각(응답내용)':
+            result.Context,
+
+          'HTTP(기준→테스트)':
             result.HTTP,
 
-          State:
+          상태클래스변화:
             `${result.BaselineClass}→${result.ResponseClass}`,
 
-          ContentType:
+          'Content-Type변화':
             result.ContentTypeTransition,
 
-          Count:
+          반사횟수:
             result.Occurrences,
 
-          Exact:
+          원본그대로반사:
             result.Exact,
 
-          Transform:
+          인코딩변환:
             result.Transformation,
 
-          Context:
+          반사위치유형:
             result.ContextType,
 
-          Resync:
+          리싱크횟수:
             result.ResyncCount,
 
-          CharacterMap:
+          문자별변환요약:
             result.CharacterSummary,
 
-          Result:
-            result.Result
+          판정:
+            result.Result,
+
+          전체요청URL:
+            result.URL
         })
       )
     );
@@ -3263,7 +3293,7 @@
     console.log('');
 
     console.log(
-      '================ RAW REFLECTION ================'
+      '================ 무필터 그대로 반사(RAW) -- 가장 위험 ================'
     );
 
 
@@ -3272,23 +3302,32 @@
       rawReflections.map(
         result => ({
 
-          Path:
+          경로:
             result.Path,
 
-          Parameter:
+          파라미터:
             result.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            result.Payload,
+
+          '발견된조각(응답내용)':
+            result.Context,
+
+          'HTTP(기준→테스트)':
             result.HTTP,
 
-          Context:
+          반사위치유형:
             result.ContextType,
 
-          Characters:
+          문자별변환요약:
             result.CharacterSummary,
 
-          Result:
-            result.Result
+          판정:
+            result.Result,
+
+          전체요청URL:
+            result.URL
         })
       )
     );
@@ -3306,7 +3345,7 @@
     console.log('');
 
     console.log(
-      '================ TRANSFORMED REFLECTION ================'
+      '================ 인코딩/변환된 채로 반사 ================'
     );
 
 
@@ -3315,29 +3354,38 @@
       transformedReflections.map(
         result => ({
 
-          Path:
+          경로:
             result.Path,
 
-          Parameter:
+          파라미터:
             result.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            result.Payload,
+
+          '발견된조각(응답내용)':
+            result.Context,
+
+          'HTTP(기준→테스트)':
             result.HTTP,
 
-          Transform:
+          인코딩변환:
             result.Transformation,
 
-          Context:
+          반사위치유형:
             result.ContextType,
 
-          Resync:
+          리싱크횟수:
             result.ResyncCount,
 
-          Characters:
+          문자별변환요약:
             result.CharacterSummary,
 
-          Result:
-            result.Result
+          판정:
+            result.Result,
+
+          전체요청URL:
+            result.URL
         })
       )
     );
@@ -3355,7 +3403,7 @@
     console.log('');
 
     console.log(
-      '================ FILTERED / TRUNCATED ================'
+      '================ 필터링/일부 제거되어 반사 ================'
     );
 
 
@@ -3364,29 +3412,38 @@
       filteredReflections.map(
         result => ({
 
-          Path:
+          경로:
             result.Path,
 
-          Parameter:
+          파라미터:
             result.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            result.Payload,
+
+          '발견된조각(응답내용)':
+            result.Context,
+
+          'HTTP(기준→테스트)':
             result.HTTP,
 
-          Transform:
+          인코딩변환:
             result.Transformation,
 
-          Context:
+          반사위치유형:
             result.ContextType,
 
-          Resync:
+          리싱크횟수:
             result.ResyncCount,
 
-          Characters:
+          문자별변환요약:
             result.CharacterSummary,
 
-          Result:
-            result.Result
+          판정:
+            result.Result,
+
+          전체요청URL:
+            result.URL
         })
       )
     );
@@ -3404,7 +3461,7 @@
     console.log('');
 
     console.log(
-      '================ ERROR REFLECTION ================'
+      '================ 오류 응답에 반사됨 ================'
     );
 
 
@@ -3413,32 +3470,41 @@
       errorReflections.map(
         result => ({
 
-          Path:
+          경로:
             result.Path,
 
-          Parameter:
+          파라미터:
             result.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            result.Payload,
+
+          '발견된조각(응답내용)':
+            result.Context,
+
+          'HTTP(기준→테스트)':
             result.HTTP,
 
-          State:
+          상태클래스변화:
             `${result.BaselineClass}→${result.ResponseClass}`,
 
-          ContentType:
+          'Content-Type변화':
             result.ContentTypeTransition,
 
-          Transform:
+          인코딩변환:
             result.Transformation,
 
-          Characters:
+          문자별변환요약:
             result.CharacterSummary,
 
-          Context:
+          반사위치유형:
             result.ContextType,
 
-          Result:
-            result.Result
+          판정:
+            result.Result,
+
+          전체요청URL:
+            result.URL
         })
       )
     );
@@ -3456,7 +3522,7 @@
     console.log('');
 
     console.log(
-      '================ CONTENT-TYPE CHANGES ================'
+      '================ Content-Type이 바뀐 응답 ================'
     );
 
 
@@ -3465,22 +3531,22 @@
       contentTypeChanges.map(
         result => ({
 
-          Path:
+          경로:
             result.Path,
 
-          Parameter:
+          파라미터:
             result.Parameter,
 
-          HTTP:
+          'HTTP(기준→테스트)':
             result.HTTP,
 
-          Transition:
+          'Content-Type전환':
             result.ContentTypeTransition,
 
-          Reflected:
+          반사여부:
             result.Reflected,
 
-          Result:
+          판정:
             result.Result
         })
       )
@@ -3499,7 +3565,7 @@
     console.log('');
 
     console.log(
-      '================ GET REPLAYABLE ================'
+      '================ GET 재현(테스트) 가능 대상 ================'
     );
 
 
@@ -3520,7 +3586,7 @@
     console.log('');
 
     console.log(
-      '================ UNREPLAYABLE ================'
+      '================ 재현 불가(네트워크 오류/CORS/메서드 거부) ================'
     );
 
 
@@ -3541,7 +3607,7 @@
     console.log('');
 
     console.log(
-      '================ STATIC SKIPPED ================'
+      '================ 정적 응답이라 테스트 건너뜀 ================'
     );
 
 
@@ -3558,58 +3624,58 @@
   console.log('');
 
   console.log(
-    '================ SUMMARY ================'
+    '================ 요약 ================'
   );
 
 
   console.table([{
 
-    Discovered:
+    발견된대상:
       targets.length,
 
-    GetReplayable:
+    GET재현가능:
       replayableTargets.length,
 
-    Unreplayable:
+    재현불가:
       unreplayableTargets.length,
 
-    Static:
+    정적응답스킵:
       staticTargets.length,
 
-    TestedParameters:
+    테스트한파라미터수:
       results.length,
 
-    Reflection:
+    반사발견:
       reflectionCandidates.length,
 
-    StableReflection:
+    안정적반사:
       stableReflections.length,
 
-    StatusChangedReflection:
+    상태변화동반반사:
       statusChangedReflections.length,
 
-    ErrorReflection:
+    오류응답반사:
       errorReflections.length,
 
-    RawReflection:
+    무필터RAW반사:
       rawReflections.length,
 
-    PartialEncoded:
+    일부인코딩반사:
       partialEncodedReflections.length,
 
-    FilteredReflection:
+    필터링된반사:
       filteredReflections.length,
 
-    TransformedReflection:
+    변환된반사:
       transformedReflections.length,
 
-    ValidationChanged:
+    검증상태변화:
       validationChanges.length,
 
-    ResponseChanged:
+    응답변화:
       responseChanges.length,
 
-    ContentTypeChanged:
+    'Content-Type변화':
       contentTypeChanges.length
   }]);
 
@@ -3666,36 +3732,36 @@
   console.log('');
 
   console.log(
-    '[XSS Scout v2.8] 완료'
+    '[XSS Scout] 1단계(GET 파라미터 반사 스캔) 완료'
   );
 
 
   console.log(
-    'Reflection:',
+    '반사 발견 목록:',
     'window.__XSS_SCOUT__.reflectionCandidates'
   );
 
 
   console.log(
-    'Raw Reflection:',
+    '무필터 RAW 반사:',
     'window.__XSS_SCOUT__.rawReflections'
   );
 
 
   console.log(
-    'Filtered Reflection:',
+    '필터링된 반사:',
     'window.__XSS_SCOUT__.filteredReflections'
   );
 
 
   console.log(
-    'Error Reflection:',
+    '오류 응답 반사:',
     'window.__XSS_SCOUT__.errorReflections'
   );
 
 
   console.log(
-    'All Results:',
+    '전체 결과:',
     'window.__XSS_SCOUT__.results'
   );
 
@@ -4696,14 +4762,14 @@
   console.log('');
 
   console.log(
-    '================ XSS SCOUT v2.9 ================'
+    '================ XSS Scout -- 결과 분석(위험도 분류) ================'
   );
 
 
   console.log('');
 
   console.log(
-    '================ ENDPOINT SUMMARY ================'
+    '================ 엔드포인트별 요약 ================'
   );
 
 
@@ -4738,37 +4804,37 @@
       .map(
         endpoint => ({
 
-          Origin:
+          출처:
             endpoint.Origin,
 
-          Host:
+          호스트:
             endpoint.Host,
 
-          Path:
+          경로:
             endpoint.Path,
 
-          Tested:
+          테스트횟수:
             endpoint.Tested,
 
-          Reflected:
+          반사횟수:
             endpoint.Reflected,
 
-          Rate:
+          반사율:
             endpoint.ReflectionRate,
 
-          Dominant:
+          주요변환유형:
             endpoint.DominantTransform,
 
-          Saturation:
+          포화도:
             endpoint.Saturation,
 
-          FullUrlEncoded:
+          전체URL인코딩횟수:
             endpoint.FullUrlEncoded,
 
-          UrlEncodedRate:
+          URL인코딩비율:
             endpoint.FullUrlEncodingRate,
 
-          RepetitiveUrlEncoding:
+          반복적URL인코딩:
             endpoint.HomogeneousUrlEncoding
         })
       )
@@ -4782,7 +4848,7 @@
   console.log('');
 
   console.log(
-    '================ PRIORITY RESULTS ================'
+    '================ 우선순위 결과 (위험도 높은 순) ================'
   );
 
 
@@ -4791,41 +4857,50 @@
     priorityResults.map(
       row => ({
 
-        Signal:
+        위험도:
           row.Signal,
 
-        Reason:
+        판정근거:
           row.SignalReason,
 
-        Origin:
+        출처:
           row.Origin,
 
-        Path:
+        경로:
           row.Path,
 
-        Parameter:
+        파라미터:
           row.Parameter,
 
-        HTTP:
+        주입한페이로드:
+          row.Payload,
+
+        '발견된조각(응답내용)':
+          row.Context,
+
+        'HTTP(기준→테스트)':
           row.HTTP,
 
-        Reflected:
+        반사여부:
           row.Reflected,
 
-        Transform:
+        인코딩변환:
           row.Transformation,
 
-        Context:
+        반사위치유형:
           row.ContextType,
 
-        Saturation:
+        엔드포인트포화도:
           row.EndpointSaturation,
 
-        Rate:
+        엔드포인트반사율:
           row.EndpointReflectionRate,
 
-        Result:
-          row.Result
+        판정:
+          row.Result,
+
+        전체요청URL:
+          row.URL
       })
     )
   );
@@ -4838,7 +4913,7 @@
   console.log('');
 
   console.log(
-    '================ HIGH SIGNAL ================'
+    '================ 위험도 HIGH -- 가장 먼저 수동 검증할 것 ================'
   );
 
 
@@ -4851,29 +4926,38 @@
       highSignal.map(
         row => ({
 
-          Path:
+          경로:
             row.Path,
 
-          Parameter:
+          파라미터:
             row.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            row.Payload,
+
+          '발견된조각(응답내용)':
+            row.Context,
+
+          'HTTP(기준→테스트)':
             row.HTTP,
 
-          Reason:
+          판정근거:
             row.SignalReason,
 
-          Transform:
+          인코딩변환:
             row.Transformation,
 
-          Context:
+          반사위치유형:
             row.ContextType,
 
-          Characters:
+          문자별변환요약:
             row.CharacterSummary,
 
-          Result:
-            row.Result
+          판정:
+            row.Result,
+
+          전체요청URL:
+            row.URL
         })
       )
     );
@@ -4881,7 +4965,7 @@
   } else {
 
     console.log(
-      '[XSS Scout] HIGH signal 없음'
+      '[XSS Scout] HIGH 위험도 없음'
     );
   }
 
@@ -4897,7 +4981,7 @@
     console.log('');
 
     console.log(
-      '================ MEDIUM SIGNAL ================'
+      '================ 위험도 MEDIUM -- 다음으로 검증할 것 ================'
     );
 
 
@@ -4906,26 +4990,35 @@
       mediumSignal.map(
         row => ({
 
-          Path:
+          경로:
             row.Path,
 
-          Parameter:
+          파라미터:
             row.Parameter,
 
-          HTTP:
+          주입한페이로드:
+            row.Payload,
+
+          '발견된조각(응답내용)':
+            row.Context,
+
+          'HTTP(기준→테스트)':
             row.HTTP,
 
-          Reason:
+          판정근거:
             row.SignalReason,
 
-          Transform:
+          인코딩변환:
             row.Transformation,
 
-          Context:
+          반사위치유형:
             row.ContextType,
 
-          Result:
-            row.Result
+          판정:
+            row.Result,
+
+          전체요청URL:
+            row.URL
         })
       )
     );
@@ -4939,7 +5032,7 @@
   console.log('');
 
   console.log(
-    '================ LOW SIGNAL SUMMARY ================'
+    '================ 위험도 LOW 요약 (엔드포인트별 묶음) ================'
   );
 
 
@@ -5017,27 +5110,27 @@
     ].map(
       group => ({
 
-        Origin:
+        출처:
           group.Origin,
 
-        Host:
+        호스트:
           group.Host,
 
-        Path:
+        경로:
           group.Path,
 
-        Count:
+        건수:
           group.Count,
 
-        Parameters:
+        파라미터목록:
           group.Parameters.join(', '),
 
-        Reasons:
+        판정근거목록:
           [
             ...group.Reasons
           ].join(', '),
 
-        Transforms:
+        변환유형목록:
           [
             ...group.Transforms
           ].join(', ')
@@ -5053,37 +5146,37 @@
   console.log('');
 
   console.log(
-    '================ SUMMARY ================'
+    '================ 최종 요약 ================'
   );
 
 
   console.table([{
 
-    Endpoints:
+    엔드포인트수:
       endpointStats.length,
 
-    Results:
+    전체결과수:
       analyzedResults.length,
 
-    Reflections:
+    반사발견수:
       analyzedResults.filter(
         row =>
           row.Reflected
       ).length,
 
-    High:
+    HIGH:
       highSignal.length,
 
-    Medium:
+    MEDIUM:
       mediumSignal.length,
 
-    Low:
+    LOW:
       lowSignal.length,
 
-    Info:
+    INFO:
       infoSignal.length,
 
-    SaturatedEndpoints:
+    포화된엔드포인트수:
       endpointStats.filter(
         endpoint =>
           endpoint.Saturation ===
@@ -5093,7 +5186,7 @@
             'HIGH'
       ).length,
 
-    RepetitiveUrlEncodingEndpoints:
+    반복URL인코딩엔드포인트수:
       endpointStats.filter(
         endpoint =>
           endpoint.HomogeneousUrlEncoding
@@ -5133,36 +5226,36 @@
   console.log('');
 
   console.log(
-    '[XSS Scout v2.9] 분석 완료'
+    '[XSS Scout] 2단계(위험도 분석) 완료'
   );
 
 
   console.log(
-    'HIGH:',
+    'HIGH 목록:',
     'window.__XSS_SCOUT_V29__.highSignal'
   );
 
 
   console.log(
-    'MEDIUM:',
+    'MEDIUM 목록:',
     'window.__XSS_SCOUT_V29__.mediumSignal'
   );
 
 
   console.log(
-    'LOW:',
+    'LOW 목록:',
     'window.__XSS_SCOUT_V29__.lowSignal'
   );
 
 
   console.log(
-    'Endpoint:',
+    '엔드포인트별 통계:',
     'window.__XSS_SCOUT_V29__.endpointStats'
   );
 
 
   console.log(
-    'All:',
+    '전체(우선순위순):',
     'window.__XSS_SCOUT_V29__.priorityResults'
   );
 
@@ -5172,20 +5265,20 @@ window.__XSS_SCOUT__.version = '3.3';
 const __xssScoutDomSummary = __XSS_SCOUT_DOM__.summary();
 const __xssScoutScanRows = window.__XSS_SCOUT_V29__.results || [];
 const __xssScoutCoverage = {
-  activeMutationScope: 'SAME_ORIGIN_ONLY',
-  analyzedResults: __xssScoutScanRows.length,
-  sameOriginResults: __xssScoutScanRows.filter(row => row.Origin === 'SAME').length,
-  crossOriginResults: __xssScoutScanRows.filter(row => row.Origin === 'CROSS').length,
-  endpointCount: window.__XSS_SCOUT_V29__.endpointStats.length,
-  domHookStatus: __xssScoutDomSummary.hookStatus,
-  activeDomHooks: __xssScoutDomSummary.activeHookCount,
-  unavailableDomHooks: __xssScoutDomSummary.unavailableHooks,
-  observedDomEvents: __xssScoutDomSummary.total,
-  observedRequestShapes: __xssScoutDomSummary.requestShapes.length,
-  blindSpots: [
-    'POST/GraphQL bodies are observed but never replayed or mutated.',
-    'Only actions performed after this script starts are observed.',
-    'Framework internals or unhookable browser APIs may not be visible.'
+  '능동테스트범위': '같은 오리진(SAME ORIGIN)만',
+  '분석된결과수': __xssScoutScanRows.length,
+  '같은오리진결과수': __xssScoutScanRows.filter(row => row.Origin === 'SAME').length,
+  '교차오리진결과수': __xssScoutScanRows.filter(row => row.Origin === 'CROSS').length,
+  '엔드포인트수': window.__XSS_SCOUT_V29__.endpointStats.length,
+  'DOM훅상태': __xssScoutDomSummary.hookStatus,
+  '활성DOM훅수': __xssScoutDomSummary.activeHookCount,
+  '비활성DOM훅목록': __xssScoutDomSummary.unavailableHooks,
+  '관측된DOM이벤트수': __xssScoutDomSummary.total,
+  '관측된요청형태수': __xssScoutDomSummary.requestShapes.length,
+  '관측범위밖사각지대': [
+    'POST/GraphQL 요청 본문은 관측만 하고 재전송/변조하지 않음.',
+    '이 스크립트가 시작된 이후의 동작만 관측됨 (그 이전 로딩 과정은 못 봄).',
+    '프레임워크 내부 로직이나 후킹 불가능한 브라우저 API는 못 볼 수 있음.'
   ]
 };
 window.__XSS_SCOUT_V33__ = {
@@ -5209,7 +5302,8 @@ window.__XSS_SCOUT_V33__ = {
   coverage: __xssScoutCoverage
 };
 console.log('[XSS Scout v3.3] 통합 분석 완료:', 'window.__XSS_SCOUT_V33__');
-console.log('[XSS Scout v3.3] DOM/request observer is active. Use a harmless XSSSCOUT_* form marker if needed, then run: window.__XSS_SCOUT_V33__.domObserver.summary()');
+console.log('[XSS Scout v3.3] 가장 먼저 window.__XSS_SCOUT_V33__.highSignal 테이블부터 확인할 것 -- 경로/파라미터/페이로드/발견된 응답 조각이 전부 들어있음.');
+console.log('[XSS Scout v3.3] DOM/요청 관찰기 계속 동작 중. 필요하면 폼에 무해한 XSSSCOUT_* 마커를 입력한 뒤 window.__XSS_SCOUT_V33__.domObserver.summary() 실행.');
 console.table([__xssScoutCoverage]);
 
 })();

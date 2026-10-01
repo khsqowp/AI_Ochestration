@@ -1,10 +1,36 @@
 (() => {
   const scout = window.__XSS_SCOUT_V33__;
   if (!scout) {
-    console.warn('[XSS Scout v3.3] 먼저 xss_scout_v3.3.js 전체를 실행하세요.');
+    console.warn('[XSS Scout v3.3] 먼저 본 스크립트(xss_scout_v3.3.js)부터 전체 실행하세요.');
     return;
   }
   const observed = scout.domObserver.summary();
+  const toEvidenceRow = row => ({
+    위험도: row.Signal,
+    판정근거: row.SignalReason,
+    출처: row.Origin,
+    경로: row.Path,
+    파라미터: row.Parameter,
+    주입한페이로드: row.Payload,
+    '발견된조각(응답내용)': row.Context,
+    'HTTP(기준→테스트)': row.HTTP,
+    인코딩변환: row.Transformation,
+    반사위치유형: row.ContextType,
+    판정: row.Result,
+    전체요청URL: row.URL,
+  });
+  const toDomEvidenceRow = row => ({
+    위험도: row.Signal,
+    종류: row.Kind,
+    대상태그: row.Target,
+    속성: row.Attribute,
+    '값(마스킹됨)': row.Value,
+    입력값과일치: row.SourceMatch,
+    XSSScout마커포함: row.ScoutMarker,
+    발생오리진: row.Origin,
+    교차오리진여부: row.CrossOrigin,
+  });
+
   const expectedFixtureSignals = [
     ['/fixture/html-raw', 'HIGH'],
     ['/fixture/html-escaped', 'LOW'],
@@ -18,11 +44,11 @@
   const fixtureRegression = expectedFixtureSignals.map(([path, expected]) => {
     const row = byPath.get(path);
     return {
-      Path: path,
-      Expected: expected,
-      Actual: row?.Signal || 'NOT_OBSERVED',
-      Reason: row?.SignalReason || '-',
-      Pass: row?.Signal === expected,
+      경로: path,
+      기대위험도: expected,
+      실제위험도: row?.Signal || 'NOT_OBSERVED',
+      판정근거: row?.SignalReason || '-',
+      통과: row?.Signal === expected,
     };
   });
   const expectedDomSignals = [
@@ -31,22 +57,45 @@
   ];
   const domRegression = expectedDomSignals.map(([kind, expected]) => {
     const row = observed.rows.find(item => item.Kind === kind && item.Signal === expected);
-    return { Kind: kind, Expected: expected, Actual: row?.Signal || 'NOT_OBSERVED', Pass: Boolean(row) };
+    return { 종류: kind, 기대위험도: expected, 실제위험도: row?.Signal || 'NOT_OBSERVED', 통과: Boolean(row) };
   });
-  console.table(scout.highSignal);
-  console.table(scout.mediumSignal);
-  console.table(observed.high);
-  console.table(observed.medium);
-  console.table(observed.stateChangingRequestShapes);
+
+  console.log('================ (GET 반사 스캔) 위험도 HIGH -- 경로/파라미터/페이로드/응답조각 ================');
+  if (scout.highSignal.length) console.table(scout.highSignal.map(toEvidenceRow));
+  else console.log('[XSS Scout] HIGH 위험도 없음');
+
+  console.log('================ (GET 반사 스캔) 위험도 MEDIUM ================');
+  if (scout.mediumSignal.length) console.table(scout.mediumSignal.map(toEvidenceRow));
+  else console.log('[XSS Scout] MEDIUM 위험도 없음');
+
+  console.log('================ (DOM 관찰) 위험도 HIGH -- innerHTML 등 HTML sink에 통제가능한 값이 그대로 들어간 사례 ================');
+  if (observed.high.length) console.table(observed.high.map(toDomEvidenceRow));
+  else console.log('[XSS Scout] DOM HIGH 위험도 없음');
+
+  console.log('================ (DOM 관찰) 위험도 MEDIUM ================');
+  if (observed.medium.length) console.table(observed.medium.map(toDomEvidenceRow));
+  else console.log('[XSS Scout] DOM MEDIUM 위험도 없음');
+
+  console.log('================ 상태변경 요청(POST/PUT/DELETE 등) 관찰 목록 -- 재전송 안 됨, 참고용 ================');
+  if (observed.stateChangingRequestShapes.length) console.table(observed.stateChangingRequestShapes);
+  else console.log('[XSS Scout] 상태변경 요청 관찰 없음');
+
+  console.log('================ 픽스처 회귀 체크(GET 반사) -- 알려진 테스트 페이지 기준 자가진단용 ================');
   console.table(fixtureRegression);
+
+  console.log('================ 픽스처 회귀 체크(DOM sink) ================');
   console.table(domRegression);
+
+  console.log('================ 관측 범위 요약 ================');
   console.table([scout.coverage]);
+
+  console.log('================ 최종 요약 ================');
   console.table([{
-    ReflectedHigh: scout.highSignal.length,
-    ReflectedMedium: scout.mediumSignal.length,
-    DomHigh: observed.high.length,
-    DomMedium: observed.medium.length,
-    ControlledInputMarkers: observed.controlledInputMarkerCount,
-    ObservedStateChangingRequests: observed.stateChangingRequestShapes.length,
+    'GET반사-HIGH': scout.highSignal.length,
+    'GET반사-MEDIUM': scout.mediumSignal.length,
+    'DOM관찰-HIGH': observed.high.length,
+    'DOM관찰-MEDIUM': observed.medium.length,
+    통제가능입력마커수: observed.controlledInputMarkerCount,
+    관측된상태변경요청수: observed.stateChangingRequestShapes.length,
   }]);
 })();

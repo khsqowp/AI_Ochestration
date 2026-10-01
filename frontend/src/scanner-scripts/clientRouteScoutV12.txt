@@ -76,31 +76,31 @@
   const addExposure = (type, source, detail, severity = 'REVIEW', location = 'unknown') => {
     const key = `${type}|${source}|${detail}`;
     if (exposures.some(item => item.Key === key)) return;
-    const confidence = severity === 'HIGH' ? 'PATTERN_MATCH_REQUIRES_VERIFICATION'
-      : severity === 'REVIEW' ? 'LOW_CONTEXT_ONLY' : 'INFORMATIONAL';
-    exposures.push({ Key: key, Type: type, Severity: severity, Confidence: confidence, Source: source, Location: location, Detail: detail, Value: '[redacted]' });
+    const confidence = severity === 'HIGH' ? '패턴일치(직접 검증 필요)'
+      : severity === 'REVIEW' ? '문맥정보부족(참고용)' : '정보성(위협아님)';
+    exposures.push({ Key: key, 종류: type, 위험도: severity, 확신도: confidence, 발견출처: source, 발견위치: location, 설명: detail, 값: '[마스킹됨 -- 실제 값은 담지 않음]' });
   };
 
   const scanExposureCandidates = (text, source) => {
     const body = String(text || '');
     const checks = [
-      ['PRIVATE_KEY_MATERIAL', /-----BEGIN (?:RSA |EC |OPENSSH |)?PRIVATE KEY-----/i, 'private-key block marker', 'HIGH'],
-      ['PUBLIC_KEY_MATERIAL', /-----BEGIN (?:RSA |EC |OPENSSH )?PUBLIC KEY-----/i, 'public-key block marker; normally non-secret, verify intended exposure', 'INFO'],
-      ['AUTHORIZATION_LITERAL', /(?:authorization|bearer)\s*[:=]\s*['"`][^'"`\s]{12,}/i, 'authorization-like literal', 'HIGH'],
-      ['CLOUD_ACCESS_KEY_PATTERN', /(?:AKIA|ASIA)[A-Z0-9]{16}/, 'cloud access-key pattern', 'HIGH'],
-      ['PASSWORD_LITERAL', /(?:password|passwd|pwd)\s*[:=]\s*['"`][^'"`\s]{4,}/i, 'password-like literal', 'HIGH'],
-      ['API_KEY_LITERAL', /(?:api[_-]?key|client[_-]?secret|access[_-]?token|secret[_-]?key)\s*[:=]\s*['"`][^'"`\s]{8,}/i, 'credential-like configuration literal', 'HIGH'],
-      ['JWT_LITERAL', /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, 'JWT-shaped literal', 'HIGH'],
-      ['CRYPTO_KEY_LITERAL', /(?:encryption|crypto|aes|rsa)[A-Za-z0-9_\-]*(?:key|iv)\s*[:=]\s*['"`][^'"`\s]{8,}/i, 'hard-coded crypto-key/IV-like literal', 'HIGH'],
-      ['WEBCRYPTO_KEY_OPERATION', /\bcrypto\.subtle\.(?:importKey|exportKey|generateKey|deriveKey|deriveBits|wrapKey|unwrapKey)\b/i, 'WebCrypto key-management operation', 'REVIEW'],
-      ['WEBCRYPTO_CRYPTO_OPERATION', /\bcrypto\.subtle\.(?:encrypt|decrypt|sign|verify|digest)\b/i, 'WebCrypto cryptographic operation', 'INFO'],
-      ['CRYPTO_ALGORITHM_REFERENCE', /\b(?:AES-(?:GCM|CBC|CTR|KW)|RSA-OAEP|RSA-PSS|PBKDF2|HKDF|ECDH|ECDSA|SHA-(?:1|256|384|512)|MD5)\b/i, 'crypto algorithm reference; verify design and key handling', 'INFO'],
-      ['KEY_CONFIGURATION_IDENTIFIER', /\b(?:publicKey|privateKey|keyId|key_id|clientSecret|encryptionKey|cryptoKey|initializationVector|\biv\b|\bsalt\b|\bnonce\b)\b/i, 'key or cryptographic-parameter identifier; inspect handling, not a secret by itself', 'REVIEW'],
-      ['ENCODING_OPERATION', /\b(?:atob|btoa|TextEncoder|TextDecoder|base64url|base64|encodeURIComponent|decodeURIComponent)\b/i, 'encoding or decoding operation', 'INFO'],
-      ['JWT_PROCESSING_REFERENCE', /\b(?:jwt|jsonwebtoken|jose|decodeJwt|signJwt|verifyJwt)\b/i, 'JWT processing reference; inspect token validation server-side', 'REVIEW'],
-      ['PUBLIC_RUNTIME_CONFIGURATION', /\b(?:VITE_[A-Z0-9_]+|NEXT_PUBLIC_[A-Z0-9_]+|window\.__ENV__|runtimeConfig)\b/i, 'public runtime configuration marker', 'REVIEW'],
-      ['SOURCE_MAP_REFERENCE', /sourceMappingURL\s*=/i, 'source-map reference', 'INFO'],
-      ['DEBUG_OR_BUILD_INFO', /(?:build-info|debug\s*[:=]\s*true|source map|stacktrace)/i, 'debug/build-info marker', 'REVIEW'],
+      ['PRIVATE_KEY_MATERIAL', /-----BEGIN (?:RSA |EC |OPENSSH |)?PRIVATE KEY-----/i, '개인키(PRIVATE KEY) 블록 마커 발견 -- 즉시 확인 필요', 'HIGH'],
+      ['PUBLIC_KEY_MATERIAL', /-----BEGIN (?:RSA |EC |OPENSSH )?PUBLIC KEY-----/i, '공개키(PUBLIC KEY) 블록 마커 -- 보통은 비밀 아님, 의도된 노출인지만 확인', 'INFO'],
+      ['AUTHORIZATION_LITERAL', /(?:authorization|bearer)\s*[:=]\s*['"`][^'"`\s]{12,}/i, 'authorization/bearer 형태의 하드코딩 값', 'HIGH'],
+      ['CLOUD_ACCESS_KEY_PATTERN', /(?:AKIA|ASIA)[A-Z0-9]{16}/, 'AWS 액세스 키 형태 패턴(AKIA/ASIA로 시작)', 'HIGH'],
+      ['PASSWORD_LITERAL', /(?:password|passwd|pwd)\s*[:=]\s*['"`][^'"`\s]{4,}/i, 'password/passwd/pwd 형태의 하드코딩 값', 'HIGH'],
+      ['API_KEY_LITERAL', /(?:api[_-]?key|client[_-]?secret|access[_-]?token|secret[_-]?key)\s*[:=]\s*['"`][^'"`\s]{8,}/i, 'api_key/client_secret/access_token/secret_key 형태의 자격증명성 설정값', 'HIGH'],
+      ['JWT_LITERAL', /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, 'JWT 형태의 문자열(eyJ...으로 시작하는 3-segment)', 'HIGH'],
+      ['CRYPTO_KEY_LITERAL', /(?:encryption|crypto|aes|rsa)[A-Za-z0-9_\-]*(?:key|iv)\s*[:=]\s*['"`][^'"`\s]{8,}/i, '암호화 키/IV로 보이는 하드코딩 값', 'HIGH'],
+      ['WEBCRYPTO_KEY_OPERATION', /\bcrypto\.subtle\.(?:importKey|exportKey|generateKey|deriveKey|deriveBits|wrapKey|unwrapKey)\b/i, 'WebCrypto 키 관리 작업 호출(importKey/exportKey/generateKey 등)', 'REVIEW'],
+      ['WEBCRYPTO_CRYPTO_OPERATION', /\bcrypto\.subtle\.(?:encrypt|decrypt|sign|verify|digest)\b/i, 'WebCrypto 암복호화/서명 작업 호출', 'INFO'],
+      ['CRYPTO_ALGORITHM_REFERENCE', /\b(?:AES-(?:GCM|CBC|CTR|KW)|RSA-OAEP|RSA-PSS|PBKDF2|HKDF|ECDH|ECDSA|SHA-(?:1|256|384|512)|MD5)\b/i, '암호 알고리즘 이름 언급 -- 설계/키 관리 방식 직접 확인 필요', 'INFO'],
+      ['KEY_CONFIGURATION_IDENTIFIER', /\b(?:publicKey|privateKey|keyId|key_id|clientSecret|encryptionKey|cryptoKey|initializationVector|\biv\b|\bsalt\b|\bnonce\b)\b/i, '키/암호 파라미터 관련 식별자 등장 -- 그 자체가 비밀은 아니고 처리 방식 점검용', 'REVIEW'],
+      ['ENCODING_OPERATION', /\b(?:atob|btoa|TextEncoder|TextDecoder|base64url|base64|encodeURIComponent|decodeURIComponent)\b/i, '인코딩/디코딩 함수 호출', 'INFO'],
+      ['JWT_PROCESSING_REFERENCE', /\b(?:jwt|jsonwebtoken|jose|decodeJwt|signJwt|verifyJwt)\b/i, 'JWT 처리 관련 코드 -- 서버측 토큰 검증 로직 점검 필요', 'REVIEW'],
+      ['PUBLIC_RUNTIME_CONFIGURATION', /\b(?:VITE_[A-Z0-9_]+|NEXT_PUBLIC_[A-Z0-9_]+|window\.__ENV__|runtimeConfig)\b/i, '클라이언트에 공개되는 런타임 설정 변수(원래 공개 목적인지 확인)', 'REVIEW'],
+      ['SOURCE_MAP_REFERENCE', /sourceMappingURL\s*=/i, '소스맵(sourceMappingURL) 참조 -- 운영 환경에 원본 소스가 노출될 수 있음', 'INFO'],
+      ['DEBUG_OR_BUILD_INFO', /(?:build-info|debug\s*[:=]\s*true|source map|stacktrace)/i, '디버그/빌드 정보 흔적(운영 환경에 남아있으면 정보 노출)', 'REVIEW'],
     ];
     for (const [type, pattern, detail, severity] of checks) {
       const match = body.match(pattern);
@@ -200,7 +200,7 @@
     }
   };
 
-  log('Collecting DOM, network, and loaded same-origin script evidence…');
+  log('DOM, 네트워크, 같은 오리진 스크립트에서 경로/노출후보 수집 중…');
   collectDom();
   collectPerformance();
   const metadataCopy = document.documentElement.cloneNode(true);
@@ -210,37 +210,54 @@
   await collectLoadedScripts();
 
   const routes = [...candidates.values()].map(row => ({
-    URL: row.URL, Path: row.Path, Parameters: row.Parameters,
-    Sources: [...row.Sources].join(', '), Evidence: [...row.Evidence].join(', '), StaticAsset: row.StaticAsset,
-  })).sort((a, b) => a.Path.localeCompare(b.Path));
+    경로: row.Path,
+    파라미터목록: row.Parameters,
+    발견출처: [...row.Sources].join(', '),
+    '근거(발췌)': [...row.Evidence].join(', '),
+    정적리소스여부: row.StaticAsset,
+    전체URL: row.URL,
+  })).sort((a, b) => a.경로.localeCompare(b.경로));
   const exposureRows = exposures.map(({ Key, ...row }) => row);
-  const apiCandidates = routes.filter(row => /\/(?:api|rest|graphql|auth|oauth|admin|internal|v\d+)\b/i.test(row.Path));
+  const apiCandidates = routes.filter(row => /\/(?:api|rest|graphql|auth|oauth|admin|internal|v\d+)\b/i.test(row.경로));
   const coverageReport = {
-    ...coverage,
-    skippedScripts: skipped.length,
-    routes: routes.length,
-    apiCandidates: apiCandidates.length,
-    exposureCandidates: exposureRows.length,
-    highExposureCandidates: exposureRows.filter(row => row.Severity === 'HIGH').length,
-    blindSpots: [
-      'Only loaded same-origin scripts up to the configured count/size are read.',
-      'Dynamically constructed, encrypted, or server-only routes may not be discoverable.',
-      'Candidate patterns are masked and require source-code or server-side verification.'
-    ]
+    'DOM내스크립트태그수': coverage.domScripts,
+    인라인스크립트수: coverage.inlineScripts,
+    '같은오리진외부스크립트수': coverage.sameOriginScripts,
+    '실제로읽어온스크립트수': coverage.fetchedScripts,
+    '건너뛴스크립트수(용량/오류)': skipped.length,
+    PerformanceAPI리소스수: coverage.resourceEntries,
+    '그중스크립트후보수': coverage.resourceScriptCandidates,
+    문서메타데이터스캔여부: coverage.documentMetadataScanned,
+    수집된전체경로수: routes.length,
+    'API로추정되는경로수': apiCandidates.length,
+    노출후보수: exposureRows.length,
+    '노출후보중HIGH위험도수': exposureRows.filter(row => row.위험도 === 'HIGH').length,
+    탐지범위밖사각지대: [
+      '설정된 개수/용량 상한 안에서 로드된 같은 오리진 스크립트만 읽음 -- 그 이상은 못 봄.',
+      '동적으로 조립되거나 암호화된 경로, 서버 내부에서만 쓰이는 경로는 발견 못 할 수 있음.',
+      '여기서 나온 노출 후보는 전부 마스킹된 패턴 매칭 결과 -- 실제 비밀 여부는 소스코드/서버에서 직접 확인 필요.',
+    ],
   };
 
   window.__CLIENT_ROUTE_SCOUT_V12__ = {
     version: '1.2', startedAt: new Date().toISOString(), config: CONFIG,
     routes, apiCandidates, exposureCandidates: exposureRows, skipped, errors, coverage: coverageReport,
-    note: 'Exposure candidates are masked indicators, not confirmed secrets. Verify server-side and rotate only confirmed credentials.',
+    note: '노출 후보는 마스킹된 지표일 뿐 확정된 비밀이 아님 -- 서버측에서 직접 확인하고, 실제 확인된 자격증명만 교체(rotate)할 것.',
   };
 
   console.log('');
-  console.log('================ CLIENT ROUTE SCOUT v1.2 ================');
-  console.table(apiCandidates);
-  console.log('================ EXPOSURE CANDIDATES (MASKED) ================');
-  console.table(exposureRows);
-  console.log('================ SUMMARY ================');
+  console.log('================ Client Route Scout v1.2 -- 탐지 범위 요약 (먼저 확인) ================');
   console.table([coverageReport]);
-  log('Done. Full routes:', 'window.__CLIENT_ROUTE_SCOUT_V12__.routes', 'Masked exposure candidates:', 'window.__CLIENT_ROUTE_SCOUT_V12__.exposureCandidates', 'Coverage:', 'window.__CLIENT_ROUTE_SCOUT_V12__.coverage');
+  console.log('================ 수집된 전체 경로 (API 여부 무관, 전체) ================');
+  console.table(routes);
+  console.log('================ 그중 API로 추정되는 경로만 ================');
+  console.table(apiCandidates);
+  console.log('================ 노출 후보 (마스킹됨) -- 종류/위험도/발견위치/근거 ================');
+  if (exposureRows.length) console.table(exposureRows);
+  else console.log('[Client Route Scout] 노출 후보 패턴 없음');
+  log(
+    '완료. 전체 경로:', 'window.__CLIENT_ROUTE_SCOUT_V12__.routes',
+    '/ 마스킹된 노출 후보:', 'window.__CLIENT_ROUTE_SCOUT_V12__.exposureCandidates',
+    '/ 탐지 범위:', 'window.__CLIENT_ROUTE_SCOUT_V12__.coverage',
+  );
 })();

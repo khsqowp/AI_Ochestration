@@ -108,6 +108,7 @@ export const SCANNER_TOOLS: ScannerTool[] = [
       '1) 본 스크립트 붙여넣기 → 몇 초 대기(같은 오리진 GET 파라미터 mutation 진행) → 2) 결과 확인 스크립트로 시그니처 회귀 체크.',
       'innerHTML/document.write 등 HTML sink만 훅 -- payload 주입·네비게이션·요청 헤더 변조 없음, 관찰만 함.',
       'Active mutation은 기본적으로 같은 오리진 GET만 나감(CONFIG.TEST_CROSS_ORIGIN=false) -- 허가된 진단 범위에서만 사용.',
+      '콘솔 표에 경로·파라미터·실제 주입한 페이로드·응답에서 발견된 조각(실제 반사 내용)까지 전부 한글로 표시됨 -- "위험해요"류 라벨만 보고 끝나지 않고 어디서 어떻게 반사됐는지 바로 확인 가능.',
     ],
     files: [],
     scripts: [
@@ -124,6 +125,7 @@ export const SCANNER_TOOLS: ScannerTool[] = [
       '같은 오리진 GET만 사용 -- 경로 추측·폼 제출·세션 값 변경 없음, 순수 관찰.',
       '노출 후보(API 키/JWT/자격증명 패턴)는 값 자체를 절대 안 담고 마스킹된 위치·근거만 기록 -- 실제 비밀 여부는 서버 코드에서 직접 확인 필요.',
       '결과는 window.__CLIENT_ROUTE_SCOUT_V12__에 저장됨.',
+      '콘솔에 탐지 범위(스캔한 스크립트 수·경로 수 등) 요약이 먼저 뜨고, 이어서 수집된 전체 경로 표 + 노출 후보(종류/위험도/발견위치/근거)가 전부 한글로 표시됨.',
     ],
     files: [],
     scripts: [
