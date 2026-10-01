@@ -138,11 +138,13 @@ export const SCANNER_TOOLS: ScannerTool[] = [
   {
     id: 'jwt-analyzer',
     name: 'JWT 구조 분석기',
-    tagline: 'alg=none / kid·jku·x5u 인젝션 가능성 / 알고리즘 컨퓨전 PoC 토큰 생성',
+    tagline: 'JWS/JWE 자동 판별 -- alg=none·RSA1_5·CBC 패딩오라클 등 구조 분석 + 변조 PoC 토큰 생성',
     standalone: true,
     notes: [
       '분석/PoC 토큰 생성만 함 -- 실제 서버에 테스트하는 건 별도 행위, 권한 있는 대상에만.',
       '--crack-secret은 로컬 HMAC 재계산이라 네트워크 요청 없음 -- 워드리스트는 직접 지정 필요(기본 경로는 SecLists 전제라 없으면 --wordlist로 지정).',
+      'JWS(3파트, 서명)뿐 아니라 JWE(5파트, 암호화)도 점(.) 개수로 자동 판별해 분석 -- JWE는 payload(ciphertext)가 암호화돼 있어 복호화는 안 하지만, protected header는 평문이라 alg(RSA1_5 패딩오라클/ECDH-ES invalid curve/PBES2 약한 반복횟수 등)·enc(CBC-HS 패딩오라클 표면/GCM)·zip(압축 오라클)·kid/jku/x5u 필드만으로 알려진 공격 표면을 구조적으로 짚어줌.',
+      'JWE 전용 --gen-jwe-ivflip: IV 한 바이트를 비트플립한 변조 토큰 생성(CBC-HS 계열 padding-oracle 탐지용 1차 프로브) -- JWS 전용 --gen-none/--confusion-pubkey/--crack-secret과 서로 다른 토큰 타입에 쓰면 명확한 오류로 막힘.',
     ],
     files: [
       { filename: 'jwt_analyzer.py' },

@@ -3,18 +3,32 @@ jwt_analyzer / jwt_analyzer.py 사용 설명서
 
 역할
 ----
-JWT(header.payload.signature)를 디코딩해서 구조/보안 문제를 자동 분석.
+"JWT"는 포맷 이름일 뿐, 실제 내용은 JWS(서명, 3파트: header.payload.signature)
+아니면 JWE(암호화, 5파트: header.encryptedKey.iv.ciphertext.tag) 둘 중 하나임.
+이 도구는 점(.) 개수로 어느 쪽인지 자동 판별해서 맞는 방식으로 분석함.
+
+[JWS일 때]
++ 구조/보안 문제 자동 분석 (alg=none, exp 없음, kid/jku/x5u 인젝션 표면 등)
 + 약한 HMAC 시크릿 무차별 대입(로컬 연산, 네트워크 전송 없음)
 + alg=none PoC 토큰 생성
 + RS/ES/PS -> HS 알고리즘 컨퓨전 PoC 토큰 생성 (서버 공개키 필요)
+
+[JWE일 때]
++ protected header는 평문이라(ciphertext만 암호화됨) 키 없이도 분석 가능 —
+  alg(RSA1_5/dir/ECDH-ES/PBES2 등)/enc(CBC-HS/GCM)/zip/kid/jku/x5u/epk/p2c
+  필드를 보고 Bleichenbacher 패딩 오라클, CBC bit-flipping, CRIME류 압축
+  오라클, Invalid Curve Attack, PBES2 약한 반복횟수 등 알려진 공격 표면을
+  구조적으로 짚어줌 (복호화는 키가 없으니 시도하지 않음 — 분석만 함).
++ IV bit-flip PoC 토큰 생성 (CBC-HS 계열에서 padding-oracle 탐지용 1차 변조본)
 
 이 도구는 분석/생성만 함. 생성된 변조 토큰을 실제 서버에 테스트하는 것은
 사용자 본인의 행위이며, 권한 있는 대상에게만 사용할 것.
 
 기본 사용법
 ----------
-python jwt_analyzer.py <토큰>
-python jwt_analyzer.py <토큰> --crack-secret
+python jwt_analyzer.py <토큰>                       (JWS/JWE 자동 판별)
+python jwt_analyzer.py <JWS토큰> --crack-secret
+python jwt_analyzer.py <JWE토큰> --gen-jwe-ivflip
 python jwt_analyzer.py --file token.txt
 
 대화형 모드
@@ -58,11 +72,22 @@ token (위치인자, --file과 택1)
 --confusion-alg HS256|HS384|HS512 (기본 HS256)
     --confusion-pubkey로 생성할 때 사용할 HMAC 알고리즘.
 
+--gen-jwe-ivflip  (JWE 토큰 전용 -- JWS에 쓰면 오류)
+    IV의 한 바이트를 1비트 뒤집어(XOR 0x01) 재인코딩한 변조 토큰 출력.
+    ciphertext/tag는 원본 그대로라 복호화는 당연히 실패하지만, "어떻게
+    실패하는지"(패딩 오류/MAC 오류/일반 오류, 응답 시간차 등)가 CBC 계열
+    (enc=A*CBC-HS*)에서 padding-oracle/bit-flipping 공격의 1차 탐지 신호가
+    됨. 이 변조 토큰을 허가된 대상에 직접 보내 응답 차이를 관찰할 것.
+
+--ivflip-byte N (기본 -1 = 마지막 바이트, 음수=끝에서부터)
+    --gen-jwe-ivflip이 뒤집을 IV 바이트 인덱스.
+
 -v, --verbose
     상세 로그.
 
 출력 항목
 --------
+[JWS 토큰]
 - [Header] / [Payload]: 디코딩된 JSON
 - [Findings]: 구조적 문제 목록
   - VULNERABLE: alg=none
@@ -70,7 +95,21 @@ token (위치인자, --file과 택1)
   - INFO: 참고 정보 (알고리즘 종류, iat 없음 등)
 - [Secret brute force] / [PoC variant]: 옵션 사용 시에만 출력
 
+[JWE 토큰]
+- [Protected Header]: 디코딩된 JSON (ciphertext는 암호화돼 있어 표시 안 됨 —
+  이 도구는 복호화를 시도하지 않음)
+- [Segments]: encrypted_key/iv/tag 바이트 길이 (enc 값 기준 예상 길이와
+  다르면 Findings에 경고로 뜸)
+- [Findings]: 구조적 문제 목록
+  - VULNERABLE: alg=RSA1_5(Bleichenbacher), alg=none(JWE엔 정의 안 된 값)
+  - WARNING: enc=CBC-HS(padding-oracle 표면), zip=DEF(압축 오라클),
+    ECDH-ES(invalid curve 가능성), PBES2 약한 반복횟수, kid/jku/x5u
+  - INFO: alg=dir, enc=GCM, epk 노출 등 참고 정보
+- [IV bit-flip PoC variant]: --gen-jwe-ivflip 사용 시에만 출력
+
 주의
 ----
 kid/jku/x5u 경고는 "가능성"을 알리는 것이지 확정 취약점이 아님 —
-실제 서버 구현을 확인해야 함.
+실제 서버 구현을 확인해야 함. JWE 쪽 findings도 전부 마찬가지로 "이 구성은
+알려진 공격 기법의 전제조건을 만족한다"는 뜻이지, 그 서버가 실제로
+취약하다고 확정하는 게 아님 — 직접 변조 토큰을 보내 반응을 봐야 확정됨.
