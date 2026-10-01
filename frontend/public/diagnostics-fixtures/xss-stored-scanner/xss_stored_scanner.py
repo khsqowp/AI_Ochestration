@@ -644,7 +644,11 @@ if __name__ == "__main__":
         except (AttributeError, ValueError):
             pass
     if len(sys.argv) == 1:
-        _argv = _interactive_argv(build_arg_parser())
+        try:
+            _argv = _interactive_argv(build_arg_parser())
+        except (EOFError, KeyboardInterrupt):
+            print("\n입력이 중단됨 -- 취소됨.")
+            raise SystemExit(130)
         if _argv is None:
             print("취소됨.")
             raise SystemExit(0)

@@ -71,12 +71,12 @@ function numericPins(maxDigits: 4 | 5 | 6): string[] {
 /* ── UI 공용 ── */
 
 function HashRow({ label, value, matched, pending }: { label: string; value: string; matched?: boolean; pending?: boolean }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<boolean | 'error'>(false)
   return <div className={`dec-row ${matched ? 'matched' : ''}`}>
     <span className="dec-row-name">{label}{matched && <CheckCircle2 size={12} className="dec-row-match-icon"/>}</span>
     <input className="dec-row-val" readOnly value={pending ? '계산 중…' : value} onFocus={e => e.currentTarget.select()}/>
-    <button className="dec-row-copy" onClick={async () => { if (!value) return; await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1200) }}>
-      <Clipboard size={12}/>{copied ? '됨' : ''}
+    <button className="dec-row-copy" onClick={async () => { if (!value) return; try { await navigator.clipboard.writeText(value); setCopied(true) } catch { setCopied('error') } setTimeout(() => setCopied(false), 1200) }}>
+      <Clipboard size={12}/>{copied === 'error' ? '실패' : copied ? '됨' : ''}
     </button>
   </div>
 }

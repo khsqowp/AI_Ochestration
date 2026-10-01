@@ -189,9 +189,12 @@ export function PanelFrame({ embedded, onClose, eyebrow, title, className, child
 
 export function NotePromptBuilder() {
   const [topic, setTopic] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<boolean | 'error'>(false)
   const prompt = NOTE_PROMPT_TEMPLATE(topic.trim())
-  const copy = async () => { await navigator.clipboard.writeText(prompt); setCopied(true); window.setTimeout(() => setCopied(false), 1500) }
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(prompt); setCopied(true) } catch { setCopied('error') }
+    window.setTimeout(() => setCopied(false), 1500)
+  }
   return <div>
     <label className="cheatsheet-option">
       <span className="cheatsheet-option-body">
@@ -201,7 +204,7 @@ export function NotePromptBuilder() {
     </label>
     <div className="cheatsheet-command-bar">
       <pre className="cheatsheet-command">{prompt}</pre>
-      <button className="cheatsheet-copy" onClick={copy}><Clipboard size={14}/>{copied ? '복사됨' : '복사'}</button>
+      <button className="cheatsheet-copy" onClick={copy}><Clipboard size={14}/>{copied === 'error' ? '복사 실패' : copied ? '복사됨' : '복사'}</button>
     </div>
   </div>
 }

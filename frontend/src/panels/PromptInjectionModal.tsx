@@ -19,7 +19,10 @@ export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
   const modalRef = useModalA11y(true, onClose)
   const [tab, setTab] = useState<Tab>('start')
   const [copied, setCopied] = useState<string | null>(null)
-  const copy = async (id: string, text: string) => { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(null), 1500) }
+  const copy = async (id: string, text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(id) } catch { setCopied(`${id}:error`) }
+    window.setTimeout(() => setCopied(c => (c === id || c === `${id}:error` ? null : c)), 1500)
+  }
 
   return <PanelShell className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">진단 · AI 안전</p><h2><ShieldAlert size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>프롬프트 인젝션</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
@@ -72,7 +75,7 @@ export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
                 </div>}
                 <div className="diag-step-question">
                   <pre>{v.chatPrompt}</pre>
-                  <button onClick={() => void copy(`v-${test.order}-${vi}`, v.chatPrompt)}><Clipboard size={13}/>{copied === `v-${test.order}-${vi}` ? '복사됨' : '복사'}</button>
+                  <button onClick={() => void copy(`v-${test.order}-${vi}`, v.chatPrompt)}><Clipboard size={13}/>{copied === `v-${test.order}-${vi}` ? '복사됨' : copied === `v-${test.order}-${vi}:error` ? '복사 실패' : '복사'}</button>
                 </div>
                 {v.canaries.length > 0 && <p className="diag-canary-line"><b>카나리:</b> {v.canaries.map(c => <code className="diag-chip diag-chip-code" key={c}>{c}</code>)}</p>}
               </div>)}

@@ -2007,10 +2007,36 @@
   // URLs already present in same-page link/form markup are safe discovery
   // candidates: this step observes them only; GET replay remains gated by the
   // existing same-origin policy below.
+  //
+  // GET <form> fields are a common reflected-XSS vector (search boxes, filter
+  // forms) but a form's own `.action` property NEVER includes its input
+  // values -- those only become a query string once the browser actually
+  // submits the form. Without synthesizing that query string here, every GET
+  // form's parameters were silently invisible to discovery (url.search was
+  // always empty, so the whole form got dropped by the `!url.search` filter
+  // in the DISCOVERY step below). Also switched the selector from
+  // `form[action]` to plain `form`, since a form with no `action` attribute
+  // at all (submits to the current page, a very common pattern) has no
+  // `action` attribute to match on but is still a perfectly valid GET form.
+  const buildFormGetURL = form => {
+    const actionAttr = form.getAttribute('action');
+    const url = new URL(actionAttr || location.href, location.href);
+    const params = new URLSearchParams(url.search);
+    form.querySelectorAll('input[name], select[name], textarea[name]').forEach(field => {
+      if (field.disabled) return;
+      const type = (field.type || '').toLowerCase();
+      if (type === 'submit' || type === 'button' || type === 'reset' || type === 'file' || type === 'image') return;
+      if ((type === 'checkbox' || type === 'radio') && !field.checked) return;
+      params.set(field.name, field.value ?? '');
+    });
+    url.search = params.toString();
+    return url.href;
+  };
+
   for (
     const element
     of document.querySelectorAll(
-      'a[href], area[href], form[action]'
+      'a[href], area[href], form'
     )
   ) {
 
@@ -2023,7 +2049,7 @@
 
     const value =
       element instanceof HTMLFormElement
-        ? element.action
+        ? buildFormGetURL(element)
         : element.href;
 
 

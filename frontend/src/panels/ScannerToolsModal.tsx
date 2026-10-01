@@ -10,9 +10,13 @@ export function ScannerToolsModal({ onClose }: { onClose: () => void }) {
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null)
 
   const copyScript = async (label: string, content: string) => {
-    await navigator.clipboard.writeText(content)
-    setCopiedLabel(label)
-    window.setTimeout(() => setCopiedLabel(l => (l === label ? null : l)), 1500)
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedLabel(label)
+    } catch {
+      setCopiedLabel(`${label}__failed`)
+    }
+    window.setTimeout(() => setCopiedLabel(l => (l === label || l === `${label}__failed` ? null : l)), 1500)
   }
 
   return <PanelShell className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
@@ -34,7 +38,7 @@ export function ScannerToolsModal({ onClose }: { onClose: () => void }) {
               <ul className="diag-bullet-list">{tool.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
               {tool.scripts && <div className="diag-file-list">
                 {tool.scripts.map(s => <button className="diag-file-download" key={s.label} onClick={() => void copyScript(s.label, s.content)}>
-                  <Clipboard size={14}/><span><b>{copiedLabel === s.label ? '복사됨' : s.label}</b>{s.note && <small>{s.note}</small>}</span>
+                  <Clipboard size={14}/><span><b>{copiedLabel === s.label ? '복사됨' : copiedLabel === `${s.label}__failed` ? '복사 실패 -- 직접 선택해 복사해주세요' : s.label}</b>{s.note && <small>{s.note}</small>}</span>
                 </button>)}
               </div>}
               {tool.files.length > 0 && <div className="diag-file-list">

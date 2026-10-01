@@ -96,7 +96,10 @@ export function PromptInjectionGuided() {
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch { /* 저장 실패는 무시 -- 세션 내 진행에는 지장 없음 */ } }, [state])
 
-  const copy = async (id: string, text: string) => { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(null), 1500) }
+  const copy = async (id: string, text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(id) } catch { setCopied(`${id}:error`) }
+    window.setTimeout(() => setCopied(c => (c === id || c === `${id}:error` ? null : c)), 1500)
+  }
 
   const tests = DIAG_TESTS
   const doneCount = tests.filter(t => state.results[t.order].status !== 'pending').length
@@ -197,7 +200,7 @@ export function PromptInjectionGuided() {
         })}
       </div>
       <div className="diag-step-question" style={{ marginTop: 14 }}>
-        <button onClick={() => void copy('report', buildReport())}><Clipboard size={13}/>{copied === 'report' ? '복사됨' : '리포트 복사'}</button>
+        <button onClick={() => void copy('report', buildReport())}><Clipboard size={13}/>{copied === 'report' ? '복사됨' : copied === 'report:error' ? '복사 실패' : '리포트 복사'}</button>
       </div>
       <button className="diag-guided-reset" style={{ marginTop: 10 }} onClick={() => setState(s => ({ ...s, view: 'run' }))}>← 진단으로 돌아가기</button>
     </div>
@@ -244,7 +247,7 @@ export function PromptInjectionGuided() {
                 </div>}
                 <div className="diag-step-question">
                   <pre>{v.chatPrompt}</pre>
-                  <button onClick={() => void copy(`v-${test.order}-${vi}`, v.chatPrompt)}><Clipboard size={13}/>{copied === `v-${test.order}-${vi}` ? '복사됨' : '복사'}</button>
+                  <button onClick={() => void copy(`v-${test.order}-${vi}`, v.chatPrompt)}><Clipboard size={13}/>{copied === `v-${test.order}-${vi}` ? '복사됨' : copied === `v-${test.order}-${vi}:error` ? '복사 실패' : '복사'}</button>
                 </div>
                 {v.canaries.length > 0 && <p className="diag-canary-line"><b>카나리:</b> {v.canaries.map(c => <code className="diag-chip diag-chip-code" key={c}>{c}</code>)}</p>}
               </div>)}
@@ -267,7 +270,7 @@ export function PromptInjectionGuided() {
             <div className="diag-variant-list">
               {test.escalation.probes.map((p, i) => <div className="diag-step-question" key={i}>
                 <pre>{p}</pre>
-                <button onClick={() => void copy(`e-${test.order}-${i}`, p)}><Clipboard size={13}/>{copied === `e-${test.order}-${i}` ? '복사됨' : '복사'}</button>
+                <button onClick={() => void copy(`e-${test.order}-${i}`, p)}><Clipboard size={13}/>{copied === `e-${test.order}-${i}` ? '복사됨' : copied === `e-${test.order}-${i}:error` ? '복사 실패' : '복사'}</button>
               </div>)}
             </div>
             <p className="diag-step-next" style={{ marginTop: 10, fontWeight: 700 }}>관찰된 반응을 선택하세요</p>

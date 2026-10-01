@@ -30,11 +30,15 @@ export function ToolModal({ tool, onClose }: { tool: CheatSheetTool; onClose: ()
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set())
   const [values, setValues] = useState<Record<string, string>>({})
   const [target, setTarget] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<boolean | 'error'>(false)
 
   const toggleOption = (id: string) => { setSelectedOptions(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }); setCopied(false) }
   const command = cheatSheetCommand(tool, selectedOptions, values, target)
-  const copy = async (text = command) => { if (!text) return; await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1500) }
+  const copy = async (text = command) => {
+    if (!text) return
+    try { await navigator.clipboard.writeText(text); setCopied(true) } catch { setCopied('error') }
+    window.setTimeout(() => setCopied(false), 1500)
+  }
 
   const Builder = PAYLOAD_BUILDERS[tool.id]
 
@@ -72,7 +76,7 @@ export function ToolModal({ tool, onClose }: { tool: CheatSheetTool; onClose: ()
         </div>
         <div className="cheatsheet-command-bar">
           <pre className="cheatsheet-command">{command || tool.base || '(옵션을 선택하세요)'}</pre>
-          <button className="cheatsheet-copy" onClick={() => void copy()} disabled={!command}><Clipboard size={14}/>{copied ? '복사됨' : '복사'}</button>
+          <button className="cheatsheet-copy" onClick={() => void copy()} disabled={!command}><Clipboard size={14}/>{copied === 'error' ? '복사 실패' : copied ? '복사됨' : '복사'}</button>
         </div>
       </>}
     </div>

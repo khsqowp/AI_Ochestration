@@ -254,12 +254,12 @@ const ALL_ENCODERS: [string, (s: string) => string][] = [
 ]
 
 function Row({ name, value }: { name: string; value: string }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<boolean | 'error'>(false)
   return <div className="dec-row">
     <span className="dec-row-name">{name}</span>
     <input className="dec-row-val" readOnly value={value} onFocus={e => e.currentTarget.select()}/>
-    <button className="dec-row-copy" onClick={async () => { if (!value) return; await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1200) }}>
-      <Clipboard size={12}/>{copied ? '됨' : ''}
+    <button className="dec-row-copy" onClick={async () => { if (!value) return; try { await navigator.clipboard.writeText(value); setCopied(true) } catch { setCopied('error') } setTimeout(() => setCopied(false), 1200) }}>
+      <Clipboard size={12}/>{copied === 'error' ? '실패' : copied ? '됨' : ''}
     </button>
   </div>
 }
@@ -268,6 +268,7 @@ export function SmartDecoderBuilder() {
   const [raw, setRaw] = useState('')
   const [edited, setEdited] = useState<string | null>(null)
   const [gridInput, setGridInput] = useState('')
+  const [copyFailed, setCopyFailed] = useState(false)
 
   const result = useMemo(() => analyze(raw.trim()), [raw])
   // 입력이 바뀌면 편집 상태 초기화
@@ -281,7 +282,10 @@ export function SmartDecoderBuilder() {
     }
   }, [result.steps, finalText])
 
-  const copy = async (v: string) => { if (v) await navigator.clipboard.writeText(v) }
+  const copy = async (v: string) => {
+    if (!v) return
+    try { await navigator.clipboard.writeText(v); setCopyFailed(false) } catch { setCopyFailed(true); window.setTimeout(() => setCopyFailed(false), 1500) }
+  }
 
   return <div className="payload-builder smart-decoder">
     <Note>값을 붙여넣으면 인코딩/해시 포맷을 자동 판별합니다. 인코딩된 값은 연쇄로 디코딩하고, 디코딩 결과를 수정하면 같은 포맷으로 즉시 재인코딩됩니다. 모든 처리는 이 브라우저 안에서만 일어납니다.</Note>
@@ -313,7 +317,7 @@ export function SmartDecoderBuilder() {
       <div className="payload-readout-title">원래 포맷으로 재인코딩 ({result.steps.map(s => s.label).reverse().join(' → ')})</div>
       <div className="cheatsheet-command-bar">
         <pre className="cheatsheet-command wrap-anywhere">{reencoded}</pre>
-        <button className="cheatsheet-copy" onClick={() => copy(reencoded)}><Clipboard size={14}/>복사</button>
+        <button className="cheatsheet-copy" onClick={() => void copy(reencoded)}><Clipboard size={14}/>{copyFailed ? '복사 실패' : '복사'}</button>
       </div>
     </>}
 
