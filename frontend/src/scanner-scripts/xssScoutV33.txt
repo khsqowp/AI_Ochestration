@@ -2025,6 +2025,14 @@
     const exact = tested.body.includes(payload);
     const resultType = classifyResult({ baseline, tested, reflected: true, exact, lengthAnalysis });
 
+    // testURL은 이 묶음의 다른 후보 이름들까지 전부 같이 실려 나간 실제 요청이라
+    // URL 필드에 그대로 쓰면 "파라미터 하나 확인했는데 20개가 전부 xsstest로
+    // 찍힌 URL"처럼 보여 오해를 산다. 사람이 수동으로 재현/보고할 때 쓸 URL은
+    // 이 파라미터 하나만 건드린 깨끗한 버전으로 따로 만든다 -- 실제 탐지에 쓰인
+    // 원요청은 MiningBatchURL로 남겨 필요하면 참고할 수 있게 한다.
+    const reproURL = new URL(target.originalURL);
+    reproURL.searchParams.set(parameter, payload);
+
     return {
       Source: target.source,
       Origin: target.sameOrigin ? 'SAME' : 'CROSS',
@@ -2062,7 +2070,8 @@
       SignificantLengthChange: lengthAnalysis.significant,
       Result: resultType,
       Context: getContext(tested.body, marker),
-      URL: testURL.href,
+      URL: reproURL.href,
+      MiningBatchURL: testURL.href,
     };
   }
 
@@ -2567,39 +2576,11 @@
   );
 
 
-  console.table(
-
-    targets.map(
-      (target, index) => ({
-
-        번호:
-          index + 1,
-
-        수집출처:
-          target.source,
-
-        관측된메서드:
-          target.observedMethod,
-
-        '출처(동일/교차)':
-          target.sameOrigin
-            ? 'SAME'
-            : 'CROSS',
-
-        호스트:
-          target.url.hostname,
-
-        경로:
-          target.url.pathname,
-
-        파라미터목록:
-          target.params.join(', '),
-
-        발견경로:
-          target.initiatorType
-      })
-    )
-  );
+  targets.forEach((target, index) => {
+    console.log(
+      `#${index + 1} [${target.source}/${target.observedMethod}/${target.sameOrigin ? 'SAME' : 'CROSS'}] ${target.url.hostname}${target.url.pathname}  파라미터=${target.params.join(', ') || '-'}  발견경로=${target.initiatorType}`
+    );
+  });
 
 
   // ============================================================
@@ -3599,61 +3580,14 @@
     results.length
   ) {
 
-    console.table(
-
-      results.map(
-        result => ({
-
-          출처:
-            result.Origin,
-
-          경로:
-            result.Path,
-
-          파라미터:
-            result.Parameter,
-
-          파라미터출처:
-            result.ParamSource,
-
-          주입한페이로드:
-            result.Payload,
-
-          '발견된조각(응답내용)':
-            result.Context,
-
-          'HTTP(기준→테스트)':
-            result.HTTP,
-
-          상태클래스변화:
-            `${result.BaselineClass}→${result.ResponseClass}`,
-
-          반사여부:
-            result.Reflected,
-
-          반사횟수:
-            result.Occurrences,
-
-          인코딩변환:
-            result.Transformation,
-
-          반사위치유형:
-            result.ContextType,
-
-          리싱크횟수:
-            result.ResyncCount,
-
-          'Content-Type변화':
-            result.ContentTypeTransition,
-
-          판정:
-            result.Result,
-
-          전체요청URL:
-            result.URL
-        })
-      )
-    );
+    // 결과 전체(수백 건 가능)라 테이블 대신 한 줄 텍스트로 찍는다 --
+    // console.table은 환경에 따라 접힌 객체/배열 미리보기로만 보일 수 있음.
+    for (const result of results) {
+      console.log(
+        `[${result.Origin}] ${result.Path}  파라미터=${result.Parameter}(${result.ParamSource})  반사=${result.Reflected}(${result.Occurrences}회, ${result.Transformation}, ${result.ContextType})  HTTP=${result.HTTP}(${result.BaselineClass}→${result.ResponseClass})  ContentType변화=${result.ContentTypeTransition}  판정=${result.Result}  페이로드=${result.Payload}  조각="${result.Context}"  URL=${result.URL}` +
+        (result.ParamSource === 'PARAM_MINED' ? `  [이 파라미터만 재현용 URL임, 실제 탐지는 여러 후보 동시전송 요청에서 나옴 -- 원요청: ${result.MiningBatchURL}]` : '')
+      );
+    }
 
   } else {
 
@@ -3678,61 +3612,11 @@
     reflectionCandidates.length
   ) {
 
-    console.table(
-
-      reflectionCandidates.map(
-        result => ({
-
-          출처:
-            result.Origin,
-
-          경로:
-            result.Path,
-
-          파라미터:
-            result.Parameter,
-
-          주입한페이로드:
-            result.Payload,
-
-          '발견된조각(응답내용)':
-            result.Context,
-
-          'HTTP(기준→테스트)':
-            result.HTTP,
-
-          상태클래스변화:
-            `${result.BaselineClass}→${result.ResponseClass}`,
-
-          'Content-Type변화':
-            result.ContentTypeTransition,
-
-          반사횟수:
-            result.Occurrences,
-
-          원본그대로반사:
-            result.Exact,
-
-          인코딩변환:
-            result.Transformation,
-
-          반사위치유형:
-            result.ContextType,
-
-          리싱크횟수:
-            result.ResyncCount,
-
-          문자별변환요약:
-            result.CharacterSummary,
-
-          판정:
-            result.Result,
-
-          전체요청URL:
-            result.URL
-        })
-      )
-    );
+    for (const result of reflectionCandidates) {
+      console.log(
+        `[${result.Origin}] ${result.Path}  파라미터=${result.Parameter}  반사=${result.Occurrences}회(원본그대로=${result.Exact}, ${result.Transformation}, ${result.ContextType})  문자별반응: ${result.CharacterSummary}  판정=${result.Result}  페이로드=${result.Payload}  조각="${result.Context}"  URL=${result.URL}`
+      );
+    }
 
   } else {
 
@@ -3757,40 +3641,11 @@
     );
 
 
-    console.table(
-
-      rawReflections.map(
-        result => ({
-
-          경로:
-            result.Path,
-
-          파라미터:
-            result.Parameter,
-
-          주입한페이로드:
-            result.Payload,
-
-          '발견된조각(응답내용)':
-            result.Context,
-
-          'HTTP(기준→테스트)':
-            result.HTTP,
-
-          반사위치유형:
-            result.ContextType,
-
-          문자별변환요약:
-            result.CharacterSummary,
-
-          판정:
-            result.Result,
-
-          전체요청URL:
-            result.URL
-        })
-      )
-    );
+    for (const result of rawReflections) {
+      console.log(
+        `${result.Path}  파라미터=${result.Parameter}(${result.ContextType})  문자별반응: ${result.CharacterSummary}  판정=${result.Result}  페이로드=${result.Payload}  조각="${result.Context}"  URL=${result.URL}`
+      );
+    }
   }
 
 
@@ -3809,46 +3664,11 @@
     );
 
 
-    console.table(
-
-      transformedReflections.map(
-        result => ({
-
-          경로:
-            result.Path,
-
-          파라미터:
-            result.Parameter,
-
-          주입한페이로드:
-            result.Payload,
-
-          '발견된조각(응답내용)':
-            result.Context,
-
-          'HTTP(기준→테스트)':
-            result.HTTP,
-
-          인코딩변환:
-            result.Transformation,
-
-          반사위치유형:
-            result.ContextType,
-
-          리싱크횟수:
-            result.ResyncCount,
-
-          문자별변환요약:
-            result.CharacterSummary,
-
-          판정:
-            result.Result,
-
-          전체요청URL:
-            result.URL
-        })
-      )
-    );
+    for (const result of transformedReflections) {
+      console.log(
+        `${result.Path}  파라미터=${result.Parameter}(${result.ContextType}, 리싱크${result.ResyncCount}회)  인코딩변환=${result.Transformation}  문자별반응: ${result.CharacterSummary}  판정=${result.Result}  페이로드=${result.Payload}  조각="${result.Context}"  URL=${result.URL}`
+      );
+    }
   }
 
 
@@ -3867,46 +3687,11 @@
     );
 
 
-    console.table(
-
-      filteredReflections.map(
-        result => ({
-
-          경로:
-            result.Path,
-
-          파라미터:
-            result.Parameter,
-
-          주입한페이로드:
-            result.Payload,
-
-          '발견된조각(응답내용)':
-            result.Context,
-
-          'HTTP(기준→테스트)':
-            result.HTTP,
-
-          인코딩변환:
-            result.Transformation,
-
-          반사위치유형:
-            result.ContextType,
-
-          리싱크횟수:
-            result.ResyncCount,
-
-          문자별변환요약:
-            result.CharacterSummary,
-
-          판정:
-            result.Result,
-
-          전체요청URL:
-            result.URL
-        })
-      )
-    );
+    for (const result of filteredReflections) {
+      console.log(
+        `${result.Path}  파라미터=${result.Parameter}(${result.ContextType}, 리싱크${result.ResyncCount}회)  인코딩변환=${result.Transformation}  문자별반응: ${result.CharacterSummary}  판정=${result.Result}  페이로드=${result.Payload}  조각="${result.Context}"  URL=${result.URL}`
+      );
+    }
   }
 
 
@@ -3925,49 +3710,11 @@
     );
 
 
-    console.table(
-
-      errorReflections.map(
-        result => ({
-
-          경로:
-            result.Path,
-
-          파라미터:
-            result.Parameter,
-
-          주입한페이로드:
-            result.Payload,
-
-          '발견된조각(응답내용)':
-            result.Context,
-
-          'HTTP(기준→테스트)':
-            result.HTTP,
-
-          상태클래스변화:
-            `${result.BaselineClass}→${result.ResponseClass}`,
-
-          'Content-Type변화':
-            result.ContentTypeTransition,
-
-          인코딩변환:
-            result.Transformation,
-
-          문자별변환요약:
-            result.CharacterSummary,
-
-          반사위치유형:
-            result.ContextType,
-
-          판정:
-            result.Result,
-
-          전체요청URL:
-            result.URL
-        })
-      )
-    );
+    for (const result of errorReflections) {
+      console.log(
+        `${result.Path}  파라미터=${result.Parameter}(${result.ContextType})  HTTP=${result.HTTP}(${result.BaselineClass}→${result.ResponseClass})  ContentType변화=${result.ContentTypeTransition}  인코딩변환=${result.Transformation}  문자별반응: ${result.CharacterSummary}  판정=${result.Result}  페이로드=${result.Payload}  조각="${result.Context}"  URL=${result.URL}`
+      );
+    }
   }
 
 
@@ -3986,31 +3733,11 @@
     );
 
 
-    console.table(
-
-      contentTypeChanges.map(
-        result => ({
-
-          경로:
-            result.Path,
-
-          파라미터:
-            result.Parameter,
-
-          'HTTP(기준→테스트)':
-            result.HTTP,
-
-          'Content-Type전환':
-            result.ContentTypeTransition,
-
-          반사여부:
-            result.Reflected,
-
-          판정:
-            result.Result
-        })
-      )
-    );
+    for (const result of contentTypeChanges) {
+      console.log(
+        `${result.Path}  파라미터=${result.Parameter}  HTTP=${result.HTTP}  Content-Type전환=${result.ContentTypeTransition}  반사여부=${result.Reflected}  판정=${result.Result}`
+      );
+    }
   }
 
 
@@ -4029,9 +3756,11 @@
     );
 
 
-    console.table(
-      minedParameterFindings
-    );
+    for (const row of minedParameterFindings) {
+      console.log(
+        `${row.경로}  숨은파라미터후보=${row.숨은파라미터후보}  사유=${row.사유}  기준URL=${row.기준URL}`
+      );
+    }
 
 
     console.log(
@@ -4055,9 +3784,9 @@
     );
 
 
-    console.table(
-      replayableTargets
-    );
+    for (const row of replayableTargets) {
+      console.log(Object.entries(row).map(([key, value]) => `${key}=${value}`).join('  '));
+    }
   }
 
 
@@ -4076,9 +3805,9 @@
     );
 
 
-    console.table(
-      unreplayableTargets
-    );
+    for (const row of unreplayableTargets) {
+      console.log(Object.entries(row).map(([key, value]) => `${key}=${value}`).join('  '));
+    }
   }
 
 
@@ -4097,9 +3826,9 @@
     );
 
 
-    console.table(
-      staticTargets
-    );
+    for (const row of staticTargets) {
+      console.log(Object.entries(row).map(([key, value]) => `${key}=${value}`).join('  '));
+    }
   }
 
 
@@ -4114,62 +3843,26 @@
   );
 
 
-  console.table([{
-
-    발견된대상:
-      targets.length,
-
-    GET재현가능:
-      replayableTargets.length,
-
-    재현불가:
-      unreplayableTargets.length,
-
-    정적응답스킵:
-      staticTargets.length,
-
-    테스트한파라미터수:
-      results.length,
-
-    히든파라미터확정반사수:
-      minedConfirmedTotal,
-
-    히든파라미터미확정후보수:
-      minedParameterTotal,
-
-    반사발견:
-      reflectionCandidates.length,
-
-    안정적반사:
-      stableReflections.length,
-
-    상태변화동반반사:
-      statusChangedReflections.length,
-
-    오류응답반사:
-      errorReflections.length,
-
-    무필터RAW반사:
-      rawReflections.length,
-
-    일부인코딩반사:
-      partialEncodedReflections.length,
-
-    필터링된반사:
-      filteredReflections.length,
-
-    변환된반사:
-      transformedReflections.length,
-
-    검증상태변화:
-      validationChanges.length,
-
-    응답변화:
-      responseChanges.length,
-
-    'Content-Type변화':
-      contentTypeChanges.length
-  }]);
+  console.log(Object.entries({
+    발견된대상: targets.length,
+    GET재현가능: replayableTargets.length,
+    재현불가: unreplayableTargets.length,
+    정적응답스킵: staticTargets.length,
+    테스트한파라미터수: results.length,
+    히든파라미터확정반사수: minedConfirmedTotal,
+    히든파라미터미확정후보수: minedParameterTotal,
+    반사발견: reflectionCandidates.length,
+    안정적반사: stableReflections.length,
+    상태변화동반반사: statusChangedReflections.length,
+    오류응답반사: errorReflections.length,
+    무필터RAW반사: rawReflections.length,
+    일부인코딩반사: partialEncodedReflections.length,
+    필터링된반사: filteredReflections.length,
+    변환된반사: transformedReflections.length,
+    검증상태변화: validationChanges.length,
+    응답변화: responseChanges.length,
+    'Content-Type변화': contentTypeChanges.length,
+  }).map(([key, value]) => `${key}=${value}`).join('  '));
 
 
   // ============================================================
@@ -5125,6 +4818,29 @@
   );
 
 
+  // ============================================================
+  // GLOSSARY -- 아래부터 찍히는 용어 전부 여기서 미리 설명. 콘솔 글만
+  // 보고도 뜻을 알아야 하니 결과 찍기 전에 한 번 먼저 보여준다.
+  // ============================================================
+
+  console.log('');
+  console.log('================ 용어 설명 (아래 결과 읽기 전에 먼저 볼 것) ================');
+  console.log('');
+  console.log('[위험도] HIGH=문자 하나(< 또는 "/\') 수준에서 파싱 구조가 실제로 깨졌다고 확인된 것, 가장 먼저 검증.  MEDIUM=반사는 됐는데 문자 하나만 봐서는 구조가 깨졌는지 확신 못 하는 것(스크립트 안 반사, 따옴표 없는 속성 등), 수동 검토 필요.  LOW=반사됐지만 위험도 낮은 것(텍스트/데이터 영역 등).  INFO=반사 자체가 없거나 참고용.');
+  console.log('');
+  console.log('[반사위치유형] HTML_TEXT=태그 사이 평문 영역.  HTML_ATTRIBUTE_DQ=쌍따옴표로 감싼 속성값 안.  HTML_ATTRIBUTE_SQ=홑따옴표로 감싼 속성값 안.  HTML_ATTRIBUTE_UNQUOTED=따옴표 없는 속성값 안(공백 하나로도 깨질 수 있음).  SCRIPT=<script> 코드 영역 안.  SCRIPT_DATA=<script type="application/json"> 같은 데이터 전용 스크립트 태그 안(실행 안 됨).  STYLE=<style> 영역 안.  JSON=응답 자체가 JSON.  TEXT=HTML 아닌 일반 텍스트 응답.  UNKNOWN=위 어디에도 안 속함.');
+  console.log('');
+  console.log('[문자별반응] 주입한 특수문자(<, >, \', ", ;, :, `) 하나하나가 응답에서 어떻게 됐는지 "문자:상태" 형식으로 나열한 것. RAW=그대로 살아서 반사됨(필터링 없음).  HTML_ENTITY=&lt; 같은 HTML 엔티티로 바뀜.  JSON_ESCAPE=\\u003c 같은 JSON 유니코드 이스케이프로 바뀜.  JS_ESCAPE=\\x3c 같은 JS 16진 이스케이프로 바뀜.  URL_ENCODED=%3c 같은 URL 퍼센트인코딩으로 바뀜.  MISSING=그 문자만 사라짐(필터링된 걸로 추정).  MISSING_OR_TRUNCATED=사라졌는데 필터링인지 응답이 잘린 건지 확신 못 함.');
+  console.log('');
+  console.log('[인코딩변환] 위 문자별반응을 파라미터 하나 기준으로 종합한 것. RAW=전부 그대로 통과.  HTML_ENTITY/JSON_ESCAPE/JS_ESCAPE/URL_ENCODED=전부 같은 방식으로 인코딩됨.  FULL_ENCODED_MIXED=여러 인코딩 방식이 섞여서 나옴.  PARTIAL_ENCODED=일부는 그대로, 일부는 인코딩됨.  FILTERED_OR_TRUNCATED=전부 사라짐.  PARTIAL_FILTERED=일부는 사라지고 일부는 남음.  NOT_REFLECTED=애초에 반사 안 됨.');
+  console.log('');
+  console.log('[판정] STABLE_EXACT_REFLECTION=주입한 값이 응답에 완전히 그대로 들어있고 상태코드도 안 바뀜(가장 깔끔한 반사).  STABLE_TRANSFORMED_REFLECTION=반사는 됐는데 일부 바뀌어서 완전히 그대로는 아님.  STATUS_CHANGED_REFLECTION=반사도 되고 HTTP 상태/응답분류까지 바뀜.  ERROR_REFLECTION=정상이던 응답이 오류 응답으로 바뀌면서 반사됨.  ERROR_BASELINE_REFLECTION=원래부터 오류 응답이던 곳에서 반사됨.  VALIDATION_STATUS_CHANGE=반사는 없는데 상태/응답분류만 바뀜(서버가 입력값을 걸러낸다는 신호).  RESPONSE_CHANGED=반사도 상태변화도 없는데 응답 길이만 크게 바뀜.  NO_REFLECTION=아무 변화 없음.');
+  console.log('');
+  console.log('[파라미터출처] DISCOVERED=페이지 링크/폼에서 실제로 눈에 보였던 파라미터.  PARAM_MINED=화면엔 안 보였는데 워드리스트로 찔러봐서 마커가 바로 반사돼 확정된 숨은 파라미터(이 단계에서 이미 완전히 테스트됨, URL은 재현용으로 그 파라미터 하나만 남긴 깨끗한 버전, 실제 탐지에 쓰인 여러 파라미터 동시전송 요청은 따로 표시됨).  PARAM_MINED_CANDIDATE=워드리스트로 찔러봤을 때 마커 반사는 없었지만 응답이 달라져서 후보로만 남긴 것, 이후 단독 테스트로 한 번 더 확인됨.');
+  console.log('');
+  console.log('바로 아래부터 나오는 표/목록은 전부 위 용어로 찍힘. 결과만 빨리 보고 싶으면 맨 아래 "최종 확인: 취약점 가능성" 블록으로 건너뛸 것.');
+
+
   console.log('');
 
   console.log(
@@ -5132,72 +4848,19 @@
   );
 
 
-  console.table(
+  const endpointSummarySorted =
+    [...endpointStats].sort((a, b) => {
+      if (a.HomogeneousUrlEncoding !== b.HomogeneousUrlEncoding) {
+        return Number(a.HomogeneousUrlEncoding) - Number(b.HomogeneousUrlEncoding);
+      }
+      return b.ReflectionRate - a.ReflectionRate;
+    });
 
-    [...endpointStats]
-
-      .sort(
-        (a, b) => {
-
-          if (
-            a.HomogeneousUrlEncoding !==
-            b.HomogeneousUrlEncoding
-          ) {
-
-            return Number(
-              a.HomogeneousUrlEncoding
-            ) -
-            Number(
-              b.HomogeneousUrlEncoding
-            );
-          }
-
-
-          return (
-            b.ReflectionRate -
-            a.ReflectionRate
-          );
-        }
-      )
-
-      .map(
-        endpoint => ({
-
-          출처:
-            endpoint.Origin,
-
-          호스트:
-            endpoint.Host,
-
-          경로:
-            endpoint.Path,
-
-          테스트횟수:
-            endpoint.Tested,
-
-          반사횟수:
-            endpoint.Reflected,
-
-          반사율:
-            endpoint.ReflectionRate,
-
-          주요변환유형:
-            endpoint.DominantTransform,
-
-          포화도:
-            endpoint.Saturation,
-
-          전체URL인코딩횟수:
-            endpoint.FullUrlEncoded,
-
-          URL인코딩비율:
-            endpoint.FullUrlEncodingRate,
-
-          반복적URL인코딩:
-            endpoint.HomogeneousUrlEncoding
-        })
-      )
-  );
+  for (const endpoint of endpointSummarySorted) {
+    console.log(
+      `[${endpoint.Origin}] ${endpoint.Host}${endpoint.Path}  테스트=${endpoint.Tested}건  반사=${endpoint.Reflected}건(${endpoint.ReflectionRate})  주요변환=${endpoint.DominantTransform}  포화도=${endpoint.Saturation}  URL인코딩=${endpoint.FullUrlEncoded}건(${endpoint.FullUrlEncodingRate}, 반복적=${endpoint.HomogeneousUrlEncoding})`
+    );
+  }
 
 
   // ============================================================
@@ -5211,61 +4874,11 @@
   );
 
 
-  console.table(
-
-    priorityResults.map(
-      row => ({
-
-        위험도:
-          row.Signal,
-
-        판정근거:
-          row.SignalReason,
-
-        출처:
-          row.Origin,
-
-        경로:
-          row.Path,
-
-        파라미터:
-          row.Parameter,
-
-        파라미터출처:
-          row.ParamSource,
-
-        주입한페이로드:
-          row.Payload,
-
-        '발견된조각(응답내용)':
-          row.Context,
-
-        'HTTP(기준→테스트)':
-          row.HTTP,
-
-        반사여부:
-          row.Reflected,
-
-        인코딩변환:
-          row.Transformation,
-
-        반사위치유형:
-          row.ContextType,
-
-        엔드포인트포화도:
-          row.EndpointSaturation,
-
-        엔드포인트반사율:
-          row.EndpointReflectionRate,
-
-        판정:
-          row.Result,
-
-        전체요청URL:
-          row.URL
-      })
-    )
-  );
+  for (const row of priorityResults) {
+    console.log(
+      `[${row.Signal}] ${row.Path}  파라미터=${row.Parameter}(${row.ParamSource})  판정근거=${row.SignalReason}  반사=${row.Reflected}(${row.Transformation}, ${row.ContextType})  엔드포인트포화도=${row.EndpointSaturation}  엔드포인트반사율=${row.EndpointReflectionRate}  판정=${row.Result}  페이로드=${row.Payload}  조각="${row.Context}"  URL=${row.URL}`
+    );
+  }
 
 
   // ============================================================
@@ -5301,7 +4914,8 @@
         `  반사위치=${row.ContextType}  인코딩변환=${row.Transformation}  판정=${row.Result}  판정근거=${row.SignalReason}  HTTP=${row.HTTP}`
       );
       console.log(
-        `  URL: ${row.URL}`
+        `  URL: ${row.URL}` +
+        (row.ParamSource === 'PARAM_MINED' ? ` (단일 파라미터 재현용, 실제 탐지는 여러 후보 동시전송 요청에서 나옴 -- 원요청: ${row.MiningBatchURL})` : '')
       );
       console.log('');
     }
@@ -5344,7 +4958,8 @@
         `  반사위치=${row.ContextType}  인코딩변환=${row.Transformation}  판정=${row.Result}  판정근거=${row.SignalReason}  HTTP=${row.HTTP}`
       );
       console.log(
-        `  URL: ${row.URL}`
+        `  URL: ${row.URL}` +
+        (row.ParamSource === 'PARAM_MINED' ? ` (단일 파라미터 재현용, 실제 탐지는 여러 후보 동시전송 요청에서 나옴 -- 원요청: ${row.MiningBatchURL})` : '')
       );
       console.log('');
     }
@@ -5429,40 +5044,11 @@
   }
 
 
-  console.table(
-
-    [
-      ...lowEndpointMap.values()
-    ].map(
-      group => ({
-
-        출처:
-          group.Origin,
-
-        호스트:
-          group.Host,
-
-        경로:
-          group.Path,
-
-        건수:
-          group.Count,
-
-        파라미터목록:
-          group.Parameters.join(', '),
-
-        판정근거목록:
-          [
-            ...group.Reasons
-          ].join(', '),
-
-        변환유형목록:
-          [
-            ...group.Transforms
-          ].join(', ')
-      })
-    )
-  );
+  for (const group of lowEndpointMap.values()) {
+    console.log(
+      `[${group.Origin}] ${group.Host}${group.Path}  건수=${group.Count}  파라미터목록=${group.Parameters.join(', ')}  판정근거목록=${[...group.Reasons].join(', ')}  변환유형목록=${[...group.Transforms].join(', ')}`
+    );
+  }
 
 
   // ============================================================
@@ -5476,48 +5062,17 @@
   );
 
 
-  console.table([{
-
-    엔드포인트수:
-      endpointStats.length,
-
-    전체결과수:
-      analyzedResults.length,
-
-    반사발견수:
-      analyzedResults.filter(
-        row =>
-          row.Reflected
-      ).length,
-
-    HIGH:
-      highSignal.length,
-
-    MEDIUM:
-      mediumSignal.length,
-
-    LOW:
-      lowSignal.length,
-
-    INFO:
-      infoSignal.length,
-
-    포화된엔드포인트수:
-      endpointStats.filter(
-        endpoint =>
-          endpoint.Saturation ===
-            'VERY_HIGH' ||
-
-          endpoint.Saturation ===
-            'HIGH'
-      ).length,
-
-    반복URL인코딩엔드포인트수:
-      endpointStats.filter(
-        endpoint =>
-          endpoint.HomogeneousUrlEncoding
-      ).length
-  }]);
+  console.log(Object.entries({
+    엔드포인트수: endpointStats.length,
+    전체결과수: analyzedResults.length,
+    반사발견수: analyzedResults.filter(row => row.Reflected).length,
+    HIGH: highSignal.length,
+    MEDIUM: mediumSignal.length,
+    LOW: lowSignal.length,
+    INFO: infoSignal.length,
+    포화된엔드포인트수: endpointStats.filter(endpoint => endpoint.Saturation === 'VERY_HIGH' || endpoint.Saturation === 'HIGH').length,
+    반복URL인코딩엔드포인트수: endpointStats.filter(endpoint => endpoint.HomogeneousUrlEncoding).length,
+  }).map(([key, value]) => `${key}=${value}`).join('  '));
 
 
   // ============================================================
@@ -5663,7 +5218,7 @@ if (__xssScoutFinalGetHigh.length) {
     console.log(`  문자별반응: ${row.CharacterSummary}`);
     console.log(`  발견된조각: ${row.Context}`);
     console.log(`  판정근거=${row.SignalReason}  판정=${row.Result}`);
-    console.log(`  URL: ${row.URL}`);
+    console.log(`  URL: ${row.URL}` + (row.ParamSource === 'PARAM_MINED' ? ` (단일 파라미터 재현용, 실제 탐지는 여러 후보 동시전송 요청에서 나옴 -- 원요청: ${row.MiningBatchURL})` : ''));
     console.log('');
   }
 } else {
