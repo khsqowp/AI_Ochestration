@@ -117,6 +117,24 @@ BUILTIN_TECH_PATHS = {
     "nextjs": NEXTJS_DEFAULT_PATHS,
 }
 
+# 대화형 모드에서 --tech를 맨입으로 타이핑하게 하지 않고 번호/이름으로 고르게 하기 위한 표시용 라벨.
+TECH_LABELS: dict[str, str] = {
+    "tomcat": "Apache Tomcat",
+    "apache": "Apache HTTPD",
+    "nginx": "nginx",
+    "iis": "Microsoft IIS",
+    "jboss": "JBoss / WildFly",
+    "axis": "Apache Axis",
+    "glassfish": "GlassFish",
+    "iplanet": "Oracle/Sun iPlanet",
+    "jrun": "Adobe JRun",
+    "nextjs": "Next.js",
+    "api": "REST API 엔드포인트/오브젝트/액션",
+    "cms": "CMS (WordPress/Drupal/Joomla)",
+    "db-backups": "DB 백업 파일 모음",
+}
+TECH_CHOICES: list[tuple[str, str]] = [(key, TECH_LABELS.get(key, key)) for key in (*TECH_WORDLISTS, *BUILTIN_TECH_PATHS)]
+
 GENERIC_DEFAULT_PATHS = [
     ".env", ".env.bak", ".env.local", ".git/HEAD", ".git/config", ".svn/entries",
     ".htaccess", ".htpasswd", "web.config", "docker-compose.yml", "Dockerfile",
@@ -591,6 +609,55 @@ def _ask_int_range(prompt: str, lo: int, hi: int, default: int) -> int:
         return n
 
 
+def _pick_multi(options: list[tuple[str, str]], current: list[str], title: str) -> list[str]:
+    """번호 또는 이름을 ','로 구분해 여러 개 고르는 공용 다중 선택 UI -- "파일 경로를
+    직접 타이핑"이 아니라 전체 선택지를 보여주고 그중에서 고르게 한다.
+    빈 줄=현재 선택 유지, all=전체 선택, q=선택 전부 해제."""
+    key_set = {key for key, _ in options}
+    while True:
+        print(f"\n-- {title} --")
+        for i, (key, label) in enumerate(options, start=1):
+            mark = "x" if key in current else " "
+            print(f"  [{mark}] {i:>2}. {key:<12} {label}")
+        print(f"  현재 선택: {', '.join(current) if current else '(없음)'}")
+        raw = input("번호 또는 이름을 ','로 구분해 입력 (빈 줄=유지, all=전체, q=선택 해제): ").strip()
+        if raw == "":
+            return current
+        if raw.lower() == "q":
+            return []
+        if raw.lower() == "all":
+            return [key for key, _ in options]
+        picked: list[str] = []
+        bad: list[str] = []
+        for token in raw.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if token.isdigit() and 1 <= int(token) <= len(options):
+                picked.append(options[int(token) - 1][0])
+            elif token in key_set:
+                picked.append(token)
+            else:
+                bad.append(token)
+        if bad:
+            print(f"  알 수 없는 항목: {', '.join(bad)} -- 번호 또는 위 목록의 이름으로 다시 입력하세요.")
+            continue
+        seen: set[str] = set()
+        result: list[str] = []
+        for key in picked:
+            if key not in seen:
+                seen.add(key)
+                result.append(key)
+        return result
+
+
+# 자유 텍스트로 받으면 무엇을 적어야 할지 알 수 없는 옵션들을 번호/이름 다중 선택
+# 메뉴로 바꾼다 -- dest별로 선택지 목록과 메뉴 제목을 등록.
+MULTI_SELECT_FIELDS: dict[str, dict] = {
+    "tech": {"title": "대상 기술 스택(웹서버/프레임워크/API/CMS 등) 선택", "options": TECH_CHOICES},
+}
+
+
 def _interactive_menu_loop(
     parser: argparse.ArgumentParser, pos_values: dict[str, str], opt_values: dict[str, object],
 ) -> tuple[dict[str, str], dict[str, object]] | None:
@@ -647,7 +714,24 @@ def _interactive_menu_loop(
             print("  잘못된 번호입니다.")
             continue
         act = optionals[int(choice) - 1]
-        if isinstance(act, argparse._StoreTrueAction):
+        if act.dest in MULTI_SELECT_FIELDS:
+            spec = MULTI_SELECT_FIELDS[act.dest]
+            current_raw = opt_values.get(act.dest)
+            if isinstance(current_raw, list):
+                current = list(current_raw)
+            elif isinstance(current_raw, str):
+                current = [c.strip() for c in current_raw.split(",") if c.strip()]
+            else:
+                default_raw = act.default if isinstance(act.default, str) else ""
+                current = [c.strip() for c in default_raw.split(",") if c.strip()]
+            picked = _pick_multi(spec["options"], current, spec["title"])
+            if isinstance(act, argparse._AppendAction):
+                opt_values[act.dest] = picked
+            elif picked:
+                opt_values[act.dest] = ",".join(picked)
+            else:
+                opt_values.pop(act.dest, None)
+        elif isinstance(act, argparse._StoreTrueAction):
             opt_values[act.dest] = not opt_values.get(act.dest, False)
         elif isinstance(act, argparse._AppendAction):
             print(f"  {act.option_strings[0]} 값 반복 입력, 빈 줄이면 종료:")
@@ -732,6 +816,12 @@ def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
         headers.append(h)
     if headers:
         opt_values["headers"] = headers
+
+    print("기본 대상 기술 스택: tomcat, apache, nginx (지문 모드가 뒤질 서버/프레임워크 종류)")
+    if not _ask_yes_no("이 기본값 그대로 쓸까요? (아니오=번호/이름으로 직접 선택)", default=True):
+        picked = _pick_multi(TECH_CHOICES, ["tomcat", "apache", "nginx"], "대상 기술 스택(웹서버/프레임워크/API/CMS 등) 선택")
+        if picked:
+            opt_values["tech"] = ",".join(picked)
 
     if _ask_yes_no("백업 파일 변형(.bak/.old/~ 등)도 확인할까요?"):
         opt_values["mutate"] = True

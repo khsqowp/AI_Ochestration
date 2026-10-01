@@ -58,6 +58,17 @@ MAX_ALLOWED_DEPTH = 10  # safety ceiling unless --force is passed
 MAX_WORDLIST_PATHS = 2000  # safety ceiling unless --force is passed
 SECLISTS_WEB_CONTENT_DIR = Path(__file__).resolve().parent.parent / "SecLists-master" / "Discovery" / "Web-Content"
 
+# 대화형 모드에서 --wordlist를 맨입으로 타이핑하게 하지 않고 번호/이름으로 고르게 하기 위한
+# 표시용 라벨 -- 오프라인 올인원 패키지에 실제로 포함된 짧은 이름들.
+WORDLIST_LABELS: dict[str, str] = {
+    "common.txt": "가벼움 -- 자주 쓰는 공통 경로 모음 (빠름)",
+    "raft-large-directories.txt": "RAFT 대형 -- 디렉터리 이름 대량 (느리지만 넓음)",
+    "raft-large-files.txt": "RAFT 대형 -- 파일 이름 대량",
+    "raft-medium-directories.txt": "RAFT 중형 -- 디렉터리 이름 (large보다 가볍고 common보다 넓음)",
+    "raft-medium-files.txt": "RAFT 중형 -- 파일 이름",
+}
+WORDLIST_CHOICES: list[tuple[str, str]] = list(WORDLIST_LABELS.items())
+
 
 # ---------------------------------------------------------------------------
 # Rate limiting (concurrency cap + per-host minimum interval)
@@ -1011,6 +1022,61 @@ def _ask_float_range(prompt: str, lo: float, hi: float, default: float) -> float
         return n
 
 
+def _pick_multi(options: list[tuple[str, str]], current: list[str], title: str) -> list[str]:
+    """번호 또는 이름을 ','로 구분해 여러 개 고르는 공용 다중 선택 UI -- "경로를
+    직접 타이핑"이 아니라 전체 선택지를 보여주고 그중에서 고르게 한다.
+    빈 줄=현재 선택 유지, all=전체 선택, q=선택 전부 해제."""
+    key_set = {key for key, _ in options}
+    while True:
+        print(f"\n-- {title} --")
+        for i, (key, label) in enumerate(options, start=1):
+            mark = "x" if key in current else " "
+            print(f"  [{mark}] {i:>2}. {key:<28} {label}")
+        print(f"  현재 선택: {', '.join(current) if current else '(없음)'}")
+        raw = input("번호 또는 이름을 ','로 구분해 입력 (빈 줄=유지, all=전체, q=선택 해제): ").strip()
+        if raw == "":
+            return current
+        if raw.lower() == "q":
+            return []
+        if raw.lower() == "all":
+            return [key for key, _ in options]
+        picked: list[str] = []
+        bad: list[str] = []
+        for token in raw.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if token.isdigit() and 1 <= int(token) <= len(options):
+                picked.append(options[int(token) - 1][0])
+            elif token in key_set:
+                picked.append(token)
+            else:
+                bad.append(token)
+        if bad:
+            print(f"  알 수 없는 항목: {', '.join(bad)} -- 번호 또는 위 목록의 이름으로 다시 입력하세요.")
+            continue
+        seen: set[str] = set()
+        result: list[str] = []
+        for key in picked:
+            if key not in seen:
+                seen.add(key)
+                result.append(key)
+        return result
+
+
+# 자유 텍스트로 받으면 무엇을 적어야 할지 알 수 없는 옵션들을 번호/이름 다중 선택
+# 메뉴로 바꾼다 -- dest별로 선택지 목록과 메뉴 제목을 등록. allow_custom=True면
+# 번들에 없는 경로(예: burp_history_to_wordlist.py가 만든 paths-wordlist.txt)도
+# 직접 추가로 입력할 수 있게 한다.
+MULTI_SELECT_FIELDS: dict[str, dict] = {
+    "wordlist": {
+        "title": "경로/디렉터리 탐색용 워드리스트 선택 (오프라인 번들 포함분)",
+        "options": WORDLIST_CHOICES,
+        "allow_custom": True,
+    },
+}
+
+
 def _interactive_menu_loop(
     parser: argparse.ArgumentParser, pos_values: dict[str, str], opt_values: dict[str, object],
 ) -> tuple[dict[str, str], dict[str, object]] | None:
@@ -1067,7 +1133,39 @@ def _interactive_menu_loop(
             print("  잘못된 번호입니다.")
             continue
         act = optionals[int(choice) - 1]
-        if isinstance(act, argparse._StoreTrueAction):
+        if act.dest in MULTI_SELECT_FIELDS:
+            spec = MULTI_SELECT_FIELDS[act.dest]
+            current_raw = opt_values.get(act.dest)
+            if isinstance(current_raw, list):
+                current = list(current_raw)
+            elif isinstance(current_raw, str):
+                current = [c.strip() for c in current_raw.split(",") if c.strip()]
+            else:
+                default_raw = act.default if isinstance(act.default, str) else ""
+                current = [c.strip() for c in default_raw.split(",") if c.strip()]
+            known_keys = {k for k, _ in spec["options"]}
+            known_current = [c for c in current if c in known_keys]
+            custom_current = [c for c in current if c not in known_keys]
+            picked = _pick_multi(spec["options"], known_current, spec["title"])
+            if spec.get("allow_custom"):
+                print(f"  직접 입력된 추가 항목(현재): {', '.join(custom_current) if custom_current else '(없음)'}")
+                print("  번들에 없는 경로를 추가로 직접 입력 (반복 가능, 빈 줄=종료/기존 유지):")
+                new_custom: list[str] = []
+                while True:
+                    v = input("    + ").strip()
+                    if not v:
+                        break
+                    new_custom.append(v)
+                if new_custom:
+                    custom_current = new_custom
+            combined = picked + [c for c in custom_current if c not in picked]
+            if isinstance(act, argparse._AppendAction):
+                opt_values[act.dest] = combined
+            elif combined:
+                opt_values[act.dest] = ",".join(combined)
+            else:
+                opt_values.pop(act.dest, None)
+        elif isinstance(act, argparse._StoreTrueAction):
             opt_values[act.dest] = not opt_values.get(act.dest, False)
         elif isinstance(act, argparse._AppendAction):
             print(f"  {act.option_strings[0]} 값 반복 입력, 빈 줄이면 종료:")
@@ -1152,6 +1250,17 @@ def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
         headers.append(h)
     if headers:
         opt_values["headers"] = headers
+
+    if _ask_yes_no("경로/디렉터리 존재 탐색(워드리스트 probing)도 같이 할까요?"):
+        picked = _pick_multi(WORDLIST_CHOICES, [], "경로/디렉터리 탐색용 워드리스트 선택 (오프라인 번들 포함분)")
+        print("  번들에 없는 경로를 추가로 직접 입력 (예: burp_history_to_wordlist.py 결과물, 반복 가능, 빈 줄=종료):")
+        while True:
+            v = input("    + ").strip()
+            if not v:
+                break
+            picked.append(v)
+        if picked:
+            opt_values["wordlist"] = picked
 
     depth = _ask_int_range("몇 단계까지 링크를 따라갈까요? (0=시작 페이지만)", 0, 5, 1)
     if depth != 1:

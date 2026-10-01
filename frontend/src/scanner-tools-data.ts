@@ -38,6 +38,7 @@ export const SCANNER_TOOLS: ScannerTool[] = [
     standalone: true,
     notes: [
       '인자 없이 실행하면(더블클릭 포함) URL·쿠키·모드만 순서대로 묻는 대화형 간단 모드로 진입 -- 옵션 이름 외울 필요 없음.',
+      '대상 기술 스택(--tech)을 더 이상 맨입으로 타이핑하지 않음 -- 번호 또는 이름을 쉼표로 구분해 입력하는 선택 메뉴(Nginx/Apache/Next.js/API/CMS 등 13종, all=전체 선택)로 바뀜.',
       '--cookies/--headers로 로그인 후에만 보이는 경로도 점검 가능.',
       '--tech에 axis/glassfish/iplanet/jrun/api/cms(wordpress·drupal·joomla)까지 추가됨, generic 목록도 SecLists quickhits.txt(2500여개) 병합으로 대폭 확대 -- "탐색 가짓수가 너무 적다"는 피드백 반영해 위 오프라인 올인원 패키지 자체를 훨씬 두껍게 채움. 해당 워드리스트 파일이 없으면(번들 없이 스크립트만 받은 경우) 그 항목만 자동으로 건너뜀(에러 아님).',
       '경로순회(traversal) 모드는 기본으로 우회 인코딩(단일/이중 URL인코딩, 오버롱 UTF-8, null byte)을 자동 적용함(--no-bypass-encodings로 끌 수 있음), 타겟 파일도 시그니처로 검증 가능한 7종(passwd/apache·nginx·php 설정/win.ini/boot.ini/web.config)으로 확대.',
@@ -149,11 +150,13 @@ export const SCANNER_TOOLS: ScannerTool[] = [
   {
     id: 'crypto-identifier',
     name: '해시/인코딩 식별기',
-    tagline: '정체불명 문자열 자동 디코드(base64/hex/rot13 등) + 해시 포맷 추정 + 로컬 사전 크랙',
+    tagline: '정체불명 문자열 자동 디코드(base64/hex/base58/base85/JWT/XOR 등) + 해시 포맷 추정 + 로컬 사전 크랙',
     standalone: true,
     notes: [
       '무솔트 빠른 해시(md5/sha1/sha256 등)만 --crack으로 로컬 크랙 -- 워드리스트 직접 지정 필요.',
       'bcrypt 등 느린 포맷은 hashcat/john 명령어를 "출력만" 함(자동 실행 안 함, 로컬에 해당 도구 없으면 명령어만 참고).',
+      '디코더에 base58/ascii85/base85/HTML엔티티/유니코드·JS 이스케이프/ROT47/gzip·zlib 압축해제(쿠키값 등)/단일 바이트 XOR 브루트포스(영어 평문 유사도로 상위 5개 정렬)/JWT 전용 구조 분석(header·payload를 그 자리에서 JSON으로) 추가.',
+      'NTLM을 MD5와 별개 포맷으로 정확히 구분해 크랙(순수 파이썬 MD4 구현 내장 -- 예전엔 길이만 보고 MD5로만 크랙 시도해서 진짜 NTLM 값은 사전에 답이 있어도 못 찾던 버그, 수정됨). MySQL 4.1+ PASSWORD()(이중 SHA1, "*"+40자리hex)도 전용 처리로 추가(예전엔 일반 SHA1로만 시도해서 항상 실패했음).',
     ],
     files: [
       { filename: 'crypto_identifier.py' },
@@ -169,7 +172,7 @@ export const SCANNER_TOOLS: ScannerTool[] = [
       '인자 없이 실행하면 URL·쿠키·깊이만 순서대로 묻는 대화형 간단 모드로 진입.',
       '--cookies/--headers로 로그인 후에만 보이는 페이지도 크롤링 가능(크롤링·워드리스트 탐색·SPA 보조 탐지 전부 적용).',
       '취약점 스캐너 아님(discovery 전용) -- 동시 요청 캡 + 호스트별 최소 간격이 항상 강제됨(끌 수 없음).',
-      '--wordlist로 경로 존재 탐색도 같이 가능, 여러 번 줘서 여러 목록 합치기 가능 -- common.txt·raft-large/medium-directories·raft-large/medium-files는 위 오프라인 올인원 패키지에 포함, 그 외는 직접 지정 필요.',
+      '--wordlist로 경로 존재 탐색도 같이 가능 -- 이제 파일 경로를 직접 타이핑하는 대신 번들 포함 목록(common.txt·raft-large/medium-directories·raft-large/medium-files)을 번호/이름 쉼표 선택으로 고르고, 번들에 없는 경로(Burp 변환기 결과물 등)는 추가로 직접 입력 가능.',
       '리포트 끝에 "수집 실패·건너뜀" 섹션이 추가됨 -- robots.txt 차단, 타임아웃/네트워크 오류, 범위 밖(다른 도메인) 스킵 건수를 전부 명시적으로 보여줘서 "경로를 다 구해왔는데도 뭐가 빠졌는지 모르겠다"는 상황을 없앰.',
     ],
     files: [
