@@ -272,6 +272,16 @@
   //   8. 중간 문자가 제거/변환돼도 다음 문자에서 resync
   //
   // 사이트/서비스/Endpoint별 blacklist 없음
+  //
+  // PARAMETER MINING (Burp Param Miner 방식 이식):
+  //   URL/form에 안 보이는 "숨은" GET 파라미터는 지금까지 아예 테스트 대상이
+  //   아니었다 -- DISCOVERY 단계가 찾은 파라미터만 변이시켰기 때문. Param Miner가
+  //   하는 일(이름 wordlist를 보내보고 응답이 바뀌면 그 이름이 실제로 쓰인다고
+  //   판단)을 이식: 후보 이름들을 청크로 묶어 한 요청에 다같이 넣고 기준 응답과
+  //   diff, 바뀌면 그 청크를 반으로 쪼개 재귀적으로 이분탐색 -- 영향 없는
+  //   파라미터는 청크당 요청 1번으로 걸러지고, 실제 영향 있는 이름만 O(log n)
+  //   추가 요청으로 정확히 찾아낸다. 찾아낸 숨은 파라미터는 기존 파라미터와
+  //   동일하게 marker/반사/문자별변환 파이프라인을 그대로 탄다.
   // ============================================================
 
 
@@ -317,7 +327,53 @@
       300,
 
     RESYNC_LOOKAHEAD:
-      80
+      80,
+
+    // Param Miner 방식 숨은 파라미터 탐지 -- 끄려면 false
+    PARAM_MINING_ENABLED:
+      true,
+
+    // 청크당 후보 이름 개수 (한 요청에 같이 실어 보낼 파라미터 수)
+    PARAM_MINE_CHUNK_SIZE:
+      20,
+
+    // 대상 하나당 마이닝에 쓸 추가 GET 요청 수 상한 (안전장치 -- wordlist 크기나
+    // 이분탐색 깊이와 무관하게 이 값을 넘으면 그 대상의 마이닝을 중단한다)
+    PARAM_MINE_MAX_REQUESTS:
+      40,
+
+    // 보이는 쿼리 파라미터가 하나도 없는 URL(예: /export, /report)도 마이닝
+    // 대상에 넣을지 -- Param Miner의 핵심 시나리오(링크엔 안 보이지만 서버가
+    // 몰래 읽는 파라미터)는 바로 이 케이스지만, 사이트에 그런 경로가 많으면
+    // 요청 수가 급격히 늘 수 있어 아래 상한으로 전체 스캔당 몇 개까지 허용할지
+    // 따로 제한한다.
+    PARAM_MINE_MAX_NO_PARAM_TARGETS:
+      10,
+
+    // 흔히 서버가 몰래 읽는 파라미터 이름 -- Burp Param Miner의 수만 개짜리
+    // wordlist와 달리, 이건 콘솔에서 빠르게 돌리는 용도라 의도적으로 작게
+    // 추렸다. 전수조사가 필요하면 오프라인 번들의 SecLists 기반 도구를 쓸 것.
+    PARAM_MINE_WORDLIST: [
+      'debug', 'test', 'dev', 'admin', 'preview', 'draft', 'beta', 'stage', 'staging', 'internal',
+      'callback', 'jsonp', 'cb', 'fn', 'func', 'format', 'output', 'type', 'mode', 'view', 'render',
+      'template', 'tpl', 'theme', 'layout', 'include', 'inc', 'require', 'page', 'file', 'path', 'dir',
+      'redirect', 'redirect_uri', 'return', 'returnUrl', 'return_url', 'next', 'url', 'dest', 'destination',
+      'continue', 'target', 'ref', 'referrer', 'source', 'src',
+      'id', 'uid', 'user', 'user_id', 'userid', 'username', 'account', 'token', 'key', 'api_key', 'apikey',
+      'secret', 'auth', 'session', 'sid',
+      'lang', 'locale', 'language', 'country', 'region', 'timezone',
+      'sort', 'order', 'orderby', 'filter', 'query', 'q', 'search', 'keyword',
+      'limit', 'offset', 'page_size', 'pagesize', 'per_page',
+      'cmd', 'exec', 'action', 'method', 'op', 'operation', 'func_name', 'proxy', 'fetch', 'load',
+      'ip', 'host', 'hostname', 'domain', 'origin',
+      'version', 'ver', 'v', 'api_version',
+      'csrf', 'csrf_token', 'xsrf', 'nonce', 'state', 'code',
+      'show', 'hide', 'display', 'visible', 'enable', 'disable', 'flag', 'feature',
+      'email', 'phone', 'name', 'password',
+      'image', 'img', 'avatar', 'file_url', 'fileurl', 'document', 'doc',
+      'json', 'xml', 'data', 'payload', 'content', 'body',
+      'parent', 'child', 'ref_id', 'group', 'category', 'tag', 'class',
+    ]
   };
 
 
@@ -1897,6 +1953,129 @@
 
 
   // ============================================================
+  // PARAMETER MINING (히든 파라미터 탐지 -- Param Miner 이분탐색)
+  // ============================================================
+
+  function buildMineProbeURL(baseOriginalURL, paramNames, probeValue) {
+
+    const url = new URL(baseOriginalURL);
+
+    for (const name of paramNames) {
+      url.searchParams.set(name, probeValue);
+    }
+
+    return url;
+  }
+
+
+  function mineProbeDiffersFromBaseline(baseline, probe, probeValue) {
+
+    // probeValue는 랜덤 생성이라 우연히 기준 응답에 이미 들어있을 수 없다 -- 응답에
+    // 그대로 나타나면 그 자체로 해당 파라미터가 실제로 읽혀서 반사됐다는 확실한
+    // 증거다. 길이 임계값(LENGTH_DIFF_THRESHOLD)에 기대면 "파라미터 값이 HTML
+    // 주석 한 줄처럼 작게만 반사되는" 흔한 케이스를 놓친다 -- 그 임계값은 원래
+    // XSS mutation 루프에서 노이즈를 거르려고 500바이트로 잡은 것이라 마이닝처럼
+    // 작은 반사를 잡아내야 하는 용도에는 너무 둔감하다.
+    if (probe.body.includes(probeValue)) return true;
+
+    if (probe.status !== baseline.status) return true;
+    if (probe.statusClass !== baseline.statusClass) return true;
+    if (probe.normalizedContentType !== baseline.normalizedContentType) return true;
+
+    return getLengthAnalysis(baseline.length, probe.length).significant;
+  }
+
+  /*
+   * paramNames 묶음 전체를 한 요청에 실어 기준과 diff -- 변화 없으면 요청 1번으로
+   * 그 묶음 전체를 "영향 없음"으로 확정하고 끝낸다. 변화가 있으면(묶음 중 누군가가
+   * 영향을 줬다는 뜻) 반으로 쪼개 재귀 -- 결국 실제 영향 있는 이름 하나하나까지
+   * O(log n) 요청으로 좁혀진다. budget은 대상 하나당 전체 마이닝 요청 수 상한을
+   * 모든 재귀 호출이 공유하는 카운터다.
+   */
+  async function mineParamChunk(baseOriginalURL, baseline, paramNames, probeValue, budget) {
+
+    if (!paramNames.length || budget.remaining <= 0) {
+      return [];
+    }
+
+    budget.remaining--;
+
+    let probe;
+
+    try {
+
+      const response = await fetchGET(
+        buildMineProbeURL(baseOriginalURL, paramNames, probeValue).href
+      );
+
+      probe = await readResponse(response);
+
+    } catch {
+
+      // 네트워크 오류/타임아웃 -- 이 묶음은 판단 불가로 보고 건너뜀
+      return [];
+    }
+
+    if (!mineProbeDiffersFromBaseline(baseline, probe, probeValue)) {
+      return [];
+    }
+
+    if (paramNames.length === 1) {
+      return [paramNames[0]];
+    }
+
+    const mid = Math.ceil(paramNames.length / 2);
+
+    const left = await mineParamChunk(baseOriginalURL, baseline, paramNames.slice(0, mid), probeValue, budget);
+    const right = await mineParamChunk(baseOriginalURL, baseline, paramNames.slice(mid), probeValue, budget);
+
+    return [...left, ...right];
+  }
+
+
+  async function mineHiddenParameters(target, baseline) {
+
+    if (!CONFIG.PARAM_MINING_ENABLED) {
+      return [];
+    }
+
+    const known = new Set(target.params.map(name => name.toLowerCase()));
+
+    const candidates = CONFIG.PARAM_MINE_WORDLIST.filter(name => !known.has(name.toLowerCase()));
+
+    if (!candidates.length) {
+      return [];
+    }
+
+    const probeValue = 'pm' + Math.random().toString(36).slice(2, 10);
+
+    const budget = { remaining: CONFIG.PARAM_MINE_MAX_REQUESTS };
+
+    const found = new Set();
+
+    for (let i = 0; i < candidates.length; i += CONFIG.PARAM_MINE_CHUNK_SIZE) {
+
+      if (budget.remaining <= 0) {
+
+        console.warn(
+          '[히든 파라미터 마이닝]', 'PARAM_MINE_MAX_REQUESTS 상한 도달 -- 이 대상의 나머지 후보는 건너뜀', target.url.pathname
+        );
+
+        break;
+      }
+
+      const chunk = candidates.slice(i, i + CONFIG.PARAM_MINE_CHUNK_SIZE);
+
+      const hits = await mineParamChunk(target.originalURL, baseline, chunk, probeValue, budget);
+
+      for (const hit of hits) found.add(hit);
+    }
+
+    return [...found];
+  }
+
+
+  // ============================================================
   // DISCOVERY SOURCES
   // ============================================================
 
@@ -2109,7 +2288,8 @@
 
 
       if (
-        !url.search
+        !url.search &&
+        !CONFIG.PARAM_MINING_ENABLED
       ) {
 
         continue;
@@ -2123,7 +2303,8 @@
 
 
       if (
-        !params.length
+        !params.length &&
+        !CONFIG.PARAM_MINING_ENABLED
       ) {
 
         continue;
@@ -2322,6 +2503,12 @@
   const unreplayableTargets = [];
 
   const staticTargets = [];
+
+  const minedParameterFindings = [];
+
+  let minedParameterTotal = 0;
+
+  let noParamMiningTargetsUsed = 0;
 
   let markerCounter = 0;
 
@@ -2534,6 +2721,96 @@
 
 
     // ==========================================================
+    // PARAMETER MINING (히든 파라미터 탐지 -- Param Miner 방식)
+    // ==========================================================
+
+    const isNoParamTarget =
+      target.params.length === 0;
+
+
+    const noParamMiningBudgetLeft =
+      !isNoParamTarget ||
+      noParamMiningTargetsUsed < CONFIG.PARAM_MINE_MAX_NO_PARAM_TARGETS;
+
+
+    if (
+      isNoParamTarget &&
+      !noParamMiningBudgetLeft
+    ) {
+
+      console.warn(
+        '[히든 파라미터 마이닝]',
+        'PARAM_MINE_MAX_NO_PARAM_TARGETS 상한 도달 -- 보이는 파라미터 없는 이 대상은 마이닝 건너뜀',
+        target.url.pathname
+      );
+    }
+
+
+    const minedParams =
+      noParamMiningBudgetLeft
+        ? await mineHiddenParameters(
+            target,
+            baseline
+          )
+        : [];
+
+
+    if (
+      isNoParamTarget &&
+      noParamMiningBudgetLeft
+    ) {
+
+      noParamMiningTargetsUsed++;
+    }
+
+
+    if (
+      minedParams.length
+    ) {
+
+      minedParameterTotal +=
+        minedParams.length;
+
+
+      for (
+        const name
+        of minedParams
+      ) {
+
+        minedParameterFindings.push({
+
+          호스트:
+            target.url.hostname,
+
+          경로:
+            target.url.pathname,
+
+          발견된히든파라미터:
+            name,
+
+          기준URL:
+            target.originalURL
+        });
+      }
+
+
+      console.log(
+        '[히든 파라미터 발견]',
+        minedParams.join(', '),
+        '--',
+        target.url.pathname
+      );
+    }
+
+
+    const allParams =
+      [
+        ...target.params,
+        ...minedParams
+      ];
+
+
+    // ==========================================================
     // REPLAYABLE
     // ==========================================================
 
@@ -2569,7 +2846,10 @@
         baseline.normalizedContentType,
 
       파라미터목록:
-        target.params.join(', ')
+        target.params.join(', '),
+
+      히든파라미터목록:
+        minedParams.join(', ') || '-'
     });
 
 
@@ -2579,7 +2859,7 @@
 
     for (
       const parameter
-      of target.params
+      of allParams
     ) {
 
       markerCounter++;
@@ -2807,6 +3087,11 @@
           Parameter:
             parameter,
 
+          ParamSource:
+            target.params.includes(parameter)
+              ? 'DISCOVERED'
+              : 'PARAM_MINED',
+
           Payload:
             payload,
 
@@ -2960,6 +3245,11 @@
 
           Parameter:
             parameter,
+
+          ParamSource:
+            target.params.includes(parameter)
+              ? 'DISCOVERED'
+              : 'PARAM_MINED',
 
           Payload:
             payload,
@@ -3181,6 +3471,9 @@
 
           파라미터:
             result.Parameter,
+
+          파라미터출처:
+            result.ParamSource,
 
           주입한페이로드:
             result.Payload,
@@ -3581,6 +3874,32 @@
 
 
   // ============================================================
+  // HIDDEN PARAMETER MINING
+  // ============================================================
+
+  if (
+    minedParameterFindings.length
+  ) {
+
+    console.log('');
+
+    console.log(
+      '================ 히든 파라미터 마이닝으로 새로 찾은 파라미터 (Param Miner 방식) ================'
+    );
+
+
+    console.table(
+      minedParameterFindings
+    );
+
+
+    console.log(
+      '위 파라미터들은 링크/폼 어디에도 안 보였지만 요청에 실어보니 응답이 달라져서(상태/타입/길이) 발견됨 -- 위 "전체 테스트 결과"에서 파라미터출처=PARAM_MINED 행으로 실제 반사/XSS 여부까지 테스트됨.'
+    );
+  }
+
+
+  // ============================================================
   // GET REPLAYABLE
   // ============================================================
 
@@ -3671,6 +3990,9 @@
     테스트한파라미터수:
       results.length,
 
+    히든파라미터발견수:
+      minedParameterTotal,
+
     반사발견:
       reflectionCandidates.length,
 
@@ -3728,6 +4050,10 @@
     unreplayableTargets,
 
     staticTargets,
+
+    minedParameterFindings,
+
+    minedParameterTotal,
 
     results,
 
@@ -4898,6 +5224,9 @@
         파라미터:
           row.Parameter,
 
+        파라미터출처:
+          row.ParamSource,
+
         주입한페이로드:
           row.Payload,
 
@@ -4957,6 +5286,9 @@
 
           파라미터:
             row.Parameter,
+
+          파라미터출처:
+            row.ParamSource,
 
           주입한페이로드:
             row.Payload,
@@ -5296,6 +5628,7 @@ const __xssScoutCoverage = {
   '같은오리진결과수': __xssScoutScanRows.filter(row => row.Origin === 'SAME').length,
   '교차오리진결과수': __xssScoutScanRows.filter(row => row.Origin === 'CROSS').length,
   '엔드포인트수': window.__XSS_SCOUT_V29__.endpointStats.length,
+  '히든파라미터발견수': window.__XSS_SCOUT__.minedParameterTotal,
   'DOM훅상태': __xssScoutDomSummary.hookStatus,
   '활성DOM훅수': __xssScoutDomSummary.activeHookCount,
   '비활성DOM훅목록': __xssScoutDomSummary.unavailableHooks,

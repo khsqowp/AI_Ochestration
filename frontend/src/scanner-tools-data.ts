@@ -110,6 +110,8 @@ export const SCANNER_TOOLS: ScannerTool[] = [
       'innerHTML/document.write 등 HTML sink만 훅 -- payload 주입·네비게이션·요청 헤더 변조 없음, 관찰만 함.',
       'Active mutation은 기본적으로 같은 오리진 GET만 나감(CONFIG.TEST_CROSS_ORIGIN=false) -- 허가된 진단 범위에서만 사용.',
       '콘솔 표에 경로·파라미터·실제 주입한 페이로드·응답에서 발견된 조각(실제 반사 내용)까지 전부 한글로 표시됨 -- "위험해요"류 라벨만 보고 끝나지 않고 어디서 어떻게 반사됐는지 바로 확인 가능.',
+      'GET <form> 필드값까지 실제 쿼리스트링으로 합성해서 테스트 대상에 포함(검색창·필터폼 같은 흔한 반사형 XSS 지점이 이전엔 누락됐었음).',
+      'Burp Param Miner 방식 숨은 파라미터 탐지 내장: URL/폼 어디에도 안 보이는 파라미터 이름 후보(debug/callback/redirect/template 등 약 120개)를 청크로 묶어 보내보고 응답이 바뀌면 이분탐색으로 실제 쓰이는 이름을 정확히 찾아냄(대상당 추가 요청 상한 CONFIG.PARAM_MINE_MAX_REQUESTS=40) -- 찾은 숨은 파라미터는 기존 파라미터와 동일하게 반사/XSS 테스트까지 자동 진행되고 결과표에 파라미터출처=PARAM_MINED로 표시됨.',
     ],
     files: [],
     scripts: [
