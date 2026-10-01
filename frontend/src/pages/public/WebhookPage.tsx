@@ -30,7 +30,7 @@ export function WebhookPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<boolean | 'error'>(false)
 
   const createBin = async () => {
     setBusy(true); setError('')
@@ -86,7 +86,10 @@ export function WebhookPage() {
   }
 
   const captureUrl = `${window.location.origin}/api/webhook/capture/${token}`
-  const copyUrl = async () => { await navigator.clipboard.writeText(captureUrl); setCopied(true); window.setTimeout(() => setCopied(false), 1500) }
+  const copyUrl = async () => {
+    try { await navigator.clipboard.writeText(captureUrl); setCopied(true) } catch { setCopied('error') }
+    window.setTimeout(() => setCopied(false), 1500)
+  }
 
   if (error === '존재하지 않거나 만료된 웹훅입니다.') {
     return <div className="page webhook-page">
@@ -100,7 +103,7 @@ export function WebhookPage() {
     <div className="webhook-head"><Webhook size={22}/><h1>웹훅 캐처</h1></div>
     <div className="webhook-url-bar">
       <code>{captureUrl}</code>
-      <button onClick={() => void copyUrl()}><Clipboard size={14}/>{copied ? '복사됨' : '복사'}</button>
+      <button onClick={() => void copyUrl()}><Clipboard size={14}/>{copied === 'error' ? '복사 실패' : copied ? '복사됨' : '복사'}</button>
     </div>
     <p className="webhook-meta">{bin && `만료: ${new Date(bin.expiresAt).toLocaleString('ko-KR')} · 최대 200건 보관`} · 2초마다 자동 새로고침</p>
 

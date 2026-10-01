@@ -48,6 +48,10 @@ export class RankRenderer implements UIObject {
           if (this.messageHandler) {
             this.messageHandler('The result has been copied');
           }
+        }).catch(() => {
+          if (this.messageHandler) {
+            this.messageHandler('Failed to copy the result');
+          }
         });
       }
     }
