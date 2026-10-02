@@ -1026,7 +1026,7 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .omakase-welcome-sub { color:#9d9d9d; font-size:13px; line-height:1.6; margin-bottom:20px; }
 .omakase-welcome-hint { color:#6b6b6b; font-size:12px; }
 
-.omakase-reader { max-width:900px; margin:0 auto; padding:28px 32px 80px; }
+.omakase-reader { width:100%; padding:28px 32px 80px; }
 .omakase-loading, .omakase-error { padding:40px 0; text-align:center; color:#9d9d9d; font-size:13px; }
 .omakase-error { color:#f18585; }
 
