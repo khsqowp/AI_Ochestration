@@ -977,12 +977,12 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; }
 .omakase-body { display:flex; flex:1; min-height:0; }
 
-.omakase-activitybar { width:48px; flex:none; background:#333333; display:flex; flex-direction:column;
-  align-items:center; padding-top:10px; gap:4px; }
-.omakase-activity-btn { width:48px; height:44px; display:flex; align-items:center; justify-content:center;
-  color:#858585; border-left:2px solid transparent; }
-.omakase-activity-btn:hover { color:#fff; }
-.omakase-activity-btn.active { color:#fff; border-left-color:#58a6ff; }
+.omakase-activitybar { width:48px; flex:none; background:#333333; }
+
+.omakase-corner-nav { position:fixed; top:10px; right:14px; z-index:10; display:flex; flex-direction:column; gap:6px; }
+.omakase-corner-btn { width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+  border-radius:6px; background:#2d2d2d; border:1px solid #3c3c3c; color:#cccccc; }
+.omakase-corner-btn:hover { background:#3c3c3c; color:#fff; border-color:#58a6ff; }
 
 .omakase-sidebar { width:260px; flex:none; background:#252526; border-right:1px solid #1b1b1b; overflow-y:auto; }
 .omakase-sidebar-title { padding:10px 16px 6px; font-size:11px; font-weight:700; letter-spacing:.08em;

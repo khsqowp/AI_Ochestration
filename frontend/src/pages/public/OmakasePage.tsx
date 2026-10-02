@@ -1,5 +1,6 @@
 import { Suspense, useState, type CSSProperties } from 'react'
-import { FileText, LayoutGrid, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Home, FileText, LayoutGrid, X } from 'lucide-react'
 import { MarkdownBody } from '../../components/shared'
 import { OMAKASE_TOPICS, type OmakaseFile, type OmakaseTopic } from '../../omakase-data'
 
@@ -62,15 +63,12 @@ export function OmakasePage() {
   }
 
   return <div className="omakase-page">
+   <div className="omakase-corner-nav">
+    <Link to="/" className="omakase-corner-btn" title="랜딩 페이지로"><Home size={18}/></Link>
+    <button type="button" className="omakase-corner-btn" onClick={backToGrid} title="주제 선택으로"><LayoutGrid size={18}/></button>
+   </div>
    <div className="omakase-body">
-    <div className="omakase-activitybar">
-      <button
-        type="button"
-        className={`omakase-activity-btn ${!topic ? 'active' : ''}`}
-        onClick={backToGrid}
-        title="주제 선택으로"
-      ><LayoutGrid size={22}/></button>
-    </div>
+    <div className="omakase-activitybar"/>
 
     <div className="omakase-sidebar">
       <div className="omakase-sidebar-title">{topic ? '탐색기' : 'OMAKASE'}</div>
