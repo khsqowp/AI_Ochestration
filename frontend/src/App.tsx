@@ -9,6 +9,7 @@ import { LandingPage } from './pages/public/LandingPage'
 import { LoginPage } from './pages/public/LoginPage'
 import { OrderPage } from './pages/public/OrderPage'
 import { WebhookPage } from './pages/public/WebhookPage'
+import { OmakasePage } from './pages/public/OmakasePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotesPage } from './pages/NotesPage'
 import { CalendarPage } from './pages/CalendarPage'
@@ -34,6 +35,7 @@ export function App() {
             <Route path="/lunch" element={<LunchRoulettePage/>}/>
             <Route path="/webhook" element={<WebhookPage/>}/>
             <Route path="/webhook/:token" element={<WebhookPage/>}/>
+            <Route path="/omakase" element={<OmakasePage/>}/>
           </Route>
           <Route path="/dashboard" element={<RequireAuth/>}>
             <Route element={<AppShell/>}>
