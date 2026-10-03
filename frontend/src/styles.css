@@ -979,6 +979,11 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 
 .omakase-activitybar { width:48px; flex:none; background:#333333; }
 
+.omakase-brand-mark { position:fixed; top:12px; left:14px; z-index:10; display:flex; align-items:center; gap:8px;
+  color:rgba(233,230,245,.82); font-weight:700; font-size:13px; letter-spacing:.04em; text-transform:uppercase; }
+.omakase-brand-mark svg { color:#9d8dff; }
+.omakase-brand-mark:hover { color:#fff; }
+
 .omakase-corner-nav { position:fixed; top:10px; right:14px; z-index:10; display:flex; flex-direction:column; gap:6px; }
 .omakase-corner-btn { width:34px; height:34px; display:flex; align-items:center; justify-content:center;
   border-radius:6px; background:#2d2d2d; border:1px solid #3c3c3c; color:#cccccc; }

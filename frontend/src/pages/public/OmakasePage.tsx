@@ -1,6 +1,6 @@
 import { Suspense, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
-import { Home, FileText, LayoutGrid, X } from 'lucide-react'
+import { Bot, Home, FileText, LayoutGrid, X } from 'lucide-react'
 import { MarkdownBody } from '../../components/shared'
 import { OMAKASE_TOPICS, type OmakaseFile, type OmakaseTopic } from '../../omakase-data'
 
@@ -63,6 +63,7 @@ export function OmakasePage() {
   }
 
   return <div className="omakase-page">
+   <Link to="/" className="omakase-brand-mark" title="랜딩 페이지로"><Bot size={16}/> <span>Orchestration Lab</span></Link>
    <div className="omakase-corner-nav">
     <Link to="/" className="omakase-corner-btn" title="랜딩 페이지로"><Home size={18}/></Link>
     <button type="button" className="omakase-corner-btn" onClick={backToGrid} title="주제 선택으로"><LayoutGrid size={18}/></button>
