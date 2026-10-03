@@ -14,15 +14,19 @@ const Markdown = lazy(() =>
   ),
 )
 
+type DolphinSource = { source?: string; category?: string; title?: string; text?: string }
 type DolphinSession = { id: string; title: string; mode: string; model: string; created_at: string }
-type DolphinMsg = { role: 'user' | 'assistant'; content: string }
-type DolphinMode = 'general' | 'ctf' | 'rag'
+type DolphinMsg = { role: 'user' | 'assistant'; content: string; sources?: DolphinSource[] }
+type DolphinMode = 'general' | 'rag' | 'ctf' | 'pentest' | 'bypass' | 'threat'
 
-// dolphin-chat 이 실제로 인식하는 SYSTEM_PROMPTS 키만 노출한다. 다른 값은 서버에서 조용히 general 로 폴백됨.
+// ORCHESTRATION_HANDOVER.md §4 기준 전체 6개 운영 모드. general 은 KB 없는 범용 모드로 항상 기본값 유지.
 const MODES: { id: DolphinMode; label: string }[] = [
   { id: 'general', label: '일반' },
-  { id: 'ctf', label: 'CTF/모의해킹' },
   { id: 'rag', label: 'Vault RAG' },
+  { id: 'ctf', label: 'CTF' },
+  { id: 'pentest', label: '모의해킹' },
+  { id: 'bypass', label: 'WAF 우회' },
+  { id: 'threat', label: '위협 분석' },
 ]
 
 export function DolphinChatModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
@@ -33,6 +37,7 @@ export function DolphinChatModal({ onClose, embedded }: { onClose?: () => void; 
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [toolStatus, setToolStatus] = useState<string | null>(null)
   const [models, setModels] = useState<string[]>([])
   const [defaultModel, setDefaultModel] = useState<string>('')
   const [model, setModel] = useState<string>('')
@@ -207,17 +212,44 @@ export function DolphinChatModal({ onClose, embedded }: { onClose?: () => void; 
           if (data === '[DONE]') continue
           try {
             const chunk = JSON.parse(data)
-            const token = chunk.content ?? chunk.choices?.[0]?.delta?.content ?? chunk.token ?? ''
-            const piece = chunk.error ? `⚠️ ${chunk.error}` : token
-            if (piece) {
+            // 실측(curl)한 dolphin-chat 실제 응답엔 "type" 필드가 없다 — 핸드오버 문서 §3.4 는 문서상
+            // 스키마고, 실서버는 content/sources/tool_call/tool_result 를 키 유무로만 구분해서 내려준다.
+            // type 이 붙어 오는 버전도 있을 수 있어 있으면 우선 사용하고, 없으면 키로 판별한다.
+            const kind = chunk.type ?? (chunk.sources ? 'sources'
+              : chunk.tool_call ? 'tool_call'
+              : chunk.tool_result !== undefined ? 'tool_result'
+              : chunk.content !== undefined ? 'text' : null)
+
+            if (chunk.error) {
               setMessages(prev => {
                 const updated = [...prev]
                 const last = updated[updated.length - 1]
-                if (last?.role === 'assistant') {
-                  updated[updated.length - 1] = { ...last, content: last.content + piece }
-                }
+                if (last?.role === 'assistant') updated[updated.length - 1] = { ...last, content: last.content + `⚠️ ${chunk.error}` }
                 return updated
               })
+            } else if (kind === 'sources') {
+              const sources: DolphinSource[] = chunk.sources ?? []
+              setMessages(prev => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last?.role === 'assistant') updated[updated.length - 1] = { ...last, sources }
+                return updated
+              })
+            } else if (kind === 'tool_call') {
+              setToolStatus(`🔧 ${chunk.name ?? chunk.tool_call?.name ?? '도구'} 호출 중…`)
+            } else if (kind === 'tool_result') {
+              // 도구 실행 결과 원문은 본문에 섞지 않는다 — 모델이 이미 이 결과를 반영해 최종 답변(text 이벤트)을 생성한다.
+              setToolStatus(null)
+            } else {
+              const token = chunk.content ?? chunk.choices?.[0]?.delta?.content ?? chunk.token ?? ''
+              if (token) {
+                setMessages(prev => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last?.role === 'assistant') updated[updated.length - 1] = { ...last, content: last.content + token }
+                  return updated
+                })
+              }
             }
           } catch { /* non-JSON line */ }
         }
@@ -235,6 +267,7 @@ export function DolphinChatModal({ onClose, embedded }: { onClose?: () => void; 
       }
     } finally {
       setStreaming(false)
+      setToolStatus(null)
       // 서버측 제목 자동갱신·저장이 끝난 뒤 실제 목록으로 맞춘다. 저장 태스크가 약간 늦을 수 있어 두 번.
       loadSessions()
       setTimeout(loadSessions, 1500)
@@ -330,8 +363,19 @@ export function DolphinChatModal({ onClose, embedded }: { onClose?: () => void; 
                       </div>
                     : <pre className="dolphin-msg-content">{streaming && i === messages.length - 1 ? '▍' : ''}</pre>)
                 : <pre className="dolphin-msg-content">{msg.content}</pre>}
+              {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                <div className="dolphin-sources">
+                  <span className="dolphin-sources-label">출처</span>
+                  {msg.sources.map((s, si) => (
+                    <span key={si} className="dolphin-source-chip" title={s.text ?? ''}>
+                      {s.title ?? s.source ?? s.category ?? `출처 ${si + 1}`}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
+          {toolStatus && <div className="dolphin-tool-status">{toolStatus}</div>}
         </div>
 
         <form className="dolphin-input-row" onSubmit={e => { e.preventDefault(); send() }}>

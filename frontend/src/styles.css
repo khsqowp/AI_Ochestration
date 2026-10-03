@@ -301,6 +301,10 @@
 .dolphin-export-btn { background:#f0eefb; color:#5c4ec2; border-radius:7px; width:28px; height:28px; display:grid; place-items:center; }
 .dolphin-export-btn:hover { background:#ddd9f9; }
 .dolphin-body { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
+.dolphin-sources { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.dolphin-sources-label { font-size:10px; font-weight:750; color:#a7a3b0; text-transform:uppercase; letter-spacing:.04em; }
+.dolphin-source-chip { padding:3px 8px; border-radius:100px; background:#f0eefb; color:#5c4ec2; font-size:11px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dolphin-tool-status { align-self:flex-start; padding:5px 10px; border-radius:8px; background:#f2f1f5; color:#706c78; font-size:11px; font-style:italic; }
 .dolphin-welcome { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; flex:1; color:#9895a2; text-align:center; }
 .dolphin-welcome svg { color:#c4c0d8; }
 .dolphin-welcome p { font-size:13px; color:#6b677a; }
