@@ -143,8 +143,11 @@ app:
     # 처리된 COLLECT는 실제 Batch API 단가(정가의 50%)에 맞춰 TaskWorkflowRunner에서 절반으로 계산한다.
     gemini-input-usd-per-million: ${GEMINI_INPUT_USD_PER_MILLION:0.25}
     gemini-output-usd-per-million: ${GEMINI_OUTPUT_USD_PER_MILLION:1.50}
-    deepseek-input-usd-per-million: ${DEEPSEEK_INPUT_USD_PER_MILLION:0.435}
-    deepseek-output-usd-per-million: ${DEEPSEEK_OUTPUT_USD_PER_MILLION:0.87}
+    # 2026-10-04: deepseek-v4-pro -> deepseek-flash로 전환하며 단가도 실제 flash 요금(피크 기준,
+    # 캐시미스 input $0.15~0.3/output $0.6~1.2)으로 갱신. 기존 0.435/0.87은 v4-pro 실제가의 1/3~1/4
+    # 수준으로 잘못 과소추정되어 있었음(사용자 실청구 $1/일과 대시보드 추정치 불일치로 발견).
+    deepseek-input-usd-per-million: ${DEEPSEEK_INPUT_USD_PER_MILLION:0.3}
+    deepseek-output-usd-per-million: ${DEEPSEEK_OUTPUT_USD_PER_MILLION:1.2}
     openai-input-usd-per-million: ${OPENAI_INPUT_USD_PER_MILLION:0.15}
     openai-output-usd-per-million: ${OPENAI_OUTPUT_USD_PER_MILLION:0.60}
     # AWS Bedrock — PM 단계를 DeepSeek 대신 Claude로 돌리는 토글용(pm_provider_setting 테이블로 전환).
