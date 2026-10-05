@@ -32,21 +32,24 @@ export interface ScannerTool {
 
 export const SCANNER_TOOLS: ScannerTool[] = [
   {
-    id: 'default-content-scanner',
-    name: '기본 콘텐츠/백업 파일 스캐너',
-    tagline: 'Tomcat/Apache/nginx/IIS/Next.js/API/CMS 기본 파일 + 백업 확장자 변형 + 우회 인코딩 포함 경로순회(Traversal) 퍼징',
+    id: 'recon-toolkit',
+    name: '정찰 올인원 스캐너',
+    tagline: '루트 확인 -> 기본/백업 파일 -> 경로순회(Traversal) -> 링크 크롤링을 한 파일로 통합, 다중 대상 동시 실행',
     standalone: true,
     notes: [
-      '인자 없이 실행하면(더블클릭 포함) URL·쿠키·모드만 순서대로 묻는 대화형 간단 모드로 진입 -- 옵션 이름 외울 필요 없음.',
-      '대상 기술 스택(--tech)을 더 이상 맨입으로 타이핑하지 않음 -- 번호 또는 이름을 쉼표로 구분해 입력하는 선택 메뉴(Nginx/Apache/Next.js/API/CMS 등 13종, all=전체 선택)로 바뀜.',
-      '--cookies/--headers로 로그인 후에만 보이는 경로도 점검 가능.',
-      '--tech에 axis/glassfish/iplanet/jrun/api/cms(wordpress·drupal·joomla)까지 추가됨, generic 목록도 SecLists quickhits.txt(2500여개) 병합으로 대폭 확대 -- "탐색 가짓수가 너무 적다"는 피드백 반영해 위 오프라인 올인원 패키지 자체를 훨씬 두껍게 채움. 해당 워드리스트 파일이 없으면(번들 없이 스크립트만 받은 경우) 그 항목만 자동으로 건너뜀(에러 아님).',
-      '경로순회(traversal) 모드는 기본으로 우회 인코딩(단일/이중 URL인코딩, 오버롱 UTF-8, null byte)을 자동 적용함(--no-bypass-encodings로 끌 수 있음), 타겟 파일도 시그니처로 검증 가능한 7종(passwd/apache·nginx·php 설정/win.ini/boot.ini/web.config)으로 확대.',
+      '예전에 "기본 콘텐츠/백업 스캐너"와 "사이트 크롤러"로 나뉘어 있던 걸 하나로 합침 -- 어느 걸 언제 쓰는지 헷갈리던 문제 해결.',
+      '신규: 루트 확인(root-discovery) 단계 -- example.com이 루트일지 example.com/a/b/c/d가 루트일지 사용자가 입력한 경로를 그냥 믿는 대신, robots.txt(1순위)/sitemap.xml/favicon.ico/index.html 등 마커 파일을 상위 경로로 거슬러 올라가며(그래도 못 찾으면 흔한 하위 마운트 경로 후보까지) 찔러보고 200 OK가 뜬 지점을 확인된 루트로 확정. 끝까지 못 찾으면 "미확인 추정 루트"라고 리포트에 명시.',
+      '신규: sitemap.xml/sitemap_index.xml 자동 탐색(robots.txt의 Sitemap: 지시자 포함, 인덱스면 재귀로 하위 sitemap까지) -- 크롤링 시드 URL 보강.',
+      '신규: --insecure -- 내부망 자체서명/사설CA 인증서 대상 전용 TLS 검증 끄기. 명시적으로 켜야만 적용, 기본은 항상 엄격 검증(자동 폴백 없음).',
+      '신규: 대상을 여러 개 지정 가능(인프라를 모르면 1개로 폭넓게, 알면 웹서버/WAS 등 N개를 명시적으로 나열) + --target-concurrency로 몇 개를 동시에 돌릴지 선택.',
+      '신규: --phases로 default/traversal/crawl 중 몇 개를 쓸지, --phase-concurrency로 그중 몇 개를 동시에 돌릴지 선택.',
+      'SecLists/PayloadsAllTheThings 서브셋 워드리스트가 이 파일 하나 안에 압축 내장됨 -- 별도 폴더 없이 이 파일만 있으면 바로 실행(폴더 구조/상대경로 걱정 없음).',
+      '인자 없이 실행하면(더블클릭 포함) 대상(여러 개 가능)·동시 실행 개수·TLS 검증 여부·쿠키·실행할 단계만 순서대로 묻는 대화형 간단 모드로 진입.',
       'robots.txt 준수 + 호스트별 최소 요청 간격 + 전체 요청 상한이 기본으로 항상 걸려 있음(끌 수 없음).',
     ],
     files: [
-      { filename: 'default_content_scanner.py', note: '스캐너 본체 -- 표준 라이브러리만' },
-      { filename: '설명서.txt', note: '3가지 모드(fingerprint/mutate/traversal) 전체 옵션 설명' },
+      { filename: 'recon_toolkit.py', note: '스캐너 본체 -- 표준 라이브러리만, 워드리스트 압축 내장' },
+      { filename: 'MANUAL_KR.txt', note: '단계 구성, 루트 확인 동작 방식, 전체 옵션 설명' },
     ],
   },
   {
@@ -164,23 +167,6 @@ export const SCANNER_TOOLS: ScannerTool[] = [
     ],
     files: [
       { filename: 'crypto_identifier.py' },
-      { filename: '설명서.txt' },
-    ],
-  },
-  {
-    id: 'site-crawler',
-    name: '사이트 깊이 크롤러',
-    tagline: 'URL+깊이로 링크를 따라가며 수집 -- 다른 스캐너에 넣을 URL 목록 뽑을 때',
-    standalone: true,
-    notes: [
-      '인자 없이 실행하면 URL·쿠키·깊이만 순서대로 묻는 대화형 간단 모드로 진입.',
-      '--cookies/--headers로 로그인 후에만 보이는 페이지도 크롤링 가능(크롤링·워드리스트 탐색·SPA 보조 탐지 전부 적용).',
-      '취약점 스캐너 아님(discovery 전용) -- 동시 요청 캡 + 호스트별 최소 간격이 항상 강제됨(끌 수 없음).',
-      '--wordlist로 경로 존재 탐색도 같이 가능 -- 이제 파일 경로를 직접 타이핑하는 대신 번들 포함 목록(common.txt·raft-large/medium-directories·raft-large/medium-files)을 번호/이름 쉼표 선택으로 고르고, 번들에 없는 경로(Burp 변환기 결과물 등)는 추가로 직접 입력 가능.',
-      '리포트 끝에 "수집 실패·건너뜀" 섹션이 추가됨 -- robots.txt 차단, 타임아웃/네트워크 오류, 범위 밖(다른 도메인) 스킵 건수를 전부 명시적으로 보여줘서 "경로를 다 구해왔는데도 뭐가 빠졌는지 모르겠다"는 상황을 없앰.',
-    ],
-    files: [
-      { filename: 'crawler.py' },
       { filename: '설명서.txt' },
     ],
   },

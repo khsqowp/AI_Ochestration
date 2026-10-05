@@ -1,0 +1,87 @@
+정찰 올인원 스캐너 (recon_toolkit.py) 사용설명서
+================================================
+
+기존에 "기본 콘텐츠/백업 스캐너"와 "사이트 크롤러" 두 개로 나뉘어 있던 도구를
+하나로 합쳤다. 어느 걸 언제 써야 하는지 헷갈리던 문제를 없애려고, 아래 순서의
+단계(phase)로 흐름을 고정했다.
+
+왜 "루트 확인" 단계가 새로 생겼나
+--------------------------------
+example.com이 루트 페이지일 수도 있고, example.com/a/b/c/d가 실제 루트일 수도
+있다. 기존 도구들은 사용자가 입력한 경로를 그냥 "루트"라고 믿고 그 자리에서부터
+기본 파일/백업 파일을 뒤졌는데, 그게 늘 맞는 가정은 아니었다. 이제는 입력한
+URL의 경로부터 시작해서
+
+  1) 입력 경로 그 자체
+  2) 상위 경로로 한 단계씩 거슬러 올라가며 (.../a/b/c -> .../a/b -> .../a -> 도메인 루트)
+  3) 그래도 못 찾으면 입력 경로/도메인 루트 바로 아래의 흔한 하위 마운트 경로 후보
+     (app, api, site, public, portal, www, admin, backend)
+
+순서로 robots.txt(1순위) + sitemap.xml + favicon.ico + index.html/php +
+.well-known/security.txt 를 찔러보고, 200 OK가 뜨는 첫 지점을 "확인된 루트"로
+확정한다. 끝까지 못 찾으면 입력 경로를 그대로 쓰되 리포트에 "미확인 추정 루트"
+라고 명시해서, 최소한 "확인 안 된 가정 위에서 돌렸다"는 사실 자체는 항상 보이게
+했다.
+
+단계(phase) 구성
+----------------
+  default    : 서버/프레임워크별 기본 파일, 민감 파일(.env/.git 등), 백업 확장자
+               변형(--mutate) 탐색. (옛 default_content_scanner.py의 fingerprint
+               + mutate 모드)
+  traversal  : 경로순회/LFI 퍼징, 우회 인코딩(단일/이중 URL인코딩, 오버롱 UTF-8,
+               null byte) 기본 적용. (옛 default_content_scanner.py의 traversal 모드)
+  crawl      : 확인된 루트(+ sitemap에서 찾은 URL)부터 깊이 제한 BFS로 링크를
+               따라가며 수집, --crawl-wordlist로 경로 존재 탐색도 같이 가능.
+               (옛 crawler.py)
+
+--phases default,traversal,crawl (기본값, 전부 실행) 로 몇 개를 쓸지 고르고,
+--phase-concurrency 로 그중 몇 개를 동시에 돌릴지 고른다(기본 1=순차 실행,
+서로 다른 단계가 같은 호스트에 동시에 요청을 쏘길 원치 않으면 그대로 둘 것).
+
+여러 대상, 동시 실행
+--------------------
+대상 URL을 여러 개 줄 수 있다 (공백으로 구분):
+    python recon_toolkit.py https://web.internal https://was1.internal https://was2.internal
+
+인프라 구성을 모르면 대상 하나로 폭넓게(기본 tech 목록 + generic) 돌리고,
+웹서버/WAS 등 구성요소를 이미 알고 있으면 그만큼 URL을 나열하면 된다.
+--target-concurrency N 으로 대상을 N개씩 동시에 돌릴지 고른다(기본 1=순차).
+대상별로 각각 루트 확인부터 다시 하고, 리포트도 대상별로 따로 나온다.
+
+내부망 / 자체서명 인증서 대상
+------------------------------
+--insecure 를 명시적으로 줘야만 TLS 인증서 검증을 끈다. 기본값은 항상 엄격
+검증이라, 외부 대상에 실수로 써도 안전하다. 자동으로 "검증 실패하면 그냥
+우회"하는 동작은 없음 -- 내부망 사설 인증서 대상에서만 직접 --insecure를 켤 것.
+
+워드리스트
+----------
+SecLists / PayloadsAllTheThings 서브셋이 이 파일 안에 압축 내장돼 있다. 폴더
+구조, 상대경로 걱정 없이 이 파일 하나만 있으면 바로 실행된다. --tech 종류별
+목록, generic 민감파일 목록(quickhits.txt 병합), traversal/LFI 페이로드,
+--crawl-wordlist 짧은 이름(common.txt, raft-large/medium-directories/files.txt)
+전부 포함.
+
+실행 방법
+--------
+인자 없이 실행(더블클릭 포함)하면 대상 URL(여러 개 가능)·동시 실행 개수·
+TLS 검증 여부·쿠키·실행할 단계만 순서대로 묻는 대화형 간단 모드로 진입한다.
+
+직접 옵션을 쓰려면:
+    python recon_toolkit.py https://target.example
+    python recon_toolkit.py https://target.example --insecure --tech tomcat,nginx --mutate
+    python recon_toolkit.py https://target.example --phases traversal --traversal-param file
+    python recon_toolkit.py https://target.example --phases crawl --crawl-depth 2 --crawl-wordlist common.txt
+
+전체 옵션은 --help 로 확인(옵션 이름/기본값은 영어, 설명 문구는 한글).
+
+안전장치 (항상 켜짐, 끌 수 없음)
+--------------------------------
+- robots.txt 준수 (--ignore-robots로만 끌 수 있음)
+- 호스트별 최소 요청 간격 (--min-interval, 기본 0.5초)
+- 동시 요청 수 상한 (--workers, 최대 10)
+- 대상 1개당 전체 요청 수 상한 (--max-requests, 기본 1000, 안전상한 3000은 --force로만 초과)
+
+주의
+----
+소유하거나 명시적으로 허가받은 대상에서만 사용할 것.
