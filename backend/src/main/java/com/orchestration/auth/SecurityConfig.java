@@ -73,6 +73,11 @@ class SecurityConfig {
         // 개인 할 일 목록 — 계정별로 스코프되어 있어 USER+ADMIN 모두 자신의 항목을 읽고 쓸 수 있어야 함
         .requestMatchers("/api/todos/**").authenticated()
 
+        // 오마카세 마지막 조회 위치 — 계정별로 스코프되어 있어 USER+ADMIN 모두 자신의 기록을 읽고 쓸 수 있어야 함.
+        // 오마카세 본문 페이지(/omakase)는 비로그인도 보지만, 위치 저장/복원은 로그인 사용자 전용 기능이라
+        // 이 하위 API만 인증을 요구한다.
+        .requestMatchers("/api/omakase/**").authenticated()
+
         // 음료 주문 — 공개 주문 페이지는 계정 없이 이름+PIN 으로 본인 주문만 조회/작성
         .requestMatchers("/api/orders/mine").permitAll()
         // 대시보드 주문판(전체 조회·구매 체크)은 ADMIN 전용
