@@ -6,22 +6,31 @@ import { useAppState } from '../../context/AppState'
 import { OMAKASE_TOPICS, type OmakaseFile, type OmakaseTopic } from '../../omakase-data'
 
 type Tab = { fileId: string; title: string }
-type TopicProgress = { fileId: string; scrollFraction: number }
+// 토픽 하나에 파일이 여러 개 있을 수 있어서, 파일별로 각자 스크롤 위치를 기억한다.
+// updatedAt은 토픽을 다시 열었을 때 "가장 최근에 보던 파일"을 고르는 기준.
+type FileProgress = { scrollFraction: number; updatedAt: number }
+type TopicProgressMap = Record<string, FileProgress> // fileId -> 위치
 
 const SCROLL_SAVE_DEBOUNCE_MS = 800
 // 만료 없음 — localStorage는 브라우저가 지우지 않는 한 그대로 남는다. 로그인 사용자는 서버(기기 간
 // 동기화)가 기준이고, 비로그인은 이 브라우저 안에서만 유지되는 로컬 기록으로 대체한다.
-const LOCAL_PROGRESS_KEY = 'omakase-progress-v1'
+const LOCAL_PROGRESS_KEY = 'omakase-progress-v2'
 
-function readLocalProgress(): Record<string, TopicProgress> {
+function readLocalProgress(): Record<string, TopicProgressMap> {
   try {
     const raw = window.localStorage.getItem(LOCAL_PROGRESS_KEY)
-    return raw ? JSON.parse(raw) as Record<string, TopicProgress> : {}
+    return raw ? JSON.parse(raw) as Record<string, TopicProgressMap> : {}
   } catch { return {} }
 }
 
-function writeLocalProgress(map: Record<string, TopicProgress>) {
+function writeLocalProgress(map: Record<string, TopicProgressMap>) {
   try { window.localStorage.setItem(LOCAL_PROGRESS_KEY, JSON.stringify(map)) } catch { /* 저장 공간 없음 등 — 무시 */ }
+}
+
+function lastActiveFileId(entries: TopicProgressMap | undefined): string | undefined {
+  if (!entries) return undefined
+  const sorted = Object.entries(entries).sort((a, b) => b[1].updatedAt - a[1].updatedAt)
+  return sorted[0]?.[0]
 }
 
 export function OmakasePage() {
@@ -34,7 +43,7 @@ export function OmakasePage() {
   const [content, setContent] = useState<Record<string, string>>({})
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [progressByTopic, setProgressByTopic] = useState<Record<string, TopicProgress>>({})
+  const [progressByTopic, setProgressByTopic] = useState<Record<string, TopicProgressMap>>({})
 
   const contentRef = useRef<HTMLDivElement | null>(null)
   const pendingScrollFractionRef = useRef<number | null>(null)
@@ -51,15 +60,20 @@ export function OmakasePage() {
     if (!loggedIn) { setProgressByTopic(readLocalProgress()); return }
     fetch('/api/omakase/progress', { credentials: 'include' })
       .then(r => (r.ok ? r.json() : []))
-      .then((rows: { topicId: string; fileId: string; scrollFraction: number }[]) => {
-        setProgressByTopic(Object.fromEntries(rows.map(r => [r.topicId, { fileId: r.fileId, scrollFraction: r.scrollFraction }])))
+      .then((rows: { topicId: string; fileId: string; scrollFraction: number; updatedAt: string }[]) => {
+        const map: Record<string, TopicProgressMap> = {}
+        for (const r of rows) {
+          (map[r.topicId] ??= {})[r.fileId] = { scrollFraction: r.scrollFraction, updatedAt: new Date(r.updatedAt).getTime() }
+        }
+        setProgressByTopic(map)
       })
       .catch(() => {})
   }, [loggedIn])
 
   function saveProgress(topicId: string, fileId: string, scrollFraction: number) {
+    const updatedAt = Date.now()
     setProgressByTopic(prev => {
-      const next = { ...prev, [topicId]: { fileId, scrollFraction } }
+      const next = { ...prev, [topicId]: { ...prev[topicId], [fileId]: { scrollFraction, updatedAt } } }
       if (!loggedIn) writeLocalProgress(next)
       return next
     })
@@ -107,12 +121,9 @@ export function OmakasePage() {
     setActiveTabId(null)
     setLoadError(null)
 
-    const saved = progressByTopic[next.id]
-    const lastFile = saved ? next.files.find(f => f.id === saved.fileId) : undefined
-    if (saved && lastFile) {
-      pendingScrollFractionRef.current = saved.scrollFraction
-      openFile(lastFile)
-    }
+    const lastId = lastActiveFileId(progressByTopic[next.id])
+    const lastFile = lastId ? next.files.find(f => f.id === lastId) : undefined
+    if (lastFile) openFile(next.id, lastFile)
   }
 
   function backToGrid() {
@@ -122,10 +133,26 @@ export function OmakasePage() {
     setLoadError(null)
   }
 
-  function openFile(file: OmakaseFile) {
+  // 파일별로 각자 스크롤 위치를 기억하므로, 실제로 "다른 파일로 전환"할 때마다 그 파일의
+  // 저장된 위치로 복원(없으면 맨 위 0으로)한다 -- 안 하면 이전 파일의 스크롤 위치가 새
+  // 파일에도 그대로 남아있는 채 보임.
+  function restoreOrResetScroll(topicId: string, fileId: string) {
+    const saved = progressByTopic[topicId]?.[fileId]
+    pendingScrollFractionRef.current = saved?.scrollFraction ?? 0
+  }
+
+  function switchTab(fileId: string) {
+    if (!topic || activeTabId === fileId) return
+    setActiveTabId(fileId)
+    restoreOrResetScroll(topic.id, fileId)
+  }
+
+  function openFile(topicId: string, file: OmakaseFile) {
+    const switching = activeTabId !== file.id
     setTabs(prev => (prev.some(t => t.fileId === file.id) ? prev : [...prev, { fileId: file.id, title: file.title }]))
     setActiveTabId(file.id)
     setLoadError(null)
+    if (switching) restoreOrResetScroll(topicId, file.id)
     if (content[file.id] !== undefined || loadingId === file.id) return
     setLoadingId(file.id)
     fetch(file.path)
@@ -147,7 +174,9 @@ export function OmakasePage() {
         setActiveTopicId(null)
         setActiveTabId(null)
       } else if (activeTabId === fileId) {
-        setActiveTabId(next[Math.min(idx, next.length - 1)].fileId)
+        const nextFileId = next[Math.min(idx, next.length - 1)].fileId
+        setActiveTabId(nextFileId)
+        if (topic) restoreOrResetScroll(topic.id, nextFileId)
       }
       return next
     })
@@ -177,7 +206,7 @@ export function OmakasePage() {
                   key={file.id}
                   type="button"
                   className={`omakase-file-row ${isOpen ? 'active' : ''}`}
-                  onClick={() => openFile(file)}
+                  onClick={() => openFile(topic.id, file)}
                 ><FileText size={14}/> <span>{file.title}</span></button>
               })}
             </div>)}
@@ -190,7 +219,7 @@ export function OmakasePage() {
         {tabs.map(tab => <div
           key={tab.fileId}
           className={`omakase-tab ${activeTabId === tab.fileId ? 'active' : ''}`}
-          onClick={() => setActiveTabId(tab.fileId)}
+          onClick={() => switchTab(tab.fileId)}
         >
           <FileText size={13}/>
           <span className="omakase-tab-title">{tab.title}</span>

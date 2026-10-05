@@ -7,5 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 interface OmakaseProgressRepository extends JpaRepository<OmakaseProgress, UUID> {
   List<OmakaseProgress> findByOwnerId(UUID ownerId);
-  Optional<OmakaseProgress> findByOwnerIdAndTopicId(UUID ownerId, String topicId);
+  Optional<OmakaseProgress> findByOwnerIdAndTopicIdAndFileId(UUID ownerId, String topicId, String fileId);
 }

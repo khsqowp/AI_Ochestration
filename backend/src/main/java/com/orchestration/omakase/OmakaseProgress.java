@@ -10,10 +10,11 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.util.UUID;
 
-/** 로그인 사용자가 오마카세 커리큘럼(토픽)별로 마지막으로 본 파일과 그 안의 스크롤 위치.
- * 토픽을 다시 열면 이 값으로 바로 복귀한다 -- 토픽당 행 하나(owner_id, topic_id 유일). */
+/** 로그인 사용자가 오마카세 커리큘럼(토픽) 안의 파일별로 마지막 스크롤 위치를 기억한다.
+ * 토픽을 다시 열면 그 토픽에서 가장 최근(updatedAt)에 본 파일로 복귀하고, 파일을 바꿔가며
+ * 봐도 각 파일은 자기 위치를 각자 기억한다 -- 행 하나당 (owner_id, topic_id, file_id) 유일. */
 @Entity
-@Table(name = "omakase_progress", uniqueConstraints = @UniqueConstraint(columnNames = {"owner_id", "topic_id"}))
+@Table(name = "omakase_progress", uniqueConstraints = @UniqueConstraint(columnNames = {"owner_id", "topic_id", "file_id"}))
 public class OmakaseProgress {
   @Id @GeneratedValue(strategy = GenerationType.UUID) private UUID id;
   @Column(nullable = false) private UUID ownerId;

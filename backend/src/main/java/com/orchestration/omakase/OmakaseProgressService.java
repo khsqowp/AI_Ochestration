@@ -13,7 +13,7 @@ public class OmakaseProgressService {
   public List<OmakaseProgress> list(UUID ownerId) { return progress.findByOwnerId(ownerId); }
 
   public OmakaseProgress save(UUID ownerId, String topicId, String fileId, double scrollFraction) {
-    OmakaseProgress existing = progress.findByOwnerIdAndTopicId(ownerId, topicId).orElse(null);
+    OmakaseProgress existing = progress.findByOwnerIdAndTopicIdAndFileId(ownerId, topicId, fileId).orElse(null);
     if (existing != null) {
       existing.apply(fileId, scrollFraction);
       return progress.save(existing);
