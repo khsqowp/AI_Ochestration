@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAR 엔드포인트 트리</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 1360px; margin: auto; padding: 28px 22px 60px; }
+  h1 { margin: 0 0 8px; font-size: 30px; }
+  p { margin: 0 0 18px; color: #a8b8ce; line-height: 1.6; }
+  .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
+  input, button, select { font: inherit; }
+  input[type=file] { width: 100%; padding: 16px; border: 1px dashed #6a83a7; border-radius: 9px; background: #101c2c; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .controls input[type=search] { flex: 1; min-width: 220px; padding: 10px; border: 1px solid #526683; border-radius: 8px; background: #0e1a2a; color: inherit; }
+  button, select { padding: 9px 12px; border-radius: 8px; border: 1px solid #557099; background: #273c59; color: inherit; cursor: pointer; }
+  button:hover { background: #335275; }
+  button:disabled { opacity: .5; cursor: default; }
+  .primary { background: #2f76cf; border-color: #5797ef; }
+  #status, #summary { color: #aebed2; font-size: 14px; }
+  #summary { margin: 15px 0; }
+  .table { overflow: auto; max-height: 70vh; border: 1px solid #30425e; border-radius: 9px; }
+  .head, .route { display: grid; grid-template-columns: minmax(300px, 1.5fr) minmax(180px, 1fr) 92px 74px; gap: 12px; align-items: center; min-width: 730px; }
+  .head { position: sticky; top: 0; z-index: 2; padding: 11px 12px; background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; }
+  .head span:last-child { text-align: right; }
+  .tree { padding: 6px 0; min-width: 730px; }
+  details { margin-left: 18px; border-left: 1px solid #344760; padding-left: 12px; }
+  .tree > details { margin-left: 10px; border: 0; padding-left: 0; }
+  summary { cursor: pointer; padding: 7px 4px; color: #b9cce5; font-weight: 650; }
+  summary:hover { color: #8dc9ff; }
+  .route { padding: 8px 10px 8px 16px; margin-left: 18px; border-left: 1px solid #344760; border-top: 1px solid #263850; }
+  .route:hover { background: #1d2d44; }
+  .path { overflow-wrap: anywhere; }
+  .params { color: #d0ddef; font-size: 13px; overflow-wrap: anywhere; }
+  .method { display: inline-block; min-width: 58px; text-align: center; border-radius: 5px; padding: 4px 6px; font-size: 12px; font-weight: 750; background: #365072; }
+  .method.get { color: #95d8ff; } .method.post { color: #aaf0bf; } .method.delete { color: #ffb4b4; }
+  .copy { justify-self: end; padding: 5px 9px; font-size: 12px; }
+  .badge { display: inline-block; margin-right: 7px; padding: 2px 5px; border-radius: 4px; font-size: 11px; background: #315f4c; color: #b8f3d4; }
+  .badge.candidate { background: #68552c; color: #ffe3a0; }
+  .hint { display: block; margin-top: 3px; color: #8da1bc; font-size: 11px; }
+  .empty { padding: 20px; color: #9fb1c8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>HAR 엔드포인트 트리</h1>
+  <p>로그인한 브라우저의 Network에서 Preserve log를 켜고 탐색한 뒤 HAR를 내보내세요. 이 파일은 브라우저 안에서만 분석하며 서버로 전송하지 않습니다.</p>
+  <section class="panel">
+    <input id="files" type="file" accept=".har,.json,application/json" multiple aria-label="HAR 파일 선택">
+    <div class="controls"><button class="primary" id="analyze">분석하기</button><button id="clear">초기화</button><span id="status" role="status"></span></div>
+  </section>
+  <section class="panel">
+    <div class="controls" style="margin-top:0">
+      <input id="search" type="search" placeholder="경로, 도메인, 파라미터 검색" aria-label="결과 검색">
+      <select id="scope" aria-label="결과 종류"><option value="all">전체</option><option value="observed">실제 요청</option><option value="candidate">JS 후보</option></select>
+      <button id="expand">모두 펼치기</button><button id="collapse">모두 접기</button>
+    </div>
+    <div id="summary">HAR 파일을 선택해 주세요.</div>
+    <div class="table"><div class="head"><span>경로</span><span>파라미터 이름</span><span>메서드</span><span>복사</span></div><div id="tree" class="tree"><div class="empty">분석 결과가 여기에 표시됩니다.</div></div></div>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let results = [];
+  let stats = { requests: 0, scripts: 0, scriptBodies: 0 };
+  const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
+  const staticExt = /\.(?:js|mjs|cjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|mp4|webm|pdf)(?:$|[?#])/i;
+
+  function parseUrl(raw, base) {
+    if (typeof raw !== 'string') return null;
+    let text = raw.trim().replace(/\\\//g, '/').replace(/\$\{[^}]+\}/g, '{…}');
+    if (!text || /^(?:data|blob|javascript|mailto):/i.test(text)) return null;
+    if (/^\/(?:\/|\*)/.test(text)) return null;
+    if (!/^(?:https?:)?\/\//i.test(text) && !text.startsWith('/')) {
+      if (!/^(?:api|v\d+|graphql|rest)\//i.test(text)) return null;
+      text = '/' + text;
+    }
+    try {
+      const url = new URL(text.startsWith('//') ? 'https:' + text : text, base);
+      if (!/^https?:$/.test(url.protocol)) return null;
+      return { host: url.host.toLowerCase(), path: url.pathname || '/', query: [...url.searchParams.keys()], origin: url.origin };
+    } catch { return null; }
+  }
+
+  function add(map, data) {
+    const key = [data.kind, data.host, data.path, data.method].join('\u0000');
+    if (!map.has(key)) map.set(key, { ...data, params: new Set(), sources: new Set(), count: 0 });
+    const item = map.get(key);
+    for (const param of data.params || []) if (param) item.params.add(param);
+    if (data.source) item.sources.add(data.source);
+    item.count++;
+  }
+
+  function bodyParams(postData) {
+    if (!postData || typeof postData !== 'object') return [];
+    const names = new Set((postData.params || []).map(x => x.name).filter(Boolean));
+    const raw = postData.text;
+    if (typeof raw !== 'string') return [...names];
+    const mime = postData.mimeType || '';
+    if (/json/i.test(mime)) {
+      try {
+        const visit = (value, prefix = '', depth = 0) => {
+          if (!value || typeof value !== 'object' || depth > 4) return;
+          for (const [key, nested] of Object.entries(value)) {
+            const name = prefix ? prefix + '.' + key : key;
+            names.add(name);
+            visit(nested, name, depth + 1);
+          }
+        };
+        visit(JSON.parse(raw));
+      } catch { /* Invalid or truncated JSON body. */ }
+    } else if (/x-www-form-urlencoded/i.test(mime)) {
+      for (const key of new URLSearchParams(raw).keys()) names.add(key);
+    }
+    return [...names];
+  }
+
+  function responseText(content) {
+    if (!content || typeof content.text !== 'string') return null;
+    if (content.encoding !== 'base64') return content.text;
+    try {
+      const binary = atob(content.text);
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    } catch { return null; }
+  }
+
+  function jsCandidates(code, source, map) {
+    let base;
+    try { base = new URL(source).origin; } catch { return; }
+    const push = (raw, method = '?') => {
+      const parsed = parseUrl(raw, base);
+      if (!parsed || staticExt.test(parsed.path)) return;
+      add(map, { ...parsed, kind: 'candidate', method, params: parsed.query, source });
+    };
+    // Request calls provide stronger evidence and sometimes a visible HTTP method.
+    const calls = /\b(?:axios\s*\.\s*(get|post|put|patch|delete|head|options)|fetch)\s*\(\s*(["'`])((?:\\.|(?!\2)[^\\])*?)\2/gi;
+    for (const match of code.matchAll(calls)) push(match[3], match[1] ? match[1].toUpperCase() : '?');
+    // Other string literals may be endpoint definitions; label them as candidates.
+    const literals = /(["'`])((?:\\.|(?!\1)[^\\])*?)\1/g;
+    for (const match of code.matchAll(literals)) {
+      const value = match[2];
+      if (/^(?:https?:)?\/\//i.test(value) || value.startsWith('/') || /^(?:api|v\d+|graphql|rest)\//i.test(value)) push(value);
+    }
+  }
+
+  function analyzeHar(har, observed, candidates) {
+    const entries = har?.log?.entries;
+    if (!Array.isArray(entries)) throw new Error('HAR 형식이 아닙니다 (log.entries 없음).');
+    for (const entry of entries) {
+      const request = entry?.request;
+      if (!request?.url) continue;
+      stats.requests++;
+      const parsed = parseUrl(request.url);
+      if (parsed) {
+        const method = String(request.method || '?').toUpperCase();
+        const query = (request.queryString || []).map(x => x.name).filter(Boolean);
+        add(observed, { ...parsed, kind: 'observed', method, params: [...parsed.query, ...query, ...bodyParams(request.postData)], source: request.url });
+      }
+      const content = entry.response?.content;
+      const script = /(?:java|ecma)script/i.test(content?.mimeType || '') || /\.(?:js|mjs|cjs)(?:$|[?#])/i.test(request.url);
+      if (!script) continue;
+      stats.scripts++;
+      const code = responseText(content);
+      if (code === null) continue;
+      stats.scriptBodies++;
+      jsCandidates(code, request.url, candidates);
+    }
+  }
+
+  function finalize(observed, candidates) {
+    const actual = [...observed.values()];
+    const known = new Map();
+    const candidateMethods = new Map();
+    for (const item of actual) {
+      const key = item.host + '\u0000' + item.path;
+      if (!known.has(key)) known.set(key, new Set());
+      known.get(key).add(item.method);
+    }
+    for (const item of candidates.values()) {
+      const key = item.host + '\u0000' + item.path;
+      if (!candidateMethods.has(key)) candidateMethods.set(key, new Set());
+      candidateMethods.get(key).add(item.method);
+    }
+    const hidden = [...candidates.values()].filter(item => {
+      const key = item.host + '\u0000' + item.path;
+      const seen = known.get(key);
+      if (item.method === '?' && candidateMethods.get(key)?.size > 1) return false;
+      return !seen || (item.method !== '?' && !seen.has(item.method));
+    });
+    return [...actual, ...hidden].sort((a, b) => (a.host + a.path + a.method).localeCompare(b.host + b.path + b.method));
+  }
+
+  function visible() {
+    const query = $('search').value.trim().toLocaleLowerCase();
+    const scope = $('scope').value;
+    return results.filter(item => {
+      if (scope !== 'all' && scope !== item.kind) return false;
+      return !query || [item.host, item.path, item.method, ...item.params].some(x => x.toLocaleLowerCase().includes(query));
+    });
+  }
+
+  function treeNode() { return { children: new Map(), routes: [] }; }
+  function build(items) {
+    const root = treeNode();
+    for (const item of items) {
+      let node = root;
+      for (const part of [item.host, ...item.path.split('/').filter(Boolean)]) {
+        if (!node.children.has(part)) node.children.set(part, treeNode());
+        node = node.children.get(part);
+      }
+      node.routes.push(item);
+    }
+    return root;
+  }
+
+  function copyValue(item) {
+    const params = [...item.params].filter(x => !x.includes('.'));
+    return item.origin + item.path + (params.length ? '?' + params.map(x => encodeURIComponent(x) + '={' + x + '}').join('&') : '');
+  }
+  async function copy(text, button) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = text; document.body.append(area); area.select();
+      document.execCommand('copy'); area.remove();
+    }
+    const old = button.textContent;
+    button.textContent = '복사됨';
+    setTimeout(() => button.textContent = old, 1200);
+  }
+  function routeRow(item) {
+    const row = document.createElement('div'); row.className = 'route';
+    const path = document.createElement('div'); path.className = 'path';
+    const badge = document.createElement('span'); badge.className = 'badge' + (item.kind === 'candidate' ? ' candidate' : '');
+    badge.textContent = item.kind === 'candidate' ? 'JS 후보' : '실제 요청'; path.append(badge);
+    const label = document.createElement('span'); label.textContent = item.path; path.append(label);
+    const hint = document.createElement('span'); hint.className = 'hint';
+    hint.textContent = item.kind === 'observed' ? `${item.count}회 요청` : `${item.sources.size}개 JS에서 발견`;
+    path.append(hint);
+    const params = document.createElement('div'); params.className = 'params';
+    params.textContent = item.params.size ? [...item.params].sort().join(', ') : '—';
+    const methodCell = document.createElement('div');
+    const method = document.createElement('span'); method.className = 'method ' + item.method.toLowerCase();
+    method.textContent = item.method; method.title = item.method === '?' ? 'JS 문자열에서 메서드를 확인할 수 없음' : item.method;
+    methodCell.append(method);
+    const button = document.createElement('button'); button.className = 'copy'; button.textContent = '복사';
+    button.title = '값을 제외한 URL과 파라미터 이름 복사';
+    button.addEventListener('click', () => copy(copyValue(item), button));
+    row.append(path, params, methodCell, button);
+    return row;
+  }
+  function renderBranch(container, node, depth = 0) {
+    for (const [name, child] of [...node.children].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const details = document.createElement('details'); details.open = depth < 2;
+      const summary = document.createElement('summary'); summary.textContent = name; details.append(summary);
+      for (const item of child.routes) details.append(routeRow(item));
+      renderBranch(details, child, depth + 1);
+      container.append(details);
+    }
+  }
+  function render() {
+    const items = visible(); $('tree').replaceChildren();
+    if (items.length) renderBranch($('tree'), build(items));
+    else { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '표시할 결과가 없습니다.'; $('tree').append(empty); }
+    const actual = results.filter(x => x.kind === 'observed').length;
+    const candidate = results.length - actual;
+    $('summary').textContent = `${items.length}개 표시 · 실제 요청 ${actual}개 · JS 후보 ${candidate}개 · JS 응답 본문 ${stats.scriptBodies}/${stats.scripts}개 분석`;
+  }
+
+  $('analyze').addEventListener('click', async () => {
+    const files = [...$('files').files];
+    if (!files.length) { $('status').textContent = 'HAR 파일을 선택해 주세요.'; return; }
+    $('status').textContent = '분석 중…';
+    const observed = new Map(), candidates = new Map();
+    stats = { requests: 0, scripts: 0, scriptBodies: 0 };
+    try {
+      for (const file of files) analyzeHar(JSON.parse(await file.text()), observed, candidates);
+      results = finalize(observed, candidates); render();
+      $('status').textContent = `${files.length}개 HAR, ${stats.requests}개 요청 분석 완료`;
+    } catch (error) { $('status').textContent = `분석 실패: ${error.message}`; }
+  });
+  $('clear').addEventListener('click', () => { $('files').value = ''; $('search').value = ''; $('scope').value = 'all'; results = []; stats = { requests: 0, scripts: 0, scriptBodies: 0 }; $('tree').replaceChildren(); $('summary').textContent = 'HAR 파일을 선택해 주세요.'; $('status').textContent = ''; });
+  $('search').addEventListener('input', render); $('scope').addEventListener('change', render);
+  $('expand').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = true));
+  $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
+})();
+</script>
+</body>
+</html>

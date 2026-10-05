@@ -17,8 +17,8 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 
 log() { echo "[build-offline-bundle] $*"; }
 
-log "도구 3종 복사 중"
-for tool in recon-toolkit safe-http-audit burp-history-tool; do
+log "도구 4종 복사 중"
+for tool in recon-toolkit safe-http-audit burp-history-tool route-tree-tools; do
   cp -R "$FIXTURES_DIR/$tool" "$STAGE_DIR/$tool"
   find "$STAGE_DIR/$tool" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
   if [ -f "$STAGE_DIR/$tool/설명서.txt" ]; then
@@ -31,8 +31,9 @@ cat > "$STAGE_DIR/READ_ME_FIRST.txt" <<'EOF'
 ======================================================
 
 인터넷이 전혀 안 되고 이 웹사이트조차 못 여는 내부망 PC에 그대로 반입해서
-쓰는 패키지. 도구 3개(.py 스크립트 + 설명서) 전부 pip install 같은 패키지
-설치 없이 바로 실행 가능(전부 Python 표준 라이브러리만 사용).
+쓰는 패키지. 도구 3개(.py 스크립트 + 설명서)는 pip install 같은 패키지
+설치 없이 바로 실행 가능(전부 Python 표준 라이브러리만 사용). route-tree-tools
+안의 2개(.html)는 Python도 필요 없이 브라우저로 파일 열면 바로 동작.
 
 recon-toolkit/recon_toolkit.py 는 워드리스트(SecLists/PayloadsAllTheThings
 서브셋)가 파일 안에 압축 내장돼 있다 -- 별도 폴더 필요 없이 이 파일 하나만
@@ -51,6 +52,8 @@ recon-toolkit/recon_toolkit.py 는 워드리스트(SecLists/PayloadsAllTheThings
   recon-toolkit/recon_toolkit.py              <- 루트확인/기본파일/경로순회/크롤링 올인원
   safe-http-audit/safe_http_audit.py (+ safe_rule_bundle.py, safe_http_checks/)
   burp-history-tool/burp_history_to_wordlist.py  (네트워크 요청 없음, 어디서나 실행 가능)
+  route-tree-tools/har-endpoint-tree.html      <- HAR 엔드포인트 트리 (브라우저로 직접 열기)
+  route-tree-tools/js-route-tree.html          <- JS URL·API 경로 트리 (브라우저로 직접 열기)
 
 실행 방법
 --------

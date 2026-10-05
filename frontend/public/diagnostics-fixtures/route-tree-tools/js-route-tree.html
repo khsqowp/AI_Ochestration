@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JS URL · API 경로 트리</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0e1420; color: #e7edf7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1200px; margin: auto; padding: 32px 20px 60px; }
+    h1 { margin: 0 0 7px; font-size: clamp(24px, 4vw, 34px); }
+    p { color: #aebbd0; line-height: 1.6; }
+    .panel { background: #172235; border: 1px solid #30405b; border-radius: 14px; padding: 20px; margin-top: 18px; }
+    .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    label { display: block; font-weight: 650; margin-bottom: 9px; }
+    input, textarea, button { font: inherit; }
+    input[type=file] { width: 100%; padding: 14px; background: #111b2b; border: 1px dashed #5c7397; border-radius: 9px; color: #dce8f9; }
+    textarea { display: block; width: 100%; min-height: 150px; resize: vertical; padding: 13px; background: #101a29; border: 1px solid #405574; border-radius: 9px; color: #e7edf7; }
+    .actions { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-top: 15px; }
+    button { border: 1px solid #5576a0; border-radius: 8px; padding: 9px 14px; background: #273c5b; color: #f2f7ff; cursor: pointer; }
+    button.primary { background: #3779d5; border-color: #5796ed; }
+    button:hover { filter: brightness(1.15); }
+    button:disabled { opacity: .45; cursor: default; }
+    #status { margin-left: auto; color: #b8c8de; font-size: 14px; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .toolbar input { min-width: 220px; flex: 1; background: #101a29; border: 1px solid #405574; border-radius: 8px; padding: 10px; color: #e7edf7; }
+    .summary { margin: 16px 0; color: #b8c8de; font-size: 14px; }
+    .tree { overflow: auto; max-height: 65vh; }
+    details { margin-left: 17px; border-left: 1px solid #34455f; padding-left: 12px; }
+    .tree > details { margin-left: 0; }
+    summary { cursor: pointer; padding: 5px 0; }
+    summary:hover, .leaf:hover { color: #8fc5ff; }
+    .leaf { padding: 5px 0 5px 13px; margin-left: 17px; border-left: 1px solid #34455f; overflow-wrap: anywhere; }
+    .leaf a { color: #a9d3ff; text-decoration: none; }
+    .leaf a:hover { text-decoration: underline; }
+    .tag { display: inline-block; margin-left: 7px; padding: 2px 6px; border-radius: 5px; background: #304562; color: #c8d9ec; font-size: 11px; vertical-align: middle; }
+    .methods { color: #83dcb7; font-size: 12px; margin-right: 7px; }
+    .muted { color: #8799b2; }
+    @media (max-width: 750px) { .input-grid { grid-template-columns: 1fr; } #status { width: 100%; margin: 0; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>JS URL · API 경로 트리</h1>
+  <p>JavaScript 파일을 선택하거나 코드를 붙여넣으세요. 분석은 브라우저 안에서만 이루어지며 입력한 코드를 실행하거나 전송하지 않습니다.</p>
+  <section class="panel">
+    <div class="input-grid">
+      <div><label for="files">JS 파일</label><input id="files" type="file" accept=".js,.mjs,.cjs,.jsx,.ts,.tsx,.txt" multiple></div>
+      <div><label for="source">코드 붙여넣기</label><textarea id="source" spellcheck="false" placeholder="fetch('/api/users');&#10;axios.get('https://example.com/v1/items');"></textarea></div>
+    </div>
+    <div class="actions"><button id="analyze" class="primary">분석하기</button><button id="clear">초기화</button><span id="status" role="status"></span></div>
+  </section>
+  <section class="panel">
+    <div class="toolbar"><input id="filter" type="search" placeholder="경로, 도메인, 파일명 검색" aria-label="결과 검색"><button id="expand">모두 펼치기</button><button id="collapse">모두 접기</button><button id="copy" disabled>목록 복사</button><button id="download" disabled>CSV 저장</button></div>
+    <div id="summary" class="summary">분석 결과가 여기에 표시됩니다.</div>
+    <div id="tree" class="tree"></div>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let records = [];
+
+  function normalize(raw) {
+    let value = raw.trim().replace(/\\\\/g, '/').replace(/\\\//g, '/');
+    value = value.replace(/^["'`]|["'`]$/g, '');
+    value = value.replace(/[),;]+$/, '');
+    if (/^(?:data|blob|javascript|mailto):/i.test(value)) return null;
+    if (/^(?:https?:)?\/\//i.test(value)) {
+      try {
+        const url = new URL(value.startsWith('//') ? 'https:' + value : value);
+        return { kind: 'url', host: url.host.toLowerCase(), path: url.pathname || '/', display: value };
+      } catch { return null; }
+    }
+    if (!value.startsWith('/') || value.startsWith('//') || value.length < 2) return null;
+    if (/^\/(?:\*|\/)/.test(value) || /\s/.test(value)) return null;
+    return { kind: 'path', host: '', path: value.split(/[?#]/)[0] || '/', display: value };
+  }
+
+  function extract(text, filename) {
+    const found = [];
+    const add = (value, method = '') => {
+      const route = normalize(value);
+      if (route) found.push({ ...route, method, file: filename });
+    };
+    // Quoted absolute URLs and root-relative paths, including values inside template literals.
+    const literals = /(["'`])((?:\\.|(?!\1)[^\\])*?)\1/g;
+    for (const match of text.matchAll(literals)) {
+      const content = match[2];
+      if (/^(?:https?:)?\/\//i.test(content) || content.startsWith('/')) add(content);
+    }
+    // Common request calls also expose a method when it is visible in the source.
+    const calls = /\b(?:axios\s*\.\s*(get|post|put|patch|delete|head|options)|fetch|open)\s*\(\s*(["'`])((?:\\.|(?!\2)[^\\])*?)\2/gi;
+    for (const match of text.matchAll(calls)) add(match[3], match[1]?.toUpperCase() || (match[0].startsWith('fetch') ? 'FETCH' : ''));
+    // Bare absolute URLs in comments and configuration text.
+    const bare = /https?:\/\/[^\s"'`<>\\)\]]+/gi;
+    for (const match of text.matchAll(bare)) add(match[0]);
+    return found;
+  }
+
+  function dedupe(items) {
+    const map = new Map();
+    for (const item of items) {
+      const key = [item.kind, item.host, item.path, item.display].join('\u0000');
+      if (!map.has(key)) map.set(key, { ...item, files: new Set(), methods: new Set() });
+      map.get(key).files.add(item.file);
+      if (item.method) map.get(key).methods.add(item.method);
+    }
+    return [...map.values()].sort((a, b) => (a.host + a.path).localeCompare(b.host + b.path));
+  }
+
+  function node() { return { children: new Map(), items: [] }; }
+  function buildTree(items) {
+    const root = node();
+    for (const item of items) {
+      const parts = [item.kind === 'url' ? item.host : '상대 경로', ...item.path.split('/').filter(Boolean)];
+      let current = root;
+      for (const part of parts) {
+        if (!current.children.has(part)) current.children.set(part, node());
+        current = current.children.get(part);
+      }
+      current.items.push(item);
+    }
+    return root;
+  }
+
+  function renderNode(container, branch, depth = 0) {
+    for (const [name, child] of [...branch.children].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const details = document.createElement('details');
+      details.open = depth < 2;
+      const summary = document.createElement('summary');
+      summary.textContent = name;
+      details.append(summary);
+      for (const item of child.items) {
+        const leaf = document.createElement('div');
+        leaf.className = 'leaf';
+        if (item.methods.size) {
+          const method = document.createElement('span');
+          method.className = 'methods';
+          method.textContent = [...item.methods].join(', ');
+          leaf.append(method);
+        }
+        const label = document.createElement('span');
+        label.textContent = item.display;
+        leaf.append(label);
+        const source = document.createElement('span');
+        source.className = 'tag';
+        source.textContent = [...item.files].join(', ');
+        leaf.append(source);
+        details.append(leaf);
+      }
+      renderNode(details, child, depth + 1);
+      container.append(details);
+    }
+  }
+
+  function visible() {
+    const query = $('filter').value.trim().toLocaleLowerCase();
+    return query ? records.filter(x => [x.display, x.host, ...x.files].some(v => v.toLocaleLowerCase().includes(query))) : records;
+  }
+  function render() {
+    const items = visible();
+    $('tree').replaceChildren();
+    renderNode($('tree'), buildTree(items));
+    $('summary').textContent = records.length ? `${items.length}개 표시 / 총 ${records.length}개 경로` : '추출된 경로가 없습니다.';
+    $('copy').disabled = $('download').disabled = !items.length;
+  }
+  function rows() {
+    return visible().map(x => ({ type: x.kind, method: [...x.methods].join('|'), url: x.display, files: [...x.files].join('|') }));
+  }
+  function csvCell(value) { return '"' + String(value).replace(/"/g, '""') + '"'; }
+  $('analyze').addEventListener('click', async () => {
+    const files = [...$('files').files];
+    const pasted = $('source').value;
+    if (!files.length && !pasted.trim()) { $('status').textContent = '파일을 선택하거나 코드를 붙여넣으세요.'; return; }
+    $('status').textContent = '분석 중…';
+    try {
+      const sources = await Promise.all(files.map(async file => ({ name: file.name, text: await file.text() })));
+      if (pasted.trim()) sources.push({ name: '붙여넣기', text: pasted });
+      records = dedupe(sources.flatMap(x => extract(x.text, x.name)));
+      render();
+      $('status').textContent = `${sources.length}개 입력 분석 완료`;
+    } catch (error) { $('status').textContent = `읽기 실패: ${error.message}`; }
+  });
+  $('clear').addEventListener('click', () => { $('files').value = ''; $('source').value = ''; $('filter').value = ''; records = []; render(); $('status').textContent = ''; });
+  $('filter').addEventListener('input', render);
+  $('expand').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = true));
+  $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
+  $('copy').addEventListener('click', async () => {
+    await navigator.clipboard.writeText(rows().map(x => [x.method, x.url, x.files].filter(Boolean).join('\t')).join('\n'));
+    $('status').textContent = '표시된 목록을 복사했습니다.';
+  });
+  $('download').addEventListener('click', () => {
+    const csv = '\uFEFF' + [['type', 'method', 'url', 'files'], ...rows().map(x => [x.type, x.method, x.url, x.files])].map(row => row.map(csvCell).join(',')).join('\r\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = 'js-routes.csv'; link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  });
+})();
+</script>
+</body>
+</html>
