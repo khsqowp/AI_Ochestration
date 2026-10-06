@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burp Comparer</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 1520px; margin: auto; padding: 28px 22px 60px; }
+  h1 { margin: 0 0 8px; font-size: 28px; }
+  p { margin: 0 0 16px; color: #a8b8ce; line-height: 1.6; }
+  .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
+  textarea, button, select, input { font: inherit; }
+  textarea { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 12px; background: #101c2c; border: 1px solid #405574; border-radius: 9px; color: #e7edf7; white-space: pre; overflow-wrap: normal; }
+  .side-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .side-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 700; }
+  .side-label span.name { color: #c9d7e9; }
+  button, select { padding: 9px 12px; border-radius: 8px; border: 1px solid #557099; background: #273c59; color: inherit; cursor: pointer; }
+  button:hover { background: #335275; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 5px 9px; font-size: 12px; }
+  .primary { background: #2f76cf; border-color: #5797ef; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .controls label.sync { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #c9d7e9; margin-left: auto; }
+  #status { color: #aebed2; font-size: 14px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .legend .mod i { background: rgba(60, 130, 246, .55); border: 1px solid #6ea2ff; }
+  .legend .del i { background: rgba(231, 76, 60, .5); border: 1px solid #ff8a7a; }
+  .legend .add i { background: rgba(46, 204, 113, .45); border: 1px solid #6adf9a; }
+  #summary { color: #aebed2; font-size: 13.5px; margin: 6px 0 14px; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .bc-pane { border: 1px solid #30425e; border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
+  .bc-pane-head { background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; padding: 9px 12px; }
+  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .bc-pane-body mark.mod { background: rgba(60, 130, 246, .38); color: #eaf1ff; border-radius: 2px; }
+  .bc-pane-body mark.del { background: rgba(231, 76, 60, .34); color: #ffecec; border-radius: 2px; }
+  .bc-pane-body mark.add { background: rgba(46, 204, 113, .32); color: #eafff0; border-radius: 2px; }
+  .empty { padding: 20px; color: #9fb1c8; }
+  .warn { color: #ffcf8a; font-size: 12.5px; margin-top: 6px; }
+  @media (max-width: 900px) { .side-grid, .result-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Burp Comparer</h1>
+  <p>Burp Suite의 Comparer처럼 두 텍스트(HTTP 요청/응답, 설정값 등)를 단어 단위로 비교한다. 완전히 브라우저 안에서만 동작하며 입력한 내용을 서버로 전송하지 않는다.</p>
+  <section class="panel">
+    <div class="side-grid">
+      <div>
+        <div class="side-label"><span class="name">원본 (Original)</span><button class="small" id="loadA" type="button">파일 불러오기</button></div>
+        <textarea id="inputA" spellcheck="false" placeholder="원본 텍스트를 붙여넣으세요"></textarea>
+        <input type="file" id="fileA" hidden>
+      </div>
+      <div>
+        <div class="side-label"><span class="name">수정본 (Modified)</span><button class="small" id="loadB" type="button">파일 불러오기</button></div>
+        <textarea id="inputB" spellcheck="false" placeholder="비교할 텍스트를 붙여넣으세요"></textarea>
+        <input type="file" id="fileB" hidden>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="primary" id="compare">비교하기</button>
+      <button id="clear">초기화</button>
+      <span id="status" role="status"></span>
+      <label class="sync"><input type="checkbox" id="syncViews" checked> Sync Views (스크롤 동기화)</label>
+    </div>
+  </section>
+  <section class="panel" id="resultPanel" style="display:none">
+    <div class="legend">
+      <span class="mod"><i></i>Modified (수정됨)</span>
+      <span class="del"><i></i>Deleted (삭제됨)</span>
+      <span class="add"><i></i>Added (추가됨)</span>
+    </div>
+    <div id="summary"></div>
+    <div class="result-grid">
+      <div class="bc-pane">
+        <div class="bc-pane-head">원본</div>
+        <pre class="bc-pane-body" id="paneA"></pre>
+      </div>
+      <div class="bc-pane">
+        <div class="bc-pane-head">수정본</div>
+        <pre class="bc-pane-body" id="paneB"></pre>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+
+  // ── 토큰화: 단어(영숫자/밑줄) 단위 + 개행 + 그 외 개별 문자 -- Burp의 "Word compare"와 비슷한 세밀도.
+  const TOKEN_RE = /[A-Za-z0-9_]+|\r\n|\n|./gs;
+  function tokenize(text) { return text.match(TOKEN_RE) || []; }
+
+  // ── Myers 최단편집거리 diff (O((N+M)D)). 토큰 배열 a(원본)->b(수정본)의 edit script를 돌려준다.
+  // V 배열을 Map이 아니라 Int32Array 윈도우로 저장한다 -- Map은 항목당 오버헤드가 커서 겹치는 부분이
+  // 거의 없는 큰 입력(병적인 케이스)에서 수백MB를 먹고 탭이 죽는 걸 실측으로 확인했음(typed array로
+  // 바꾸니 같은 입력에서 메모리 증가가 사실상 0에 수렴). MAX_COMBINED_TOKENS 캡과 함께 이중 방어.
+  function myersDiff(a, b) {
+    const N = a.length, M = b.length;
+    const MAX = N + M;
+    if (MAX === 0) return [];
+    const trace = [];
+    const V = new Int32Array(2 * MAX + 3);
+    const OFF = MAX + 1;
+    V[1 + OFF] = 0;
+    for (let d = 0; d <= MAX; d++) {
+      const win = new Int32Array(2 * d + 1); // idx = k + d, k in [-d, d]
+      for (let k = -d; k <= d; k += 2) {
+        let x;
+        if (k === -d || (k !== d && V[k - 1 + OFF] < V[k + 1 + OFF])) x = V[k + 1 + OFF];
+        else x = V[k - 1 + OFF] + 1;
+        let y = x - k;
+        while (x < N && y < M && a[x] === b[y]) { x++; y++; }
+        V[k + OFF] = x;
+        win[k + d] = x;
+        if (x >= N && y >= M) { trace.push(win); return backtrack(trace, a, b, d); }
+      }
+      trace.push(win);
+    }
+    throw new Error('diff did not converge');
+  }
+  function backtrack(trace, a, b, D) {
+    let x = a.length, y = b.length;
+    const ops = [];
+    for (let d = D; d > 0; d--) {
+      const win = trace[d];
+      const get = k => win[k + d];
+      const k = x - y;
+      let prevK;
+      if (k === -d || (k !== d && get(k - 1) < get(k + 1))) prevK = k + 1;
+      else prevK = k - 1;
+      const prevX = get(prevK);
+      const prevY = prevX - prevK;
+      while (x > prevX && y > prevY) { ops.push({ type: 'equal', a: a[x - 1], b: b[y - 1] }); x--; y--; }
+      if (x === prevX) { ops.push({ type: 'insert', b: b[y - 1] }); y--; }
+      else { ops.push({ type: 'delete', a: a[x - 1] }); x--; }
+    }
+    while (x > 0 && y > 0) { ops.push({ type: 'equal', a: a[x - 1], b: b[y - 1] }); x--; y--; }
+    while (x > 0) { ops.push({ type: 'delete', a: a[x - 1] }); x--; }
+    while (y > 0) { ops.push({ type: 'insert', b: b[y - 1] }); y--; }
+    ops.reverse();
+    return ops;
+  }
+
+  // ── 연속된 delete/insert 묶음을 하나의 hunk로 보고, 그 안에 delete와 insert가 둘 다 있으면
+  // "교체(Modified/파랑)"로, 한쪽만 있으면 "삭제(빨강)"/"추가(초록)"로 분류한다 -- difflib의
+  // replace/delete/insert opcode와 같은 방식.
+  function classify(ops) {
+    const out = [];
+    let i = 0;
+    while (i < ops.length) {
+      if (ops[i].type === 'equal') { out.push(ops[i]); i++; continue; }
+      let j = i;
+      let hasDel = false, hasIns = false;
+      while (j < ops.length && ops[j].type !== 'equal') {
+        if (ops[j].type === 'delete') hasDel = true; else hasIns = true;
+        j++;
+      }
+      const label = hasDel && hasIns ? 'mod' : (hasDel ? 'del' : 'add');
+      for (let k = i; k < j; k++) out.push({ ...ops[k], label });
+      i = j;
+    }
+    return out;
+  }
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderSide(ops, side) {
+    let html = '';
+    for (const op of ops) {
+      if (op.type === 'equal') { html += esc(op.a); continue; }
+      if (side === 'a' && (op.type === 'delete')) html += `<mark class="${op.label}">${esc(op.a)}</mark>`;
+      if (side === 'b' && (op.type === 'insert')) html += `<mark class="${op.label}">${esc(op.b)}</mark>`;
+    }
+    return html;
+  }
+
+  const MAX_COMBINED_TOKENS = 24000; // 완전히 겹치는 부분이 없는 병적인 입력에서도 체감 지연 없이 끝내기 위한 상한
+
+  let syncing = false;
+  function wireSync(paneA, paneB) {
+    function makeHandler(from, to) {
+      return () => {
+        if (!$('syncViews').checked || syncing) return;
+        syncing = true;
+        const ratio = from.scrollHeight <= from.clientHeight ? 0 : from.scrollTop / (from.scrollHeight - from.clientHeight);
+        to.scrollTop = ratio * (to.scrollHeight - to.clientHeight);
+        syncing = false;
+      };
+    }
+    paneA.addEventListener('scroll', makeHandler(paneA, paneB));
+    paneB.addEventListener('scroll', makeHandler(paneB, paneA));
+  }
+  wireSync($('paneA'), $('paneB'));
+
+  function runCompare() {
+    const a = $('inputA').value, b = $('inputB').value;
+    if (!a && !b) { $('status').textContent = '원본과 수정본을 입력해 주세요.'; return; }
+    const tokA = tokenize(a), tokB = tokenize(b);
+    if (tokA.length + tokB.length > MAX_COMBINED_TOKENS) {
+      $('status').textContent = `텍스트가 너무 커서(토큰 ${tokA.length + tokB.length}개) 비교를 건너뜁니다 -- 더 작은 범위로 나눠서 비교해 주세요.`;
+      return;
+    }
+    $('status').textContent = '비교 중…';
+    $('resultPanel').style.display = 'none';
+    setTimeout(() => {
+      const ops = classify(myersDiff(tokA, tokB));
+      $('paneA').innerHTML = renderSide(ops, 'a') || '<span class="empty">내용 없음</span>';
+      $('paneB').innerHTML = renderSide(ops, 'b') || '<span class="empty">내용 없음</span>';
+      let mod = 0, del = 0, add = 0;
+      for (const op of ops) {
+        if (op.type === 'delete' && op.label === 'mod') mod++;
+        else if (op.type === 'delete') del++;
+        else if (op.type === 'insert' && op.label !== 'mod') add++;
+      }
+      const same = a === b;
+      $('summary').textContent = same
+        ? '두 텍스트가 완전히 동일합니다.'
+        : `수정 ${mod}개 · 삭제 ${del}개 · 추가 ${add}개 (토큰 단위)`;
+      $('resultPanel').style.display = '';
+      $('status').textContent = `비교 완료 (토큰 ${tokA.length + tokB.length}개)`;
+    }, 0);
+  }
+
+  $('compare').addEventListener('click', runCompare);
+  $('clear').addEventListener('click', () => {
+    $('inputA').value = ''; $('inputB').value = '';
+    $('resultPanel').style.display = 'none';
+    $('status').textContent = '';
+  });
+
+  function wireFileLoad(buttonId, fileId, textareaId) {
+    $(buttonId).addEventListener('click', () => $(fileId).click());
+    $(fileId).addEventListener('change', async () => {
+      const file = $(fileId).files[0];
+      if (!file) return;
+      $(textareaId).value = await file.text();
+      $(fileId).value = '';
+    });
+  }
+  wireFileLoad('loadA', 'fileA', 'inputA');
+  wireFileLoad('loadB', 'fileB', 'inputB');
+})();
+</script>
+</body>
+</html>

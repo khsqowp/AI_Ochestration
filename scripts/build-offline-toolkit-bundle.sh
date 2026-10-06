@@ -17,8 +17,8 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 
 log() { echo "[build-offline-bundle] $*"; }
 
-log "도구 4종 복사 중"
-for tool in recon-toolkit safe-http-audit burp-history-tool route-tree-tools; do
+log "도구 5종 복사 중"
+for tool in recon-toolkit safe-http-audit burp-history-tool route-tree-tools burp-comparer; do
   cp -R "$FIXTURES_DIR/$tool" "$STAGE_DIR/$tool"
   find "$STAGE_DIR/$tool" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
   if [ -f "$STAGE_DIR/$tool/설명서.txt" ]; then
@@ -33,7 +33,8 @@ cat > "$STAGE_DIR/READ_ME_FIRST.txt" <<'EOF'
 인터넷이 전혀 안 되고 이 웹사이트조차 못 여는 내부망 PC에 그대로 반입해서
 쓰는 패키지. 도구 3개(.py 스크립트 + 설명서)는 pip install 같은 패키지
 설치 없이 바로 실행 가능(전부 Python 표준 라이브러리만 사용). route-tree-tools
-안의 2개(.html)는 Python도 필요 없이 브라우저로 파일 열면 바로 동작.
+안의 2개와 burp-comparer 안의 1개(전부 .html)는 Python도 필요 없이
+브라우저로 파일 열면 바로 동작.
 
 recon-toolkit/recon_toolkit.py 는 워드리스트(SecLists/PayloadsAllTheThings
 서브셋)가 파일 안에 압축 내장돼 있다 -- 별도 폴더 필요 없이 이 파일 하나만
