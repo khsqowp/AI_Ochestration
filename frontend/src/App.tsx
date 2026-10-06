@@ -44,7 +44,7 @@ export function App() {
               <Route path="notes" element={<NotesPage/>}/>
               <Route path="calendar" element={<CalendarPage/>}/>
               <Route path="diag" element={<DiagnosticsPage/>}/>
-              <Route path="diag/:toolId" handle={{ pageClass: 'diag-tool-page' }} element={<DiagToolPage/>}/>
+              <Route path="diag/:toolId" element={<DiagToolPage/>}/>
               <Route path="llm" element={<LocalLlmPage/>}/>
               <Route element={<RequireAdmin/>}>
                 <Route path="order" element={<OrderBoardPage/>}/>
