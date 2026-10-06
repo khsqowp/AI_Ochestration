@@ -42,10 +42,14 @@
   .badge.candidate { background: #68552c; color: #ffe3a0; }
   .hint { display: block; margin-top: 3px; color: #8da1bc; font-size: 11px; }
   .empty { padding: 20px; color: #9fb1c8; }
+  .zoom-controls { position: fixed; right: 18px; bottom: 18px; z-index: 10; display: flex; align-items: center;
+    gap: 2px; background: #172337; border: 1px solid #31425d; border-radius: 10px; padding: 5px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+  .zoom-controls button { width: 32px; height: 32px; padding: 0; font-size: 17px; font-weight: 700; line-height: 1; }
+  .zoom-controls span { width: 46px; text-align: center; font-size: 12px; color: #aebed2; }
 </style>
 </head>
 <body>
-<main>
+<main id="zoomRoot">
   <h1>HAR 엔드포인트 트리</h1>
   <p>로그인한 브라우저의 Network에서 Preserve log를 켜고 탐색한 뒤 HAR를 내보내세요. 이 파일은 브라우저 안에서만 분석하며 서버로 전송하지 않습니다.</p>
   <section class="panel">
@@ -62,6 +66,11 @@
     <div class="table"><div class="head"><span>경로</span><span>파라미터 이름</span><span>메서드</span><span>복사</span></div><div id="tree" class="tree"><div class="empty">분석 결과가 여기에 표시됩니다.</div></div></div>
   </section>
 </main>
+<div class="zoom-controls">
+  <button id="zoomOut" type="button" title="축소" aria-label="축소">&minus;</button>
+  <span id="zoomLevel">100%</span>
+  <button id="zoomIn" type="button" title="확대" aria-label="확대">+</button>
+</div>
 <script>
 (() => {
   'use strict';
@@ -290,6 +299,20 @@
   $('search').addEventListener('input', render); $('scope').addEventListener('change', render);
   $('expand').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = true));
   $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
+
+  // 뷰가 좁은 iframe/모달에 끼면 글자가 너무 커서 안 읽히므로 50~150% 축소/확대 지원.
+  // CSS zoom은 main 서브트리에만 걸어서 우측하단 버튼 자체는 그대로 크기 유지.
+  const ZOOM_KEY = 'har-endpoint-tree-zoom';
+  let zoom = Number(localStorage.getItem(ZOOM_KEY)) || 100;
+  function applyZoom() {
+    zoom = Math.min(150, Math.max(50, zoom));
+    $('zoomRoot').style.zoom = zoom + '%';
+    $('zoomLevel').textContent = zoom + '%';
+    try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {}
+  }
+  $('zoomIn').addEventListener('click', () => { zoom += 10; applyZoom(); });
+  $('zoomOut').addEventListener('click', () => { zoom -= 10; applyZoom(); });
+  applyZoom();
 })();
 </script>
 </body>

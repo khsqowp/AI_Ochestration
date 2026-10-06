@@ -38,10 +38,14 @@
     .methods { color: #83dcb7; font-size: 12px; margin-right: 7px; }
     .muted { color: #8799b2; }
     @media (max-width: 750px) { .input-grid { grid-template-columns: 1fr; } #status { width: 100%; margin: 0; } }
+    .zoom-controls { position: fixed; right: 18px; bottom: 18px; z-index: 10; display: flex; align-items: center;
+      gap: 2px; background: #172235; border: 1px solid #30405b; border-radius: 10px; padding: 5px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+    .zoom-controls button { width: 32px; height: 32px; padding: 0; font-size: 17px; font-weight: 700; line-height: 1; }
+    .zoom-controls span { width: 46px; text-align: center; font-size: 12px; color: #b8c8de; }
   </style>
 </head>
 <body>
-<main>
+<main id="zoomRoot">
   <h1>JS URL · API 경로 트리</h1>
   <p>JavaScript 파일을 선택하거나 코드를 붙여넣으세요. 분석은 브라우저 안에서만 이루어지며 입력한 코드를 실행하거나 전송하지 않습니다.</p>
   <section class="panel">
@@ -57,6 +61,11 @@
     <div id="tree" class="tree"></div>
   </section>
 </main>
+<div class="zoom-controls">
+  <button id="zoomOut" type="button" title="축소" aria-label="축소">&minus;</button>
+  <span id="zoomLevel">100%</span>
+  <button id="zoomIn" type="button" title="확대" aria-label="확대">+</button>
+</div>
 <script>
 (() => {
   'use strict';
@@ -188,6 +197,19 @@
   $('filter').addEventListener('input', render);
   $('expand').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = true));
   $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
+
+  const ZOOM_KEY = 'js-route-tree-zoom';
+  let zoom = Number(localStorage.getItem(ZOOM_KEY)) || 100;
+  function applyZoom() {
+    zoom = Math.min(150, Math.max(50, zoom));
+    $('zoomRoot').style.zoom = zoom + '%';
+    $('zoomLevel').textContent = zoom + '%';
+    try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {}
+  }
+  $('zoomIn').addEventListener('click', () => { zoom += 10; applyZoom(); });
+  $('zoomOut').addEventListener('click', () => { zoom -= 10; applyZoom(); });
+  applyZoom();
+
   $('copy').addEventListener('click', async () => {
     await navigator.clipboard.writeText(rows().map(x => [x.method, x.url, x.files].filter(Boolean).join('\t')).join('\n'));
     $('status').textContent = '표시된 목록을 복사했습니다.';
