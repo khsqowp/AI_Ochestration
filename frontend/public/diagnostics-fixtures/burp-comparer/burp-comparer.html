@@ -13,7 +13,7 @@
   p { margin: 0 0 16px; color: #a8b8ce; line-height: 1.6; }
   .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
   textarea, button, select, input { font: inherit; }
-  textarea { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 12px; background: #101c2c; border: 1px solid #405574; border-radius: 9px; color: #e7edf7; white-space: pre-wrap; overflow-wrap: anywhere; }
+  textarea { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 12px; background: #101c2c; border: 1px solid #405574; border-radius: 9px; color: #e7edf7; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
   .side-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .side-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 700; }
   .side-label span.name { color: #c9d7e9; }
@@ -24,7 +24,9 @@
   .primary { background: #2f76cf; border-color: #5797ef; }
   .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
   .controls label.sync { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #c9d7e9; margin-left: auto; }
-  #status { color: #aebed2; font-size: 14px; }
+  #status { color: #aebed2; font-size: 14px; display: inline-flex; align-items: center; gap: 7px; }
+  #status.busy::before { content: ''; width: 13px; height: 13px; border-radius: 50%; border: 2px solid #3a4d6c; border-top-color: #5797ef; animation: bc-spin .7s linear infinite; }
+  @keyframes bc-spin { to { transform: rotate(360deg); } }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; font-size: 13px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
@@ -35,7 +37,7 @@
   .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .bc-pane { border: 1px solid #30425e; border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
   .bc-pane-head { background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; padding: 9px 12px; }
-  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
   .bc-pane-body mark.mod { background: rgba(60, 130, 246, .38); color: #eaf1ff; border-radius: 2px; }
   .bc-pane-body mark.del { background: rgba(231, 76, 60, .34); color: #ffecec; border-radius: 2px; }
   .bc-pane-body mark.add { background: rgba(46, 204, 113, .32); color: #eafff0; border-radius: 2px; }
@@ -147,6 +149,22 @@
     return ops;
   }
 
+  // ── 앞뒤로 완전히 같은 구간은 Myers diff를 돌리기 전에 잘라낸다 -- 실제로 비슷한 두 HTTP
+  // 메시지를 비교하는(의도된) 경우 중간의 진짜 차이 구간만 diff 대상이 되어 훨씬 빨라진다.
+  // 구조 자체가 전혀 다른 두 텍스트(겹치는 접두/접미가 거의 없는 경우)는 이 트리밍으로는 못
+  // 줄이므로 MAX_COMBINED_TOKENS 캡이 그 경우의 최종 안전장치 역할을 한다.
+  function diffTrimmed(a, b) {
+    let start = 0;
+    const minLen = Math.min(a.length, b.length);
+    while (start < minLen && a[start] === b[start]) start++;
+    let endA = a.length, endB = b.length;
+    while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) { endA--; endB--; }
+    const prefix = a.slice(0, start).map(t => ({ type: 'equal', a: t, b: t }));
+    const suffix = a.slice(endA).map((t, i) => ({ type: 'equal', a: t, b: b[endB + i] }));
+    const core = myersDiff(a.slice(start, endA), b.slice(start, endB));
+    return [...prefix, ...core, ...suffix];
+  }
+
   // ── 연속된 delete/insert 묶음을 하나의 hunk로 보고, 그 안에 delete와 insert가 둘 다 있으면
   // "교체(Modified/파랑)"로, 한쪽만 있으면 "삭제(빨강)"/"추가(초록)"로 분류한다 -- difflib의
   // replace/delete/insert opcode와 같은 방식.
@@ -182,7 +200,7 @@
     return html;
   }
 
-  const MAX_COMBINED_TOKENS = 24000; // 완전히 겹치는 부분이 없는 병적인 입력에서도 체감 지연 없이 끝내기 위한 상한
+  const MAX_COMBINED_TOKENS = 12000; // 겹치는 부분이 없는 병적인 입력에서도 1초 이내로 끝내기 위한 상한(실측 기준)
 
   let syncing = false;
   function wireSync(paneA, paneB) {
@@ -209,24 +227,36 @@
       return;
     }
     $('status').textContent = '비교 중…';
+    $('status').classList.add('busy');
+    $('compare').disabled = true;
     $('resultPanel').style.display = 'none';
-    setTimeout(() => {
-      const ops = classify(myersDiff(tokA, tokB));
-      $('paneA').innerHTML = renderSide(ops, 'a') || '<span class="empty">내용 없음</span>';
-      $('paneB').innerHTML = renderSide(ops, 'b') || '<span class="empty">내용 없음</span>';
-      let mod = 0, del = 0, add = 0;
-      for (const op of ops) {
-        if (op.type === 'delete' && op.label === 'mod') mod++;
-        else if (op.type === 'delete') del++;
-        else if (op.type === 'insert' && op.label !== 'mod') add++;
+    // 버튼 비활성화 + 스피너가 실제로 화면에 그려진 다음 프레임에 무거운 연산을 시작해야
+    // "멈춘 것처럼 보임"이 안 생긴다 -- setTimeout(0)만으론 그 전 프레임에 묶여 끊길 수 있어
+    // requestAnimationFrame으로 한 번 더 페인트를 보장한다.
+    requestAnimationFrame(() => setTimeout(() => {
+      try {
+        const ops = classify(diffTrimmed(tokA, tokB));
+        $('paneA').innerHTML = renderSide(ops, 'a') || '<span class="empty">내용 없음</span>';
+        $('paneB').innerHTML = renderSide(ops, 'b') || '<span class="empty">내용 없음</span>';
+        let mod = 0, del = 0, add = 0;
+        for (const op of ops) {
+          if (op.type === 'delete' && op.label === 'mod') mod++;
+          else if (op.type === 'delete') del++;
+          else if (op.type === 'insert' && op.label !== 'mod') add++;
+        }
+        const same = a === b;
+        $('summary').textContent = same
+          ? '두 텍스트가 완전히 동일합니다.'
+          : `수정 ${mod}개 · 삭제 ${del}개 · 추가 ${add}개 (토큰 단위)`;
+        $('resultPanel').style.display = '';
+        $('status').textContent = `비교 완료 (토큰 ${tokA.length + tokB.length}개)`;
+      } catch (error) {
+        $('status').textContent = `비교 실패: ${error.message}`;
+      } finally {
+        $('status').classList.remove('busy');
+        $('compare').disabled = false;
       }
-      const same = a === b;
-      $('summary').textContent = same
-        ? '두 텍스트가 완전히 동일합니다.'
-        : `수정 ${mod}개 · 삭제 ${del}개 · 추가 ${add}개 (토큰 단위)`;
-      $('resultPanel').style.display = '';
-      $('status').textContent = `비교 완료 (토큰 ${tokA.length + tokB.length}개)`;
-    }, 0);
+    }, 0));
   }
 
   $('compare').addEventListener('click', runCompare);
