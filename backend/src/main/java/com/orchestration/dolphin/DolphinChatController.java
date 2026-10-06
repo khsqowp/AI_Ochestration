@@ -44,11 +44,15 @@ public class DolphinChatController {
   private static final int CHUNK = 8192;
   private static final String COOKIE = "orchestration_session";
 
-  /** dolphin 으로 넘기면 안 되는 헤더: hop-by-hop, 길이/인코딩 협상, 그리고 오케스트레이션 인증정보. */
+  /** dolphin 으로 넘기면 안 되는 헤더: hop-by-hop, 길이/인코딩 협상, 그리고 오케스트레이션 인증정보.
+   * x-orchestration-user/-admin 은 서버가 토큰 검증 후 직접 세팅하는 신뢰 경계 헤더라서, 클라이언트가
+   * 같은 이름으로 보낸 값이 섞여 들어가면 안 된다 — RestClient.header() 는 add 방식(치환 아님)이라
+   * 걸러내지 않으면 우리 값 뒤에 클라이언트 값이 추가로 실려서 dolphin_ai 로 넘어간다. */
   private static final Set<String> SKIP_REQUEST_HEADERS = Set.of(
       "host", "content-length", "connection", "keep-alive", "transfer-encoding",
       "te", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate",
-      "accept-encoding", "cookie", "authorization");
+      "accept-encoding", "cookie", "authorization",
+      "x-orchestration-user", "x-orchestration-admin");
 
   private final String baseUrl;
   private final RestClient rest;

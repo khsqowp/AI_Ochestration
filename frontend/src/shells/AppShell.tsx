@@ -5,7 +5,7 @@ import { useAppState } from '../context/AppState'
 import { NotificationStack, NotePromptBuilder } from '../components/shared'
 import { TodoFloating } from '../components/Todo'
 
-const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean }[] = [
+const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean; external?: boolean }[] = [
   { to: '/dashboard', label: '대시보드', end: true },
   { to: '/dashboard/notes', label: '노트 생성' },
   { to: '/dashboard/order', label: '주문', adminOnly: true },
@@ -13,6 +13,7 @@ const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean }[] =
   { to: '/dashboard/calendar', label: '캘린더' },
   { to: '/dashboard/diag', label: '진단' },
   { to: '/dashboard/llm', label: '로컬 LLM' },
+  { to: 'http://localhost:8787', label: 'ARTEX', adminOnly: true, external: true },
   { to: '/dashboard/debate', label: '토론', adminOnly: true },
   { to: '/dashboard/역량강화', label: '역량 강화', adminOnly: true },
   { to: '/dashboard/admin', label: '관리', adminOnly: true },
@@ -26,7 +27,9 @@ export function AppShell() {
       <Link to="/dashboard" className="topbar-logo"><Bot size={19}/> <span>Orchestration Lab</span></Link>
       <nav className="topbar-nav">
         {NAV.filter(item => !item.adminOnly || isAdmin).map(item => (
-          <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => isActive ? 'active' : ''}>{item.label}</NavLink>
+          item.external
+            ? <a key={item.to} href={item.to} target="_blank" rel="noopener noreferrer">{item.label}</a>
+            : <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => isActive ? 'active' : ''}>{item.label}</NavLink>
         ))}
       </nav>
       <div className="topbar-right">
