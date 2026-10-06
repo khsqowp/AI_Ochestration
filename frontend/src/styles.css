@@ -959,6 +959,15 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .diag-scanner-body { padding:14px 16px 16px; border-top:1px solid #eceaf0; }
 .diag-scanner-body .diag-bullet-list { margin-bottom:12px; }
 .diag-route-tree-frame { width:100%; height:min(70vh, 720px); margin-top:12px; border:1px solid #eceaf0; border-radius:10px; background:#fff; }
+
+/* 경로 트리 분석기 전용: file-explorer(28px) + explorer-preview(18px/22px) + diag-scanner-body(14px/16px)
+   패딩이 3겹으로 겹쳐서 iframe 가로폭이 필요 이상으로 좁아짐(안 그래도 내부 콘텐츠 자체가 넓은 도구라
+   더 두드러짐) -- 이 모달에서만 패딩을 줄이고 iframe 세로도 더 키운다. 다른 진단 모달(.diag-modal 공유)
+   레이아웃엔 영향 없게 .route-tree-modal 스코프로만 건다. */
+.route-tree-modal.file-explorer { padding:18px; }
+.route-tree-modal .explorer-preview { padding:8px 10px; }
+.route-tree-modal .diag-scanner-body { padding:10px 6px 14px; }
+.route-tree-modal .diag-route-tree-frame { height:min(80vh, 920px); }
 .diag-escalate { margin-top:16px; border:1px solid #ded9f1; background:#faf9fc; border-radius:12px; padding:16px 18px; }
 .diag-escalate-title { margin:0 0 6px; font-size:13.5px; color:#4e43a5; }
 .diag-escalate-hint { margin:0 0 12px; font-size:11.8px; color:#6f6977; line-height:1.5; }
