@@ -199,7 +199,11 @@
   $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
 
   const ZOOM_KEY = 'js-route-tree-zoom';
-  let zoom = Number(localStorage.getItem(ZOOM_KEY)) || 100;
+  // sandbox="allow-scripts"만 걸린 iframe(allow-same-origin 없음) 안에서는 origin이 opaque라
+  // localStorage 접근 자체가 던진다 -- try/catch 밖이면 스크립트 전체가 여기서 죽어서 뒤에 나오는
+  // 줌 버튼 리스너조차 등록이 안 된다.
+  let zoom = 100;
+  try { zoom = Number(localStorage.getItem(ZOOM_KEY)) || 100; } catch {}
   function applyZoom() {
     zoom = Math.min(150, Math.max(50, zoom));
     $('zoomRoot').style.zoom = zoom + '%';

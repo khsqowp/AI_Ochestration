@@ -303,7 +303,11 @@
   // 뷰가 좁은 iframe/모달에 끼면 글자가 너무 커서 안 읽히므로 50~150% 축소/확대 지원.
   // CSS zoom은 main 서브트리에만 걸어서 우측하단 버튼 자체는 그대로 크기 유지.
   const ZOOM_KEY = 'har-endpoint-tree-zoom';
-  let zoom = Number(localStorage.getItem(ZOOM_KEY)) || 100;
+  // sandbox="allow-scripts"만 걸린 iframe(allow-same-origin 없음) 안에서는 origin이 opaque라
+  // localStorage 접근 자체가 던진다 -- 이 줄이 try/catch 밖에 있으면 스크립트 전체가 여기서 죽어서
+  // 뒤에 나오는 줌 버튼 리스너조차 등록이 안 된다(버튼은 보이는데 안 눌리는 증상의 원인이었음).
+  let zoom = 100;
+  try { zoom = Number(localStorage.getItem(ZOOM_KEY)) || 100; } catch {}
   function applyZoom() {
     zoom = Math.min(150, Math.max(50, zoom));
     $('zoomRoot').style.zoom = zoom + '%';
