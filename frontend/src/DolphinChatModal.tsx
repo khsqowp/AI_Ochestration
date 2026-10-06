@@ -15,7 +15,7 @@ const Markdown = lazy(() =>
 )
 
 type DolphinSource = { source?: string; category?: string; title?: string; text?: string }
-type DolphinSession = { id: string; title: string; mode: string; model: string; created_at: string }
+type DolphinSession = { id: string; title: string; mode: string; model: string; created_at: string; owner_id?: string }
 type DolphinMsg = { role: 'user' | 'assistant'; content: string; sources?: DolphinSource[] }
 type DolphinMode = 'general' | 'rag' | 'ctf' | 'pentest' | 'bypass' | 'threat'
 
@@ -295,7 +295,7 @@ export function DolphinChatModal({ onClose, embedded }: { onClose?: () => void; 
               disabled={streaming}
             >
               <span className="dolphin-session-title">{s.title || '새 대화'}</span>
-              <span className="dolphin-session-mode">{s.mode}</span>
+              <span className="dolphin-session-mode">{MODES.find(m => m.id === s.mode)?.label ?? s.mode}</span>
               <button className="dolphin-delete-btn" onClick={e => deleteSession(s.id, e)} disabled={streaming} title="삭제">
                 <Trash2 size={11}/>
               </button>

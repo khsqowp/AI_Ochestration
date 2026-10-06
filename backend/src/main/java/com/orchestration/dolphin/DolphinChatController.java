@@ -1,16 +1,27 @@
 package com.orchestration.dolphin;
 
+import com.orchestration.auth.AuthService;
+import com.orchestration.auth.Role;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.server.ResponseStatusException;
 
 import org.springframework.util.StreamUtils;
 import java.io.IOException;
@@ -31,6 +42,7 @@ public class DolphinChatController {
 
   private static final Logger log = LoggerFactory.getLogger(DolphinChatController.class);
   private static final int CHUNK = 8192;
+  private static final String COOKIE = "orchestration_session";
 
   /** dolphin 으로 넘기면 안 되는 헤더: hop-by-hop, 길이/인코딩 협상, 그리고 오케스트레이션 인증정보. */
   private static final Set<String> SKIP_REQUEST_HEADERS = Set.of(
@@ -41,9 +53,11 @@ public class DolphinChatController {
   private final String baseUrl;
   private final RestClient rest;
   private final HttpClient http;
+  private final AuthService auth;
 
-  public DolphinChatController(DolphinProperties props, RestClient.Builder builder) {
+  public DolphinChatController(DolphinProperties props, RestClient.Builder builder, AuthService auth) {
     this.baseUrl = props.chatUrl();
+    this.auth = auth;
     // uvicorn(dolphin)은 HTTP/2 미지원. JDK HttpClient 기본값(HTTP_2)이면 cleartext h2c 업그레이드를
     // 시도하다 요청 본문이 유실돼 dolphin 이 422(body missing)를 낸다 — 스트리밍/일반 프록시 모두 HTTP/1.1 고정.
     this.http = HttpClient.newBuilder()
@@ -59,8 +73,10 @@ public class DolphinChatController {
 
   @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public ResponseEntity<StreamingResponseBody> chat(
+      @CookieValue(value = COOKIE, required = false) String token,
       @RequestBody byte[] body,
       HttpServletRequest incoming) {
+    AuthService.UserProfile profile = profile(token);
 
     log.info("dolphin /chat proxy: body={} bytes, content-type={}, content-length={}",
         body == null ? -1 : body.length, incoming.getContentType(), incoming.getContentLengthLong());
@@ -69,6 +85,8 @@ public class DolphinChatController {
         .uri(URI.create(baseUrl + "/api/chat"))
         .timeout(Duration.ofMinutes(10))
         .header("Content-Type", "application/json")
+        .header("X-Orchestration-User", profile.id())
+        .header("X-Orchestration-Admin", Boolean.toString(profile.role() == Role.ADMIN))
         .POST(HttpRequest.BodyPublishers.ofByteArray(body))
         .build();
 
@@ -124,31 +142,44 @@ public class DolphinChatController {
   // ── Generic JSON proxy ───────────────────────────────────────────────────
 
   @GetMapping("/**")
-  public ResponseEntity<byte[]> proxyGet(HttpServletRequest req) {
-    return forward(req, HttpMethod.GET, null);
+  public ResponseEntity<byte[]> proxyGet(
+      @CookieValue(value = COOKIE, required = false) String token,
+      HttpServletRequest req) {
+    return forward(req, HttpMethod.GET, null, token);
   }
 
   @PostMapping("/**")
-  public ResponseEntity<byte[]> proxyPost(HttpServletRequest req, @RequestBody(required = false) byte[] body) {
-    return forward(req, HttpMethod.POST, body);
+  public ResponseEntity<byte[]> proxyPost(
+      @CookieValue(value = COOKIE, required = false) String token,
+      HttpServletRequest req,
+      @RequestBody(required = false) byte[] body) {
+    return forward(req, HttpMethod.POST, body, token);
   }
 
   @PatchMapping("/**")
-  public ResponseEntity<byte[]> proxyPatch(HttpServletRequest req, @RequestBody(required = false) byte[] body) {
-    return forward(req, HttpMethod.PATCH, body);
+  public ResponseEntity<byte[]> proxyPatch(
+      @CookieValue(value = COOKIE, required = false) String token,
+      HttpServletRequest req,
+      @RequestBody(required = false) byte[] body) {
+    return forward(req, HttpMethod.PATCH, body, token);
   }
 
   @DeleteMapping("/**")
-  public ResponseEntity<byte[]> proxyDelete(HttpServletRequest req) {
-    return forward(req, HttpMethod.DELETE, null);
+  public ResponseEntity<byte[]> proxyDelete(
+      @CookieValue(value = COOKIE, required = false) String token,
+      HttpServletRequest req) {
+    return forward(req, HttpMethod.DELETE, null, token);
   }
 
-  private ResponseEntity<byte[]> forward(HttpServletRequest incoming, HttpMethod method, byte[] body) {
+  private ResponseEntity<byte[]> forward(HttpServletRequest incoming, HttpMethod method, byte[] body, String token) {
+    AuthService.UserProfile profile = profile(token);
     String path = incoming.getRequestURI().replaceFirst("^/api/dolphin", "/api");
     String query = incoming.getQueryString();
     String uri = query == null ? path : path + "?" + query;
 
     var spec = rest.method(method).uri(uri);
+    spec.header("X-Orchestration-User", profile.id());
+    spec.header("X-Orchestration-Admin", Boolean.toString(profile.role() == Role.ADMIN));
 
     Enumeration<String> headerNames = incoming.getHeaderNames();
     if (headerNames != null) {
@@ -177,5 +208,9 @@ public class DolphinChatController {
       }
       return out.body(payload);
     });
+  }
+
+  private AuthService.UserProfile profile(String token) {
+    return auth.validate(token).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
   }
 }
