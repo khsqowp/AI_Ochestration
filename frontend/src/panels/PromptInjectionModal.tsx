@@ -15,8 +15,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'grader', label: '판정 용어·심각도' },
 ]
 
-export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
-  const modalRef = useModalA11y(true, onClose)
+export function PromptInjectionModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
+  const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
   const [tab, setTab] = useState<Tab>('start')
   const [copied, setCopied] = useState<string | null>(null)
   const copy = async (id: string, text: string) => {
@@ -24,8 +24,8 @@ export function PromptInjectionModal({ onClose }: { onClose: () => void }) {
     window.setTimeout(() => setCopied(c => (c === id || c === `${id}:error` ? null : c)), 1500)
   }
 
-  return <PanelShell className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
-    <div className="sheet-header"><div><p className="eyebrow">진단 · AI 안전</p><h2><ShieldAlert size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>프롬프트 인젝션</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
+    <div className="sheet-header"><div><p className="eyebrow">진단 · AI 안전</p><h2><ShieldAlert size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>프롬프트 인젝션</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
     <p className="diag-warning">승인된 환경의 방어 검증용이다. 실제 비밀·개인정보·실제 외부 수신자 대신 가짜 카나리와 모의 대상만 사용한다.</p>
     <div className="period-tabs diag-tabs">
       {TABS.map(t => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>{t.label}</button>)}

@@ -22,12 +22,12 @@ const ROUTE_TREE_TOOLS: RouteTreeTool[] = [
   },
 ]
 
-export function RouteTreeModal({ onClose }: { onClose: () => void }) {
-  const modalRef = useModalA11y(true, onClose)
+export function RouteTreeModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
+  const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
   const [open, setOpen] = useState<string | null>(ROUTE_TREE_TOOLS[0].id)
 
-  return <PanelShell className="file-explorer tool-modal diag-modal route-tree-modal" modalRef={modalRef}>
-    <div className="sheet-header"><div><p className="eyebrow">진단 · 정찰</p><h2><Route size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>경로 트리 분석기</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal route-tree-modal" modalRef={modalRef}>
+    <div className="sheet-header"><div><p className="eyebrow">진단 · 정찰</p><h2><Route size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>경로 트리 분석기</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
     <p className="diag-warning">소유하거나 명시적으로 허가받은 대상에서만 사용한다. 완전히 독립된 HTML 파일이라 폐쇄망에 저장해 열어도 동일하게 동작한다.</p>
     <div className="explorer-preview tool-modal-body">
       <div className="explorer-preview-body cheatsheet-options-body diag-scanner-list">

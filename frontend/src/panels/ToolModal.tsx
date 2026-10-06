@@ -25,8 +25,8 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
 /* 치트시트 도구 하나를 곧장 보여주는 모달. 타일 그리드(DiagnosticsPage)에서 도구를 클릭하면
    카테고리 목록을 거치지 않고 바로 이 화면으로 연다 -- 이전 CheatSheetModal의 사이드바를
    그리드가 대신하므로, 여기는 우측 프리뷰였던 부분만 남긴다. */
-export function ToolModal({ tool, onClose }: { tool: CheatSheetTool; onClose: () => void }) {
-  const modalRef = useModalA11y(true, onClose)
+export function ToolModal({ tool, onClose, embedded }: { tool: CheatSheetTool; onClose?: () => void; embedded?: boolean }) {
+  const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set())
   const [values, setValues] = useState<Record<string, string>>({})
   const [target, setTarget] = useState('')
@@ -42,8 +42,8 @@ export function ToolModal({ tool, onClose }: { tool: CheatSheetTool; onClose: ()
 
   const Builder = PAYLOAD_BUILDERS[tool.id]
 
-  return <PanelShell className="file-explorer tool-modal" modalRef={modalRef}>
-    <div className="sheet-header"><div><p className="eyebrow">CHEAT SHEET</p><h2>{tool.name}</h2></div><button className="sheet-close" onClick={onClose}><X size={18}/></button></div>
+  return <PanelShell embedded={embedded} className="file-explorer tool-modal" modalRef={modalRef}>
+    <div className="sheet-header"><div><p className="eyebrow">CHEAT SHEET</p><h2>{tool.name}</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
     <div className="explorer-preview tool-modal-body">
       {Builder ? <div className="explorer-preview-body cheatsheet-options-body"><Builder/></div> : <>
         <div className="explorer-preview-body cheatsheet-options-body">
