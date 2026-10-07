@@ -323,17 +323,21 @@ def fetch(
                 body = resp.read(max_body_bytes) if want_body else b""
                 elapsed_ms = (time.monotonic() - start) * 1000
                 length = len(body) if want_body else int(resp.headers.get("Content-Length", 0) or 0)
+                logger.info("[요청] GET %s -> %d (%dB, %.0fms)", url, status, length, elapsed_ms)
                 return status, length, elapsed_ms, body, None, {k.lower(): v for k, v in resp.headers.items()}
         except urllib.error.HTTPError as exc:
             elapsed_ms = (time.monotonic() - start) * 1000
             body = exc.read(max_body_bytes) if want_body else b""
             headers = {k.lower(): v for k, v in exc.headers.items()} if exc.headers else None
+            logger.info("[요청] GET %s -> %d (%dB, %.0fms)", url, exc.code, len(body), elapsed_ms)
             return exc.code, len(body), elapsed_ms, body, None, headers
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
             last_error = str(exc)
             attempt += 1
             if attempt > max_retries:
+                logger.info("[요청] GET %s -> 실패 (%s)", url, last_error)
                 break
+            logger.info("[요청] GET %s -> 재시도 %d/%d (%s)", url, attempt, max_retries, last_error)
             time.sleep(0.5 * attempt)
     return None, None, 0.0, b"", f"Request failed after {max_retries + 1} attempt(s): {last_error}", None
 
