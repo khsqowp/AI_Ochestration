@@ -65,6 +65,24 @@ from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 logger = logging.getLogger("recon_toolkit")
 
+
+def normalize_cookie_line(raw: str) -> str:
+    """세션 쿠키 한 줄을 Cookie 헤더 값으로 정규화한다. 'NAME=VALUE; NAME2=VALUE2'
+    형식은 그대로 두고, 'NAME:VALUE'(콜론) 형식의 각 조각도 허용해 'NAME=VALUE'로
+    바꿔준다 -- 세션/쿠키 이름이 JSESSIONID가 아닌 경우(PHPSESSID, connect.sid 등)도
+    이름:값 한 줄로 그대로 입력받기 위함."""
+    parts = []
+    for part in raw.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part and ":" in part:
+            name, _, value = part.partition(":")
+            part = f"{name.strip()}={value.strip()}"
+        parts.append(part)
+    return "; ".join(parts)
+
+
 DEFAULT_USER_AGENT = "recon-toolkit/1.0 (+rate-limited; contact: local-security-testing)"
 MAX_BODY_BYTES = 512 * 1024
 MAX_CRAWL_BODY_BYTES = 2 * 1024 * 1024
@@ -946,15 +964,16 @@ class TargetReport:
     crawl_results: list[PageResult] = field(default_factory=list)
     crawl_stats: CrawlStats | None = None
     error: str | None = None
+    session_label: str | None = None
 
 
-def run_target(target: str, args: argparse.Namespace) -> TargetReport:
+def run_target(target: str, args: argparse.Namespace, cookie: str | None = None) -> TargetReport:
     ssl_context = make_ssl_context(args.insecure)
     rate_limiter = HostRateLimiter(args.min_interval)
     robots = RobotsCache(args.user_agent, args.timeout, not args.ignore_robots, ssl_context)
     extra_headers: dict[str, str] = {}
-    if args.cookies:
-        extra_headers["Cookie"] = args.cookies
+    if cookie:
+        extra_headers["Cookie"] = normalize_cookie_line(cookie)
     for h in args.headers:
         if ":" in h:
             k, v = h.split(":", 1)
@@ -990,7 +1009,7 @@ def run_target(target: str, args: argparse.Namespace) -> TargetReport:
         root.sitemap_seed_urls = sitemap_seeds
 
     phases = [p.strip() for p in args.phases.split(",") if p.strip()]
-    report = TargetReport(target=target, root=root)
+    report = TargetReport(target=target, root=root, session_label=cookie)
 
     def _run_phase(phase: str, phase_budget: int) -> None:
         if phase == "default":
@@ -1020,6 +1039,8 @@ def run_target(target: str, args: argparse.Namespace) -> TargetReport:
 def print_target_report(report: TargetReport) -> None:
     print("=" * 70)
     print(f" 대상: {report.target}")
+    if report.session_label:
+        print(f" 세션: {report.session_label}")
     print("=" * 70)
     root = report.root
     status = f"확인됨 (마커: {root.matched_marker})" if root.confirmed else "미확인 -- 추정 루트로 진행"
@@ -1067,6 +1088,7 @@ def print_target_report(report: TargetReport) -> None:
 def _target_to_dict(report: TargetReport) -> dict:
     return {
         "target": report.target,
+        "session": report.session_label,
         "root": {
             "confirmed": report.root.confirmed,
             "root_url": report.root.root_url,
@@ -1131,7 +1153,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-requests", type=int, default=1000, help="대상 1개당 전체 요청 수 상한 (기본 1000, 0=제한 없음)")
     parser.add_argument("--ignore-robots", action="store_true", help="robots.txt 무시 (기본은 준수)")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT, help="커스텀 User-Agent 문자열")
-    parser.add_argument("--cookies", default=None, help="모든 요청에 실어 보낼 Cookie 헤더, 'k=v; k2=v2' 형식")
+    parser.add_argument("--cookies", action="append", default=[], help="모든 요청에 실어 보낼 Cookie 헤더, 'k=v; k2=v2' 형식(콜론 'k:v'도 허용). 반복 가능 -- 2번 이상 주면 세션/계정별로 전체 스캔을 각각 따로 돌려서 끝에 세션별로 구분된 결과를 출력함(예: --cookies \"JSESSIONID=aaa\" --cookies \"JSESSIONID=bbb\")")
     parser.add_argument("--headers", action="append", default=[], help="모든 요청에 추가할 헤더 'Name: value' (반복 가능)")
     parser.add_argument("--output", choices=["console", "json"], default="console", help="출력 형식 (기본 console)")
     parser.add_argument("--output-file", default=None, help="JSON 리포트를 저장할 파일 경로")
@@ -1186,8 +1208,12 @@ def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
     if _ask_yes_no("내부망 대상이라 TLS 인증서가 자체서명/사설CA라서 검증을 건너뛰어야 하나요?"):
         argv.append("--insecure")
 
-    cookie = input("세션 쿠키 (로그인 후 검사 시, 없으면 Enter): ").strip()
-    if cookie:
+    print("세션 쿠키 (로그인 후 검사 시) -- 형식: NAME=VALUE 또는 NAME=VALUE; NAME2=VALUE2 (콜론 NAME:VALUE도 허용)")
+    print("계정/권한별로 여러 세션을 비교하고 싶으면 한 줄에 하나씩 입력하세요 (예: 일반회원, 관리자 세션 각각).")
+    while True:
+        cookie = input(f"  세션 쿠키 #{argv.count('--cookies') + 1} (빈 줄=종료/없음): ").strip()
+        if not cookie:
+            break
         argv += ["--cookies", cookie]
 
     print("\n단계(모드) 선택: default(기본/백업 파일), traversal(경로순회/LFI), crawl(링크 크롤링)")
@@ -1243,14 +1269,16 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("--max-requests %d가 안전상한 %d를 넘음 (--force로 허용)", args.max_requests, MAX_TOTAL_REQUESTS)
         return 2
 
-    target_concurrency = min(args.target_concurrency, len(args.targets), 10)
+    sessions: list[str | None] = list(args.cookies) if args.cookies else [None]
+    pairs = [(t, s) for t in args.targets for s in sessions]
+    target_concurrency = min(args.target_concurrency, len(pairs), 10)
     reports: list[TargetReport] = []
     if target_concurrency <= 1:
-        for t in args.targets:
-            reports.append(run_target(t, args))
+        for t, s in pairs:
+            reports.append(run_target(t, args, s))
     else:
         with ThreadPoolExecutor(max_workers=target_concurrency) as pool:
-            futures = {pool.submit(run_target, t, args): t for t in args.targets}
+            futures = {pool.submit(run_target, t, args, s): (t, s) for t, s in pairs}
             for fut in as_completed(futures):
                 reports.append(fut.result())
 
