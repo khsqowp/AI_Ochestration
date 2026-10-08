@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Burp History 뷰어</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 1520px; margin: auto; padding: 28px 22px 60px; }
+  h1 { margin: 0 0 8px; font-size: 28px; }
+  p { margin: 0 0 16px; color: #a8b8ce; line-height: 1.6; }
+  .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
+  textarea, button, select, input { font: inherit; }
+  textarea { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 12px; background: #101c2c; border: 1px solid #405574; border-radius: 9px; color: #e7edf7; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
+  .side-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .side-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 700; gap: 8px; }
+  .side-label .name-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .side-label span.name { color: #c9d7e9; }
+  .fmt-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid #405574; color: #9fb1c8; background: #101c2c; white-space: nowrap; }
+  .fmt-badge.json { color: #cdeccb; border-color: #4f9a5c; background: rgba(46, 204, 113, .12); }
+  .fmt-badge.xml { color: #ffd9a8; border-color: #c08a3e; background: rgba(230, 160, 60, .12); }
+  button, select { padding: 9px 12px; border-radius: 8px; border: 1px solid #557099; background: #273c59; color: inherit; cursor: pointer; }
+  button:hover { background: #335275; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 5px 9px; font-size: 12px; }
+  .primary { background: #2f76cf; border-color: #5797ef; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .controls label.sync { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #c9d7e9; margin-left: auto; }
+  #status { color: #aebed2; font-size: 14px; display: inline-flex; align-items: center; gap: 7px; }
+  #status.busy::before { content: ''; width: 13px; height: 13px; border-radius: 50%; border: 2px solid #3a4d6c; border-top-color: #5797ef; animation: bc-spin .7s linear infinite; }
+  @keyframes bc-spin { to { transform: rotate(360deg); } }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .legend .mod i { background: rgba(60, 130, 246, .55); border: 1px solid #6ea2ff; }
+  .legend .del i { background: rgba(231, 76, 60, .5); border: 1px solid #ff8a7a; }
+  .legend .add i { background: rgba(46, 204, 113, .45); border: 1px solid #6adf9a; }
+  #summary { color: #aebed2; font-size: 13.5px; margin: 6px 0 14px; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .bc-pane { border: 1px solid #30425e; border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
+  .bc-pane-head { background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; padding: 9px 12px; }
+  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .bc-pane-body mark.mod { background: rgba(60, 130, 246, .38); color: #eaf1ff; border-radius: 2px; }
+  .bc-pane-body mark.del { background: rgba(231, 76, 60, .34); color: #ffecec; border-radius: 2px; }
+  .bc-pane-body mark.add { background: rgba(46, 204, 113, .32); color: #eafff0; border-radius: 2px; }
+  .empty { padding: 20px; color: #9fb1c8; }
+  .warn { color: #ffcf8a; font-size: 12.5px; margin-top: 6px; }
+  @media (max-width: 900px) { .side-grid, .result-grid { grid-template-columns: 1fr; } }
+
+input[type=search] { padding:9px; background:#101c2c; color:inherit; border:1px solid #405574; border-radius:8px; }
+.table-wrap { overflow:auto; } table { width:100%; border-collapse:collapse; font-size:13px; } th,td { padding:9px; border-bottom:1px solid #31425d; text-align:left; } th { white-space:nowrap; } td { overflow-wrap:anywhere; } tr.selected { background:#335275; } tbody tr:hover { background:#273c59; } .row-open { padding:4px 8px; } #drop.drag { outline:2px solid #5797ef; } h2 { font-size:18px; } pre { tab-size:2; } [hidden] { display:none !important; }
+</style></head><body><main>
+<h1>Burp History 뷰어</h1><p>Burp Suite의 HTTP history XML을 요청 한 줄씩 살펴보고 요청·응답 원문과 경로 목록을 확인한다. 서버로 전송하지 않음, 브라우저 안에서만 파싱 -- 이 HTML 파일 하나로 인터넷 없는 PC에서도 동작한다.</p>
+<section class="panel" id="drop"><button id="load" type="button">파일 불러오기</button><input type="file" id="file" accept=".xml,application/xml,text/xml" hidden><p>Proxy &gt; HTTP history에서 우클릭 &gt; Save items로 저장한 XML을 선택하거나 여기에 끌어 놓으세요.</p><span id="status" role="status" aria-live="polite"></span></section>
+<section class="panel"><h2>HTTP History</h2><p id="summary">XML 파일을 불러오세요.</p><div class="controls"><label>URL 검색 <input id="search" type="search" placeholder="URL 문자열 포함 검색"></label><label>상태 <select id="filter"><option value="">전체</option></select></label></div><div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">Host</th><th scope="col">Method</th><th scope="col">URL</th><th scope="col">Status</th><th scope="col">Length</th><th scope="col">MIME type</th><th scope="col">Time</th></tr></thead><tbody id="rows"></tbody></table></div><div class="controls"><button id="prev" disabled>이전</button><span id="page" role="status"></span><button id="next" disabled>다음</button></div></section>
+<section class="panel" id="detail" hidden><h2 id="selection"></h2><div class="result-grid"><div class="bc-pane"><div class="bc-pane-head"><label>Request <select id="requestMode"><option>Raw</option><option>Pretty</option></select></label></div><pre class="bc-pane-body" id="request"></pre></div><div class="bc-pane"><div class="bc-pane-head"><label>Response <select id="responseMode"><option>Raw</option><option>Pretty</option></select></label></div><pre class="bc-pane-body" id="response"></pre></div></div></section>
+<section class="panel"><h2>중복 제거 URL 경로 목록</h2><p>쿼리스트링·프래그먼트·맨 앞 슬래시를 제거하고 정렬한다. 루트 경로는 목록에서 제외한다. 필터와 관계없이 전체 히스토리를 사용한다.</p><div class="controls"><button id="copy" disabled>클립보드 복사</button><button id="download" disabled>txt로 다운로드</button></div><pre class="bc-pane-body" id="paths"></pre></section>
+</main><script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+  function detectFormat(text) {
+    const t = text.trim();
+    if (!t) return null;
+    if (t[0] === '{' || t[0] === '[') {
+      try { JSON.parse(t); return 'json'; } catch { return null; }
+    }
+    if (t[0] === '<') {
+      try {
+        const doc = new DOMParser().parseFromString(t, 'application/xml');
+        if (doc.querySelector('parsererror')) return null;
+        return 'xml';
+      } catch { return null; }
+    }
+    return null;
+  }
+
+  function formatJSON(text) {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  }
+
+  function escXmlText(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escXmlAttr(s) { return escXmlText(s).replace(/"/g, '&quot;'); }
+
+  // DOMParser(브라우저 내장, 외부 라이브러리 불필요)로 파싱 후 직접 재직렬화 -- 속성/CDATA/주석/
+  // 처리명령어(PI)까지 보존하고, 텍스트만 있는 leaf 엘리먼트는 한 줄로 유지(과도한 줄바꿈 방지).
+  function formatXML(text) {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('XML 파싱 실패');
+    function serialize(node, depth) {
+      const pad = '  '.repeat(depth);
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = node.textContent.trim();
+        return t ? pad + escXmlText(t) + '\n' : '';
+      }
+      if (node.nodeType === Node.CDATA_SECTION_NODE) return pad + '<![CDATA[' + node.textContent + ']]>\n';
+      if (node.nodeType === Node.COMMENT_NODE) return pad + '<!--' + node.textContent + '-->\n';
+      if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) return pad + '<?' + node.target + ' ' + node.data + '?>\n';
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const attrs = Array.from(node.attributes).map(a => ` ${a.name}="${escXmlAttr(a.value)}"`).join('');
+      const children = Array.from(node.childNodes).filter(n => n.nodeType !== Node.TEXT_NODE || n.textContent.trim());
+      if (children.length === 0) return `${pad}<${node.tagName}${attrs}/>\n`;
+      if (children.length === 1 && children[0].nodeType === Node.TEXT_NODE) {
+        return `${pad}<${node.tagName}${attrs}>${escXmlText(children[0].textContent.trim())}</${node.tagName}>\n`;
+      }
+      let out = `${pad}<${node.tagName}${attrs}>\n`;
+      for (const child of children) out += serialize(child, depth + 1);
+      out += `${pad}</${node.tagName}>\n`;
+      return out;
+    }
+    const declMatch = text.match(/^\s*<\?xml[^?]*\?>/);
+    const decl = declMatch ? declMatch[0] + '\n' : '';
+    return (decl + serialize(doc.documentElement, 0)).trimEnd();
+  }
+
+
+// Python normalize_path: split('?')[0].split('#')[0].lstrip('/')
+function normalizePath(raw) { return raw.split('?')[0].split('#')[0].replace(/^\/+/, ''); }
+const field = (item, name) => Array.from(item.children).find(el => el.tagName === name);
+const value = (item, name) => field(item, name)?.textContent?.trim() || '';
+let items = [], filtered = [], paths = [], page = 0, selected = null, loadVersion = 0;
+const PAGE_SIZE = 200;
+function urlPath(url) {
+  // Preserve percent escapes and dot segments; URL() would normalize those paths.
+  return url.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, '') || '/';
+}
+function parseHistory(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('XML 파싱 실패 -- Save items XML 파일인지 확인하세요.');
+  if (doc.documentElement.tagName !== 'items') throw new Error('Burp items XML 파일이 아닙니다.');
+  return Array.from(doc.getElementsByTagName('item')).map((element, index) => {
+    const url = value(element, 'url'), path = value(element, 'path') || (url ? urlPath(url) : '');
+    return { element, number:index+1, path, url:path || url || '—', host:value(element,'host') || '—', method:value(element,'method') || 'GET', status:field(element,'response') && value(element,'status') ? value(element,'status') : '응답 없음', length:value(element,'responselength') || '—', mime:value(element,'mimetype') || '—', time:value(element,'time') || '—' };
+  });
+}
+function decodeMessage(element, name) {
+  const el = field(element, name);
+  if (!el) return { text:name === 'response' ? '응답 없음' : '요청 없음', displayOnly:true };
+  if (el.getAttribute('base64')?.toLowerCase() !== 'true') return { text:el.textContent || '' };
+  let bytes;
+  try { bytes = Uint8Array.from(atob((el.textContent || '').replace(/\s/g,'')), c => c.charCodeAt(0)); }
+  catch { return { text:'base64 디코딩 실패 -- 원본 데이터를 확인하세요.', displayOnly:true }; }
+  try { return { text:new TextDecoder('utf-8', { fatal:true, ignoreBOM:true }).decode(bytes) }; }
+  catch { return { text:`바이너리 데이터(${bytes.length}바이트, 표시 안 함)`, displayOnly:true }; }
+}
+function prettyMessage(message) {
+  if (message.displayOnly) return message.text;
+  const separator = /\r\n\r\n|\n\n|\r\r/.exec(message.text);
+  if (!separator) return message.text;
+  const end = separator.index + separator[0].length;
+  const header = message.text.slice(0,end), body = message.text.slice(end), format = detectFormat(body);
+  try { return header + (format === 'json' ? formatJSON(body) : format === 'xml' ? formatXML(body) : body); }
+  catch { return message.text; }
+}
+function renderDetail() {
+  for (const name of ['request','response']) {
+    const message = selected.messages[name];
+    $(name).textContent = $(name+'Mode').value === 'Pretty' ? prettyMessage(message) : message.text;
+  }
+}
+function selectItem(item) {
+  // Retain only the current decoded messages, rather than caching all bodies.
+  selected = { item, messages:{ request:decodeMessage(item.element,'request'), response:decodeMessage(item.element,'response') } };
+  $('selection').textContent = `#${item.number} ${item.method} ${item.url}`;
+  $('requestMode').value = 'Raw'; $('responseMode').value = 'Raw';
+  $('detail').hidden = false; renderDetail(); renderRows();
+}
+function renderRows() {
+  const fragment = document.createDocumentFragment();
+  for (const item of filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE)) {
+    const row = document.createElement('tr');
+    if (selected?.item === item) row.className = 'selected';
+    for (const [index, text] of [item.number,item.host,item.method,item.url,item.status,item.length,item.mime,item.time].entries()) {
+      const cell = document.createElement('td');
+      if (index === 0) {
+        const button = document.createElement('button'); button.className = 'row-open'; button.textContent = String(text);
+        button.setAttribute('aria-label', `요청 ${item.number} 상세 보기`); cell.append(button);
+      } else cell.textContent = String(text);
+      row.append(cell);
+    }
+    row.addEventListener('click', () => selectItem(item)); fragment.append(row);
+  }
+  $('rows').replaceChildren(fragment);
+  const pages = Math.ceil(filtered.length/PAGE_SIZE);
+  $('page').textContent = `검색 결과 ${filtered.length}개 · ${pages ? page+1 : 0}/${pages} 페이지`;
+  $('prev').disabled = page === 0; $('next').disabled = page+1 >= pages;
+}
+function applyFilters() {
+  const query = $('search').value.toLowerCase(), status = $('filter').value;
+  filtered = items.filter(item => item.url.toLowerCase().includes(query) && (!status || item.status === status));
+  page = 0; renderRows();
+}
+async function loadFile(file) {
+  if (!file) return;
+  const version = ++loadVersion; $('status').textContent = 'XML 읽는 중…';
+  try {
+    const text = await file.text(); if (version !== loadVersion) return;
+    const parsed = parseHistory(text);
+    items = parsed; selected = null; $('detail').hidden = true;
+    paths = [...new Set(items.map(item => normalizePath(item.path)).filter(Boolean))].sort((a,b) => {
+      // Python sorted() compares Unicode code points, including supplementary characters.
+      const x = Array.from(a, c => c.codePointAt(0)), y = Array.from(b, c => c.codePointAt(0));
+      for (let i=0;i<Math.min(x.length,y.length);i++) if(x[i]!==y[i]) return x[i]-y[i];
+      return x.length-y.length;
+    });
+    const counts = new Map(); for (const item of items) counts.set(item.status,(counts.get(item.status)||0)+1);
+    $('summary').textContent = `총 요청 ${items.length}개 · 고유 경로 ${paths.length}개 · 상태: ${Array.from(counts,([code,count]) => `${code} ${count}개`).join(', ') || '없음'}`;
+    $('filter').replaceChildren(new Option('전체','')); for (const code of [...counts.keys()].sort()) $('filter').add(new Option(code,code));
+    $('search').value = ''; $('paths').textContent = paths.join('\n');
+    $('copy').disabled = $('download').disabled = paths.length === 0;
+    applyFilters(); $('status').textContent = `${file.name} 불러오기 완료`;
+  } catch (error) { if(version === loadVersion) $('status').textContent = error.message || '파일 읽기 실패'; }
+}
+$('load').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', () => { loadFile($('file').files[0]); $('file').value = ''; });
+for (const event of ['dragenter','dragover']) $('drop').addEventListener(event, e => { e.preventDefault(); $('drop').classList.add('drag'); });
+$('drop').addEventListener('dragleave', () => $('drop').classList.remove('drag'));
+$('drop').addEventListener('drop', e => { e.preventDefault(); $('drop').classList.remove('drag'); loadFile(e.dataTransfer.files[0]); });
+$('search').addEventListener('input',applyFilters); $('filter').addEventListener('change',applyFilters);
+$('prev').addEventListener('click', () => { page--; renderRows(); }); $('next').addEventListener('click', () => { page++; renderRows(); });
+for (const name of ['request','response']) $(name+'Mode').addEventListener('change',renderDetail);
+const wordlist = () => paths.join('\n')+'\n';
+$('copy').addEventListener('click', async () => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(wordlist());
+    else {
+      const area = document.createElement('textarea'); area.value = wordlist(); document.body.append(area); area.select();
+      try { if (!document.execCommand('copy')) throw new Error('copy failed'); } finally { area.remove(); }
+    }
+    $('status').textContent = '경로 목록 복사 완료';
+  } catch { $('status').textContent = '클립보드 복사 실패 -- txt 다운로드를 사용하세요.'; }
+});
+$('download').addEventListener('click', () => {
+  const url = URL.createObjectURL(new Blob([wordlist()],{type:'text/plain;charset=utf-8'}));
+  const link = document.createElement('a'); link.href = url; link.download = 'paths-wordlist.txt'; document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url),1000);
+});
+})();
+</script></body></html>

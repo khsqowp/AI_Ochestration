@@ -1,5 +1,5 @@
 import { type ComponentType } from 'react'
-import { AppWindow, Binary, Database, FolderSearch, GitCompare, Route, ShieldAlert, SquareTerminal, Terminal, Zap } from 'lucide-react'
+import { AppWindow, Binary, Database, FolderSearch, GitCompare, History, Route, ShieldAlert, SquareTerminal, Terminal, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
 
@@ -33,6 +33,9 @@ export function DiagnosticsPage() {
           </Link>
           <Link className="diag-tile" to="/dashboard/diag/burp-comparer">
             <GitCompare size={20}/><span>Burp Comparer</span>
+          </Link>
+          <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
+            <History size={20}/><span>Burp History 뷰어</span>
           </Link>
         </div>
       </section>
