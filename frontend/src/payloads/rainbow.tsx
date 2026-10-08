@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clipboard, CheckCircle2, XCircle, Cpu } from 'lucide-react'
 import { Note } from './shared'
+import { HASH_PREFIX, identifyHash } from './decoder'
 import {
   type AlgoId, ALGO_LABEL, ALL_ALGOS, HASH_LENGTH_TO_ALGOS, subtleAvailable,
   md5Hex, ntlmHex, crc32Hex, hashWith,
 } from './hashCore'
 
-/* 레인보우 테이블 해시 크랙 — 세 방향.
+/* 레인보우 테이블 해시 크랙 — 단일 해시 세 방향 + 여러 해시 순차 배치.
    1) 원본값 → 해시: 평문을 넣으면 MD5/NTLM/SHA1/SHA256/SHA384/SHA512/CRC32 를 즉시 계산한다
       (비교용 해시값을 같이 넣으면 일치하는 알고리즘을 표시 — "이 평문이 이 해시가 맞는지" 검증).
    2) 해시 → 원본값(사전): 해시값을 넣으면 길이로 알고리즘 후보를 좁히고, 내장 사전(흔한 취약
@@ -140,6 +141,16 @@ function GenerateMode() {
 }
 
 /* ── 해시 입력 + 알고리즘 판별(사전/브루트포스 공용) ── */
+function cryptFormat(input: string): string | undefined {
+  const value = input.trim()
+  if (!value.startsWith('$') && !HASH_PREFIX.some(([re]) => re.test(value))) return undefined
+  return identifyHash(value).map(h => h.name).join(' / ') || '알 수 없는 $ 접두사 해시'
+}
+
+function NotFoundDiagnosis({ tried }: { tried: string }) {
+  return <p className="dec-hash-note">{tried} 안에서 일치하는 값을 찾지 못했습니다. raw 해시(MD5/SHA1/SHA256/SHA384/SHA512/NTLM/CRC32)는 해시값 자체만 보고는 솔트가 걸렸는지 알 방법이 전혀 없습니다. bcrypt($2b$)/md5crypt($1$)/sha256crypt($5$)/sha512crypt($6$)/pbkdf2처럼 접두사로 포맷이 드러나는 해시는 포맷으로 식별할 수 있으며, 스마트 디코더에서 먼저 확인하세요. 사전+브루트포스 범위를 넓혀도 안 나오면 (1) 평문이 범위 밖이거나 (2) 솔트가 걸려 있을 가능성이 높다.</p>
+}
+
 function useHashTarget() {
   const [hash, setHash] = useState('')
   const [algo, setAlgo] = useState<AlgoId | ''>('')
@@ -147,14 +158,15 @@ function useHashTarget() {
   const isHex = /^[0-9a-fA-F]+$/.test(trimmed)
   const detected = isHex ? HASH_LENGTH_TO_ALGOS[trimmed.length] : undefined
   const candidateAlgos: AlgoId[] = algo ? [algo] : (detected ?? [])
-  return { hash, setHash, algo, setAlgo, trimmed, detected, candidateAlgos }
+  return { hash, setHash, algo, setAlgo, trimmed, detected, candidateAlgos, cryptFormatWarning: cryptFormat(trimmed) }
 }
 
-function HashTargetFields({ t, onHashChange }: { t: ReturnType<typeof useHashTarget>; onHashChange?: () => void }) {
+function HashTargetFields({ t, onHashChange, batch = false, disabled = false }: { t: ReturnType<typeof useHashTarget>; onHashChange?: () => void; batch?: boolean; disabled?: boolean }) {
   return <>
-    <label className="payload-builder-label">해시값</label>
-    <input className="payload-builder-input" value={t.hash} onChange={e => { t.setHash(e.target.value); onHashChange?.() }} placeholder="예: 5f4dcc3b5aa765d61d8327deb882cf99"/>
-    {t.trimmed && <div className="dec-verdict">
+    <label className="payload-builder-label">{batch ? '여러 해시 (한 줄에 하나씩)' : '해시값'}</label>
+    {batch ? <textarea className="payload-builder-textarea" rows={6} value={t.hash} disabled={disabled} onChange={e => t.setHash(e.target.value)} placeholder="해시를 한 줄에 하나씩 붙여넣으세요"/> : <input className="payload-builder-input" value={t.hash} onChange={e => { t.setHash(e.target.value); onHashChange?.() }} placeholder="예: 5f4dcc3b5aa765d61d8327deb882cf99"/>}
+    {(batch ? t.hash.split(/\r?\n/).map((hash, i) => ({ format: cryptFormat(hash), line: i + 1 })).filter(x => x.format) : [{ format: t.cryptFormatWarning, line: 0 }]).map(({ format, line }) => format && <p key={line} role="alert" className="dec-hash-note">{batch && `${line}번째 줄: `}이 값은 raw 해시가 아니라 {format} 포맷으로 보입니다 — 레인보우 크랙이 아니라 스마트 디코더에서 먼저 확인하세요.</p>)}
+    {!batch && t.trimmed && <div className="dec-verdict">
       <span className="dec-verdict-label">알고리즘</span>
       {t.detected
         ? t.detected.map(a => <span key={a} className="dec-hash-badge">{ALGO_LABEL[a]}</span>)
@@ -162,8 +174,8 @@ function HashTargetFields({ t, onHashChange }: { t: ReturnType<typeof useHashTar
       {t.detected && t.detected.length > 1 && <span className="dec-hash-note">길이가 같아 후보가 여러 개입니다 — 자동판별 시 전부 시도합니다.</span>}
     </div>}
     <label className="payload-builder-label">알고리즘 <small>(자동판별 후보를 그대로 쓰려면 비워두세요)</small></label>
-    <select className="payload-builder-select" value={t.algo} onChange={e => t.setAlgo(e.target.value as AlgoId | '')}>
-      <option value="">자동판별 사용{t.detected ? ` (${t.detected.map(a => ALGO_LABEL[a]).join(' / ')})` : ''}</option>
+    <select className="payload-builder-select" value={t.algo} disabled={disabled} onChange={e => t.setAlgo(e.target.value as AlgoId | '')}>
+      <option value="">{batch ? '자동판별(라인별 길이 기반)' : '자동판별 사용'}{!batch && t.detected ? ` (${t.detected.map(a => ALGO_LABEL[a]).join(' / ')})` : ''}</option>
       {ALL_ALGOS.map(a => <option key={a} value={a}>{ALGO_LABEL[a]}</option>)}
     </select>
   </>
@@ -243,7 +255,7 @@ function CrackMode() {
       <p><CheckCircle2 size={14}/> 크랙 성공 — {fmtInt(status.tried)}번째 후보에서 일치</p>
       <HashRow label={ALGO_LABEL[status.algo]} value={status.plain}/>
     </div>}
-    {status.state === 'not-found' && <p className="dec-hash-note">사전 {fmtInt(status.tried)}개 안에서 일치하는 값을 찾지 못했습니다. 아래 브루트포스로 넘어가거나, 솔트가 걸려 있을 수 있습니다.</p>}
+    {status.state === 'not-found' && <NotFoundDiagnosis tried={`사전 ${fmtInt(status.tried)}개`}/>}
     {status.state === 'stopped' && <p className="dec-hash-note">{fmtInt(status.tried)}개 시도 후 중단했습니다.</p>}
     <Note>이 사전은 실제 유출 데이터가 아니라 공개적으로 널리 알려진 "흔한 취약 비밀번호" 패턴(대소문자·자릿수·연도·리트스피크 변형 포함, 기본 {fmtInt(WORDLIST.length)}개)으로 만든 것입니다. bcrypt·argon2·scrypt·sha256crypt 같은 솔트+저속 해시는 사전이든 브루트포스든 이 방식으로 원천적으로 못 뚫습니다 — 그게 그 알고리즘들을 쓰는 이유입니다.</Note>
   </>
@@ -396,18 +408,179 @@ function BruteForceMode() {
       <p><CheckCircle2 size={14}/> 크랙 성공 — {status.length}자리에서 발견</p>
       <HashRow label={ALGO_LABEL[status.algo]} value={status.plain}/>
     </div>}
-    {status.state === 'not-found' && <p className="dec-hash-note">지정한 문자셋·길이 범위 전체를 다 돌았지만 일치하는 값을 찾지 못했습니다. 범위를 넓히거나, 솔트가 걸려 있을 수 있습니다.</p>}
+    {status.state === 'not-found' && <NotFoundDiagnosis tried="지정한 문자셋·길이 범위 전체"/>}
     {status.state === 'stopped' && <p className="dec-hash-note">중단했습니다.</p>}
     <Note>진짜 전수조사입니다 — 문자셋·길이를 넉넉히 잡으면 후보 수가 기하급수로 커집니다(예: 영문+숫자+기호 8자리 ≈ 6×10¹⁵개). CPU 코어를 최대한 씁니다만 브라우저 탭이 계속 열려 있어야 하고, 팬이 돌 수 있습니다. bcrypt·argon2 같은 솔트+저속 해시는 이 방식으로도 현실적 시간 안엔 못 뚫습니다.</Note>
   </>
 }
 
+/* ── 여러 해시 배치: 한 해시에만 워커를 집중하고 결과는 즉시 누적 ── */
+type BatchResult = { hash: string; plain: string | null; algo: AlgoId | null; foundAt: number; status: 'found' | 'not-found' }
+
+function BatchCrackMode() {
+  const t = useHashTarget()
+  const [results, setResults] = useState<BatchResult[]>([])
+  const [presetId, setPresetId] = useState('lowerNum')
+  const [customChars, setCustomChars] = useState('')
+  const [minLen, setMinLen] = useState(1)
+  const [maxLen, setMaxLen] = useState(4)
+  const [running, setRunning] = useState(false)
+  const [message, setMessage] = useState('')
+  const [current, setCurrent] = useState(0)
+  const [progress, setProgress] = useState<Extract<CrackStatus, { state: 'running' }> | null>(null)
+  const runIdRef = useRef(0)
+  const cancelLengthRef = useRef<(() => void) | null>(null)
+  const hashes = t.hash.split(/\r?\n/).map(h => h.trim()).filter(Boolean)
+  const rawChars = presetId === 'custom' ? customChars : CHARSET_PRESETS.find(p => p.id === presetId)?.chars ?? ''
+  const charset = [...new Set(rawChars.split(''))].join('')
+  const keyspaces = Array.from({ length: maxLen - minLen + 1 }, (_, i) => ({ length: minLen + i, size: charset.length ** (minLen + i) }))
+  const totalKeyspace = keyspaces.reduce((sum, k) => sum + k.size, 0)
+  const oversized = keyspaces.some(k => !Number.isSafeInteger(k.size)) || !Number.isSafeInteger(totalKeyspace)
+
+  useEffect(() => () => { runIdRef.current++; cancelLengthRef.current?.() }, [])
+
+  // 기존 워커의 구간 분할/메시지 프로토콜을 유지. 중단도 Promise를 해제한다.
+  const runLength = (hash: string, algos: AlgoId[], length: number, myRun: number, done: number, startedAt: number): Promise<{ plain: string; algo: AlgoId; tried: number } | null> => new Promise((resolve, reject) => {
+    const count = Math.min(navigator.hardwareConcurrency || 4, 16)
+    const total = charset.length ** length
+    const chunk = Math.ceil(total / count)
+    const workers: Worker[] = []
+    const tried = new Array<number>(count).fill(0)
+    let completed = 0
+    let settled = false
+    const cleanup = () => { workers.forEach(w => w.terminate()); cancelLengthRef.current = null }
+    const finish = (found: { plain: string; algo: AlgoId; tried: number } | null) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(found)
+    }
+    const fail = (error: unknown) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(error)
+    }
+    cancelLengthRef.current = () => finish(null)
+    try {
+      for (let wi = 0; wi < count; wi++) {
+        const startIndex = wi * chunk
+        const endIndex = Math.min(total, startIndex + chunk)
+        if (startIndex >= endIndex) continue
+        const worker = new Worker(new URL('./rainbowWorker.ts', import.meta.url), { type: 'module' })
+        workers.push(worker)
+        worker.onerror = () => fail(new Error('브루트포스 워커 실행 실패'))
+        worker.onmessageerror = () => fail(new Error('브루트포스 워커 응답 해석 실패'))
+        worker.onmessage = (e: MessageEvent<{ type: string; tried?: number; plain?: string; algo?: AlgoId }>) => {
+          if (runIdRef.current !== myRun || settled) return
+          if (e.data.type === 'progress' && typeof e.data.tried === 'number') {
+            tried[wi] = e.data.tried
+            setProgress({ state: 'running', tried: done + tried.reduce((a, b) => a + b, 0), total: totalKeyspace, startedAt })
+          } else if (e.data.type === 'found' && e.data.plain !== undefined && e.data.algo) {
+            finish({ plain: e.data.plain, algo: e.data.algo, tried: done + tried.reduce((a, b) => a + b, 0) + 1 })
+          } else if (e.data.type === 'done' && ++completed === workers.length) finish(null)
+        }
+        worker.postMessage({ cmd: 'run', algos, charset, length, startIndex, endIndex, target: hash.toLowerCase(), reportEvery: 20000 })
+      }
+      if (!workers.length) finish(null)
+    } catch (error) { fail(error) }
+  })
+
+  const start = async (kind: 'dictionary' | 'brute') => {
+    if (running || !hashes.length || (kind === 'brute' && (!charset || oversized))) return
+    const myRun = ++runIdRef.current
+    setResults([])
+    setRunning(true)
+    setMessage('')
+    try {
+      for (let hi = 0; hi < hashes.length; hi++) {
+        if (runIdRef.current !== myRun) return
+        const hash = hashes[hi]
+        const algos = cryptFormat(hash) ? [] : t.algo ? [t.algo] : /^[0-9a-fA-F]+$/.test(hash) ? HASH_LENGTH_TO_ALGOS[hash.length] ?? [] : []
+        const startedAt = performance.now()
+        const total = kind === 'dictionary' ? WORDLIST.length : totalKeyspace
+        setCurrent(hi + 1)
+        setProgress({ state: 'running', tried: 0, total, startedAt })
+        let found: { plain: string; algo: AlgoId; tried: number } | null = null
+        if (algos.length && kind === 'dictionary') {
+          search: for (let i = 0; i < WORDLIST.length; i++) {
+            for (const algo of algos) {
+              if (runIdRef.current !== myRun) return
+              const digest = await hashWith(algo, WORDLIST[i])
+              if (runIdRef.current !== myRun) return
+              if (digest.toLowerCase() === hash.toLowerCase()) { found = { plain: WORDLIST[i], algo, tried: i + 1 }; break search }
+            }
+            if (i % CHUNK_SIZE === 0) {
+              setProgress({ state: 'running', tried: i + 1, total, startedAt })
+              await new Promise(resolve => setTimeout(resolve, 0))
+            }
+          }
+        } else if (algos.length) {
+          let done = 0
+          for (const { length, size } of keyspaces) {
+            if (runIdRef.current !== myRun) return
+            found = await runLength(hash, algos, length, myRun, done, startedAt)
+            if (runIdRef.current !== myRun) return
+            if (found) break
+            done += size
+            setProgress({ state: 'running', tried: done, total, startedAt })
+          }
+        }
+        if (runIdRef.current !== myRun) return
+        const result: BatchResult = { hash, plain: found?.plain ?? null, algo: found?.algo ?? null, foundAt: found ? performance.now() - startedAt : 0, status: found ? 'found' : 'not-found' }
+        setResults(prev => [...prev, result])
+        // 캐시 없이 즉시 결과를 그릴 기회를 주고 다음 해시로 이동한다.
+        await new Promise(resolve => setTimeout(resolve, 0))
+      }
+      if (runIdRef.current === myRun) setMessage('전체 배치 처리가 끝났습니다.')
+    } catch (error) {
+      if (runIdRef.current === myRun) setMessage(`실행 실패: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      if (runIdRef.current === myRun) { setRunning(false); setProgress(null) }
+    }
+  }
+  const stop = () => { runIdRef.current++; cancelLengthRef.current?.(); setRunning(false); setProgress(null); setMessage('중단했습니다. 처리된 결과는 유지됩니다.') }
+
+  return <>
+    <HashTargetFields t={t} batch disabled={running}/>
+    <label className="payload-builder-label">브루트포스 문자셋</label>
+    <select className="payload-builder-select" value={presetId} disabled={running} onChange={e => setPresetId(e.target.value)}>
+      {CHARSET_PRESETS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+    </select>
+    {presetId === 'custom' && <input className="payload-builder-input" value={customChars} disabled={running} onChange={e => setCustomChars(e.target.value)} placeholder="예: ab12!@ — 사용할 문자를 그대로 나열"/>}
+    <label className="payload-builder-label">길이 범위 <small>(짧은 길이부터 순서대로 시도)</small></label>
+    <div className="rainbow-length-range">
+      <input type="number" className="payload-builder-input rainbow-num" min={1} max={12} value={minLen} disabled={running} onChange={e => setMinLen(Math.max(1, Math.min(Number(e.target.value) || 1, maxLen)))}/>
+      <span>~</span>
+      <input type="number" className="payload-builder-input rainbow-num" min={1} max={12} value={maxLen} disabled={running} onChange={e => setMaxLen(Math.max(minLen, Math.min(12, Number(e.target.value) || minLen)))}/>
+      <span className="rainbow-keyspace-hint">문자셋 {charset.length}종 · 해시당 총 후보 {oversized ? '계산 불가' : fmtBig(totalKeyspace)}개</span>
+    </div>
+    {oversized && <p className="dec-hash-note">후보 수가 인덱스 정밀도 한계를 넘습니다 — 문자셋이나 길이를 줄이세요.</p>}
+    <Note>여러 해시를 동시에 브루트포스하면 워커가 과도하게 늘어나 전체 소요시간이 더 길어지므로, 한 해시씩 CPU 전체를 집중해 순차 처리합니다.</Note>
+    <div className="rainbow-actions">
+      <button className="rainbow-btn primary" disabled={running || !hashes.length} onClick={() => void start('dictionary')}>사전으로 전부 시도</button>
+      <button className="rainbow-btn primary" disabled={running || !hashes.length || !charset || oversized} onClick={() => void start('brute')}>브루트포스로 전부 시도</button>
+      {running && <button className="rainbow-btn stop" onClick={stop}><XCircle size={14}/>중단</button>}
+    </div>
+    {running && <p className="rainbow-sublabel">{current} / 총{hashes.length}번째 해시 처리 중</p>}
+    {progress && <ProgressBar status={progress}/>}
+    {message && <p className="dec-hash-note" role="status">{message}</p>}
+    {results.map((result, i) => <div key={i} className={`rainbow-result ${result.status === 'found' ? 'found' : 'not-found'}`}>
+      <p style={{ overflowWrap: 'anywhere' }}>{result.status === 'found' ? <CheckCircle2 size={14}/> : <XCircle size={14}/>}{i + 1}. {result.hash} — {result.status === 'found' ? `성공 (${fmtDuration(result.foundAt / 1000)})` : '못 찾음'}</p>
+      {result.algo && <HashRow label={ALGO_LABEL[result.algo]} value={result.plain ?? ''}/>}
+      {result.status === 'not-found' && !(t.algo || HASH_LENGTH_TO_ALGOS[result.hash.length]) && <p className="dec-hash-note">지원 알고리즘을 자동판별할 수 없습니다. 알고리즘을 직접 선택하거나 스마트 디코더에서 확인하세요.</p>}
+    </div>)}
+    {results.some(r => r.status === 'not-found') && <NotFoundDiagnosis tried="배치에서 지정한 검색 범위"/>}
+  </>
+}
+
 export function RainbowTableBuilder() {
-  const [mode, setMode] = useState<'crack' | 'brute' | 'generate'>('crack')
+  const [mode, setMode] = useState<'crack' | 'brute' | 'generate' | 'batch'>('crack')
   const modeButtons = useMemo(() => [
     { id: 'crack' as const, label: '해시 → 원본값 (사전)' },
     { id: 'brute' as const, label: '해시 → 원본값 (브루트포스)' },
     { id: 'generate' as const, label: '원본값 → 해시 (생성·검증)' },
+    { id: 'batch' as const, label: '여러 해시 일괄 크랙' },
   ], [])
 
   return <div className="payload-builder rainbow-table">
@@ -418,5 +591,6 @@ export function RainbowTableBuilder() {
     {mode === 'crack' && <CrackMode/>}
     {mode === 'brute' && <BruteForceMode/>}
     {mode === 'generate' && <GenerateMode/>}
+    {mode === 'batch' && <BatchCrackMode/>}
   </div>
 }

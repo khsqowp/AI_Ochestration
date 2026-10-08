@@ -763,6 +763,8 @@
 .dec-hash-badge.match { background:#e7f8ee; color:#1f6d45; border-color:#b9e8cb; }
 .rainbow-result { margin-top:10px; padding:10px 12px; border-radius:9px; background:#f1faf5; border:1px solid #b9e8cb; }
 .rainbow-result p { display:flex; align-items:center; gap:6px; margin:0 0 8px; font-size:12px; font-weight:700; color:#1f6d45; }
+.rainbow-result.not-found { background:#fdeceb; border-color:#f4c7c2; }
+.rainbow-result.not-found p { color:#c0392b; }
 .rainbow-checkbox-row { display:flex; align-items:center; gap:8px; margin:10px 0; font-size:12px; color:#4a4552; }
 .rainbow-inline-select { width:auto !important; max-width:160px !important; padding:5px 7px !important; }
 .rainbow-actions { display:flex; gap:8px; margin-top:10px; }

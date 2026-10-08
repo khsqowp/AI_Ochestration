@@ -166,7 +166,7 @@ function detectStep(input: string): Step | null {
 
 /* ── 해시 포맷 식별 (DecoderPanel.HASH_PREFIX_RULES + HASH_HEX_LENGTHS) ── */
 
-const HASH_PREFIX: [RegExp, string, boolean][] = [
+export const HASH_PREFIX: [RegExp, string, boolean][] = [
   [/^\$2[aby]\$/, 'bcrypt', false],
   [/^\$1\$/, 'md5crypt', true],
   [/^\$5\$/, 'sha256crypt', false],
@@ -187,7 +187,7 @@ const HEX_HASH: Record<number, [string, boolean]> = {
   128: ['SHA512', false],
 }
 
-function identifyHash(input: string): { name: string; weak: boolean }[] {
+export function identifyHash(input: string): { name: string; weak: boolean }[] {
   const v = input.trim()
   const out: { name: string; weak: boolean }[] = []
   for (const [re, name, weak] of HASH_PREFIX) if (re.test(v)) out.push({ name, weak })
