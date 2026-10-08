@@ -15,8 +15,12 @@
   textarea, button, select, input { font: inherit; }
   textarea { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 12px; background: #101c2c; border: 1px solid #405574; border-radius: 9px; color: #e7edf7; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
   .side-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .side-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 700; }
+  .side-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 700; gap: 8px; }
+  .side-label .name-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .side-label span.name { color: #c9d7e9; }
+  .fmt-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid #405574; color: #9fb1c8; background: #101c2c; white-space: nowrap; }
+  .fmt-badge.json { color: #cdeccb; border-color: #4f9a5c; background: rgba(46, 204, 113, .12); }
+  .fmt-badge.xml { color: #ffd9a8; border-color: #c08a3e; background: rgba(230, 160, 60, .12); }
   button, select { padding: 9px 12px; border-radius: 8px; border: 1px solid #557099; background: #273c59; color: inherit; cursor: pointer; }
   button:hover { background: #335275; }
   button:disabled { opacity: .5; cursor: default; }
@@ -49,16 +53,16 @@
 <body>
 <main>
   <h1>Burp Comparer</h1>
-  <p>Burp Suite의 Comparer처럼 두 텍스트(HTTP 요청/응답, 설정값 등)를 단어 단위로 비교한다. 완전히 브라우저 안에서만 동작하며 입력한 내용을 서버로 전송하지 않는다.</p>
+  <p>Burp Suite의 Comparer처럼 두 텍스트(HTTP 요청/응답, 설정값 등)를 단어 단위로 비교한다. 완전히 브라우저 안에서만 동작하며 입력한 내용을 서버로 전송하지 않는다. JSON/XML로 보이는 입력은 자동으로 들여쓰기를 맞춰 포맷한 뒤 비교한다(끌 수 있음) -- 포맷 차이가 실제 내용 차이에 섞여 보이는 걸 줄여준다.</p>
   <section class="panel">
     <div class="side-grid">
       <div>
-        <div class="side-label"><span class="name">원본 (Original)</span><button class="small" id="loadA" type="button">파일 불러오기</button></div>
+        <div class="side-label"><span class="name-group"><span class="name">원본 (Original)</span><span class="fmt-badge" id="fmtA">텍스트</span></span><button class="small" id="loadA" type="button">파일 불러오기</button></div>
         <textarea id="inputA" spellcheck="false" placeholder="원본 텍스트를 붙여넣으세요"></textarea>
         <input type="file" id="fileA" hidden>
       </div>
       <div>
-        <div class="side-label"><span class="name">수정본 (Modified)</span><button class="small" id="loadB" type="button">파일 불러오기</button></div>
+        <div class="side-label"><span class="name-group"><span class="name">수정본 (Modified)</span><span class="fmt-badge" id="fmtB">텍스트</span></span><button class="small" id="loadB" type="button">파일 불러오기</button></div>
         <textarea id="inputB" spellcheck="false" placeholder="비교할 텍스트를 붙여넣으세요"></textarea>
         <input type="file" id="fileB" hidden>
       </div>
@@ -67,6 +71,7 @@
       <button class="primary" id="compare">비교하기</button>
       <button id="clear">초기화</button>
       <span id="status" role="status"></span>
+      <label class="sync"><input type="checkbox" id="autoFormat" checked> 자동 포맷 (JSON/XML)</label>
       <label class="sync"><input type="checkbox" id="syncViews" checked> Sync Views (스크롤 동기화)</label>
     </div>
   </section>
@@ -207,6 +212,78 @@
 
   const MAX_COMBINED_TOKENS = 12000; // 겹치는 부분이 없는 병적인 입력에서도 1초 이내로 끝내기 위한 상한(실측 기준)
 
+  // ── JSON/XML 자동 포맷 -- https://semanticdiff.com/online-diff/xml/ 참고. 그쪽은 기본은
+  // 원문 그대로 두고 수동 Prettify 버튼을 제공하는 방식이지만, 여기선 명시적으로 "자동" 요청이라
+  // 기본 ON(체크박스로 끌 수 있음)으로 하고, 들여쓰기만 바꾸는 게 아니라 양쪽을 같은 포맷터로
+  // 통일시켜서 "포맷 차이"가 "실제 내용 차이"에 섞여 보이는 걸 줄인다.
+  function detectFormat(text) {
+    const t = text.trim();
+    if (!t) return null;
+    if (t[0] === '{' || t[0] === '[') {
+      try { JSON.parse(t); return 'json'; } catch { return null; }
+    }
+    if (t[0] === '<') {
+      try {
+        const doc = new DOMParser().parseFromString(t, 'application/xml');
+        if (doc.querySelector('parsererror')) return null;
+        return 'xml';
+      } catch { return null; }
+    }
+    return null;
+  }
+
+  function formatJSON(text) {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  }
+
+  function escXmlText(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escXmlAttr(s) { return escXmlText(s).replace(/"/g, '&quot;'); }
+
+  // DOMParser(브라우저 내장, 외부 라이브러리 불필요)로 파싱 후 직접 재직렬화 -- 속성/CDATA/주석/
+  // 처리명령어(PI)까지 보존하고, 텍스트만 있는 leaf 엘리먼트는 한 줄로 유지(과도한 줄바꿈 방지).
+  function formatXML(text) {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('XML 파싱 실패');
+    function serialize(node, depth) {
+      const pad = '  '.repeat(depth);
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = node.textContent.trim();
+        return t ? pad + escXmlText(t) + '\n' : '';
+      }
+      if (node.nodeType === Node.CDATA_SECTION_NODE) return pad + '<![CDATA[' + node.textContent + ']]>\n';
+      if (node.nodeType === Node.COMMENT_NODE) return pad + '<!--' + node.textContent + '-->\n';
+      if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) return pad + '<?' + node.target + ' ' + node.data + '?>\n';
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const attrs = Array.from(node.attributes).map(a => ` ${a.name}="${escXmlAttr(a.value)}"`).join('');
+      const children = Array.from(node.childNodes).filter(n => n.nodeType !== Node.TEXT_NODE || n.textContent.trim());
+      if (children.length === 0) return `${pad}<${node.tagName}${attrs}/>\n`;
+      if (children.length === 1 && children[0].nodeType === Node.TEXT_NODE) {
+        return `${pad}<${node.tagName}${attrs}>${escXmlText(children[0].textContent.trim())}</${node.tagName}>\n`;
+      }
+      let out = `${pad}<${node.tagName}${attrs}>\n`;
+      for (const child of children) out += serialize(child, depth + 1);
+      out += `${pad}</${node.tagName}>\n`;
+      return out;
+    }
+    const declMatch = text.match(/^\s*<\?xml[^?]*\?>/);
+    const decl = declMatch ? declMatch[0] + '\n' : '';
+    return (decl + serialize(doc.documentElement, 0)).trimEnd();
+  }
+
+  function applyAutoFormat(textareaId, badgeId) {
+    const ta = $(textareaId);
+    const badge = $(badgeId);
+    const fmt = detectFormat(ta.value);
+    badge.textContent = fmt === 'json' ? 'JSON' : fmt === 'xml' ? 'XML' : '텍스트';
+    badge.className = 'fmt-badge' + (fmt ? ' ' + fmt : '');
+    if (!fmt || !$('autoFormat').checked) return;
+    try {
+      ta.value = fmt === 'json' ? formatJSON(ta.value) : formatXML(ta.value);
+    } catch {
+      // 감지는 됐지만 포맷 중 실패하면 원문 그대로 둔다(배지 표시는 유지).
+    }
+  }
+
   let syncing = false;
   function wireSync(paneA, paneB) {
     function makeHandler(from, to) {
@@ -224,6 +301,8 @@
   wireSync($('paneA'), $('paneB'));
 
   function runCompare() {
+    applyAutoFormat('inputA', 'fmtA');
+    applyAutoFormat('inputB', 'fmtB');
     const a = $('inputA').value, b = $('inputB').value;
     if (!a && !b) { $('status').textContent = '원본과 수정본을 입력해 주세요.'; return; }
     const tokA = tokenize(a), tokB = tokenize(b);
@@ -269,19 +348,29 @@
     $('inputA').value = ''; $('inputB').value = '';
     $('resultPanel').style.display = 'none';
     $('status').textContent = '';
+    $('fmtA').textContent = '텍스트'; $('fmtA').className = 'fmt-badge';
+    $('fmtB').textContent = '텍스트'; $('fmtB').className = 'fmt-badge';
   });
 
-  function wireFileLoad(buttonId, fileId, textareaId) {
+  $('inputA').addEventListener('blur', () => applyAutoFormat('inputA', 'fmtA'));
+  $('inputB').addEventListener('blur', () => applyAutoFormat('inputB', 'fmtB'));
+  $('autoFormat').addEventListener('change', () => {
+    applyAutoFormat('inputA', 'fmtA');
+    applyAutoFormat('inputB', 'fmtB');
+  });
+
+  function wireFileLoad(buttonId, fileId, textareaId, badgeId) {
     $(buttonId).addEventListener('click', () => $(fileId).click());
     $(fileId).addEventListener('change', async () => {
       const file = $(fileId).files[0];
       if (!file) return;
       $(textareaId).value = await file.text();
       $(fileId).value = '';
+      applyAutoFormat(textareaId, badgeId);
     });
   }
-  wireFileLoad('loadA', 'fileA', 'inputA');
-  wireFileLoad('loadB', 'fileB', 'inputB');
+  wireFileLoad('loadA', 'fileA', 'inputA', 'fmtA');
+  wireFileLoad('loadB', 'fileB', 'inputB', 'fmtB');
 })();
 </script>
 </body>
