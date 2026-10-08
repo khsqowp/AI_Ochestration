@@ -1080,3 +1080,19 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
   .omakase-sidebar { position:fixed; inset:0 0 0 48px; z-index:5; width:auto; }
   .omakase-main { margin-left:0; }
 }
+
+/* 여러 디코딩 경로 탐색 트리 */
+.dectree-filter { display:flex; align-items:center; gap:8px; margin:12px 0; font-size:12px; color:#6b6577; }
+.dectree-node { margin:6px 0; padding:6px 8px; border:1px solid #e6e2ee; border-radius:8px; background:#fff; min-width:0; }
+.dectree-node > summary { cursor:pointer; overflow-wrap:anywhere; font-size:12px; line-height:1.8; list-style:none; }
+.dectree-node > summary::-webkit-details-marker { display:none; }
+.dectree-method { display:inline-block; padding:1px 7px; margin-right:6px; border-radius:5px; background:#efeafd; color:#5b4fc4; font-weight:700; }
+.dectree-preview { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; color:#3f3b47; }
+.dectree-copy { display:inline-flex; align-items:center; gap:4px; margin:0 6px; padding:2px 7px; border:0; background:#f1eefb; color:#5b4fc4; border-radius:5px; font-size:10px; cursor:pointer; }
+.dectree-children { padding-left:12px; margin-left:6px; border-left:2px solid #ece9f0; }
+.dectree-readable { border-color:#8fd4ae; background:#f1faf5; }
+.dectree-readable > summary { color:#1f6d45; font-weight:600; }
+.dectree-warning { color:#b8791f; font-size:12px; background:#fdf3e3; border:1px solid #f3e0b6; border-radius:6px; padding:6px 10px; }
+.dectree-jwt { padding:8px 4px 2px; }
+.dectree-jwt pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:300px; overflow:auto; background:#faf9fc; border:1px solid #e6e2ee; border-radius:6px; padding:8px; font-size:11px; }
+.dectree-hash-note { margin:6px 0 0; font-size:11px; color:#8a8591; }

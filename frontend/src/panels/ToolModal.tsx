@@ -9,6 +9,7 @@ import { SqliPayloadBuilder } from '../payloads/sqli'
 import { SsrfPayloadBuilder } from '../payloads/ssrf'
 import { CsrfPayloadBuilder } from '../payloads/csrf'
 import { SmartDecoderBuilder } from '../payloads/decoder'
+import { SmartDecoderTreeBuilder } from '../payloads/decoderTree'
 import { RainbowTableBuilder } from '../payloads/rainbow'
 import { ClickjackingPoCBuilder } from '../payloads/clickjacking'
 
@@ -18,6 +19,7 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'ssrf-payloads': SsrfPayloadBuilder,
   'csrf-payloads': CsrfPayloadBuilder,
   'smart-decoder': SmartDecoderBuilder,
+  'smart-decoder-tree': SmartDecoderTreeBuilder,
   'rainbow-crack': RainbowTableBuilder,
   'clickjacking-poc': ClickjackingPoCBuilder,
 }

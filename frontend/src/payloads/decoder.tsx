@@ -12,7 +12,7 @@ const te = new TextEncoder()
 const bytesToBinary = (b: Uint8Array) => { let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return s }
 const binaryToBytes = (s: string) => { const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b }
 
-function b64Decode(raw: string): string {
+export function b64Decode(raw: string): string {
   let t = raw.trim().replace(/\s+/g, '')
   const urlSafe = /[-_]/.test(t)
   if (urlSafe) t = t.replace(/-/g, '+').replace(/_/g, '/')
@@ -42,7 +42,7 @@ function urlDecodeWithCharset(raw: string, charset: string): string {
   const bytes = percentDecodeToBytes(raw.replace(/\+/g, ' '))
   return new TextDecoder(charset, { fatal: false }).decode(bytes)
 }
-function hexDecode(raw: string): string {
+export function hexDecode(raw: string): string {
   const t = raw.trim().replace(/\s+/g, '')
   const b = new Uint8Array(t.length / 2)
   for (let i = 0; i < b.length; i++) b[i] = parseInt(t.substr(i * 2, 2), 16)
@@ -50,13 +50,13 @@ function hexDecode(raw: string): string {
 }
 const hexEncode = (s: string) => Array.from(te.encode(s)).map(x => x.toString(16).padStart(2, '0')).join('')
 
-function htmlDecode(s: string): string {
+export function htmlDecode(s: string): string {
   const doc = new DOMParser().parseFromString(s, 'text/html')
   return doc.documentElement.textContent ?? s
 }
 const htmlEncode = (s: string) => Array.from(s).map(c => `&#${c.codePointAt(0)};`).join('')
 
-function unicodeUnescape(s: string): string {
+export function unicodeUnescape(s: string): string {
   return s.replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
     .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
@@ -91,7 +91,7 @@ const strongText = (s: string) => s.length > 0 && textScore(s) > 0.95 && /\S/.te
 
 type Step = { label: string; decoded: string; reencode: (edited: string) => string }
 
-function jwtStep(input: string): Step | null {
+export function jwtStep(input: string): Step | null {
   const t = input.trim()
   if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/.test(t)) return null
   const [h, p, sig = ''] = t.split('.')
@@ -230,7 +230,7 @@ function analyze(input: string) {
 
 /* ── tab_encoder.py: 전체 디코더/인코더 동시 시도 ──────────────── */
 
-const ALL_DECODERS: [string, (s: string) => string][] = [
+export const ALL_DECODERS: [string, (s: string) => string][] = [
   ['Base64', b64Decode],
   ['URL 디코딩', s => decodeURIComponent(s.replace(/\+/g, ' '))],
   ['URL 디코딩 (2중)', s => decodeURIComponent(decodeURIComponent(s))],
