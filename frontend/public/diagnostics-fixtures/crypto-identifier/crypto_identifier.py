@@ -21,15 +21,26 @@ Given a string that "looks encoded or hashed", this tool:
      under ../hashcat and ../john -- it does NOT execute them itself,
      since those can run for a very long time and should be started
      deliberately by you.
+  5. For fast unsalted digests only, --bruteforce runs a TRUE exhaustive
+     keyspace search (every combination of a charset, increasing length)
+     directly in Python -- not a wordlist/dictionary/rainbow-table lookup.
+     No artificial attempt cap: if --max-length is omitted it keeps growing
+     the length forever until found. Ctrl+C stops it cleanly at any point
+     (checkpoint saved -- the "stop button" for a CLI tool) and rerunning
+     the same command resumes from that exact point instead of restarting.
+     The instant a match is found, the search stops immediately.
 
 No real rainbow-table files are bundled here (those are large precomputed
 files this toolset never downloaded) -- dictionary attacks via hashcat/john
 against the bundled SecLists wordlists are the practical equivalent for
-unsalted fast hashes, and the only sane approach for salted ones.
+unsalted fast hashes and salted ones; --bruteforce (below) is the actual
+exhaustive alternative when you want to search the full keyspace rather
+than a wordlist, for fast unsalted digests.
 
 Usage:
     python crypto_identifier.py "aGVsbG8gd29ybGQ="
     python crypto_identifier.py "5d41402abc4b2a76b9719d911017c592" --crack
+    python crypto_identifier.py "5d41402abc4b2a76b9719d911017c592" --bruteforce --charset lower --max-length 6
     python crypto_identifier.py "$2b$12$abc..." --crack
     python crypto_identifier.py --file value.txt
 """
@@ -466,6 +477,145 @@ _DIGEST_FUNCS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# 3b. True exhaustive brute force (keyspace search, not wordlist) for fast
+#     unsalted digests -- the --crack above is dictionary-only; this is the
+#     "진짜 전체 다 뒤지는" complement with a Ctrl+C stop button + resume.
+# ---------------------------------------------------------------------------
+_LOWER = "abcdefghijklmnopqrstuvwxyz"
+_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_DIGITS = "0123456789"
+_SYMBOLS = "!@#$%^&*()-_=+[]{};:,.<>?/\\|~`'\""
+
+CHARSETS: dict[str, str] = {
+    "digits": _DIGITS,
+    "lower": _LOWER,
+    "upper": _UPPER,
+    "lower+digits": _LOWER + _DIGITS,
+    "upper+digits": _UPPER + _DIGITS,
+    "alpha": _LOWER + _UPPER,
+    "alnum": _LOWER + _UPPER + _DIGITS,
+    "alnum+symbols": _LOWER + _UPPER + _DIGITS + _SYMBOLS,
+}
+
+CHECKPOINT_DIR = Path(__file__).resolve().parent / ".bruteforce_checkpoints"
+
+
+def _checkpoint_path(signature: str) -> Path:
+    digest = hashlib.sha256(signature.encode("utf-8")).hexdigest()[:16]
+    return CHECKPOINT_DIR / f"{digest}.json"
+
+
+def bruteforce_fast_digest(
+    target_hex: str,
+    john_format: str,
+    charset: str,
+    min_length: int,
+    max_length: int | None,
+    resume: bool = True,
+    progress_interval: float = 5.0,
+) -> tuple[str | None, int, str]:
+    """진짜 전수조사(exhaustive brute force) -- 워드리스트에 없는 값도 지정한
+    문자셋/길이 범위 안에서 가능한 모든 조합을 순서대로 시도한다. --crack(사전
+    대입)과 달리 "찾아낼 단어가 사전에 있어야 한다"는 전제가 없음 -- 대신 길이가
+    늘어날수록 시도량이 지수적으로 커지므로(문자셋 크기^길이), 넓은 문자셋+긴
+    길이는 현실적으로 끝나지 않을 수 있다(그래도 요청대로 진짜 전체 탐색임).
+
+    max_length가 None이면 "찾을 때까지" 길이를 계속 늘려가며 무한히 진행한다.
+    Ctrl+C를 누르면 그 즉시 현재 위치(길이+진행한 조합 수)를 체크포인트 파일에
+    저장하고 깨끗하게 멈춘다(=정지 버튼) -- 트레이스백 없이, 그리고 똑같은
+    해시/문자셋/길이 조건으로 다시 실행하면 처음부터가 아니라 그 지점부터 이어서
+    진행한다. 정답을 찾는 즉시(=깨지면) 더 이상 시도하지 않고 바로 멈춘다.
+    """
+    digest_fn = _DIGEST_FUNCS[john_format]
+    target_hex = target_hex.lower().lstrip("*")
+    base = len(charset)
+    if base == 0:
+        raise ValueError("문자셋이 비어 있음(--charset-custom 확인)")
+
+    signature = f"{target_hex}|{john_format}|{charset}|{min_length}|{max_length}"
+    ckpt_path = _checkpoint_path(signature)
+
+    length = min_length
+    counter = 0
+    if resume and ckpt_path.is_file():
+        try:
+            saved = json.loads(ckpt_path.read_text(encoding="utf-8"))
+            if saved.get("signature") == signature:
+                length = saved["current_length"]
+                counter = saved["counter"]
+                print(
+                    f"[이어서 진행] 이전 중단 지점부터 재개: length={length}, "
+                    f"이미 시도한 횟수={saved['total_tried']:,}",
+                    file=sys.stderr,
+                )
+        except (json.JSONDecodeError, KeyError, OSError):
+            pass
+
+    total_tried = 0
+    started = time.monotonic()
+    last_print = started
+    CHECKPOINT_DIR.mkdir(exist_ok=True)
+
+    def _save_checkpoint() -> None:
+        try:
+            ckpt_path.write_text(
+                json.dumps({
+                    "signature": signature, "current_length": length,
+                    "counter": counter, "total_tried": total_tried,
+                }),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    try:
+        while max_length is None or length <= max_length:
+            total_for_length = base ** length
+            while counter < total_for_length:
+                cc = counter
+                chars: list[str] = []
+                for _ in range(length):
+                    cc, r = divmod(cc, base)
+                    chars.append(charset[r])
+                word = "".join(chars)
+                total_tried += 1
+                if digest_fn(word) == target_hex:
+                    if ckpt_path.is_file():
+                        ckpt_path.unlink()
+                    return word, total_tried, "found"
+                counter += 1
+                if total_tried % 20000 == 0:
+                    now = time.monotonic()
+                    if now - last_print >= progress_interval:
+                        pct = counter / total_for_length * 100
+                        rate = total_tried / max(now - started, 1e-9)
+                        print(
+                            f"[전수조사 진행중] length={length} ({pct:.1f}%, "
+                            f"{counter:,}/{total_for_length:,}) 누적시도 {total_tried:,}회, "
+                            f"{rate:,.0f}회/s, 경과 {now - started:.0f}s "
+                            f"-- Ctrl+C로 정지 가능(재실행시 이 지점부터 이어서 진행)",
+                            file=sys.stderr,
+                        )
+                        last_print = now
+                        _save_checkpoint()
+            length += 1
+            counter = 0
+    except KeyboardInterrupt:
+        _save_checkpoint()
+        print(
+            f"\n[정지됨] length={length}, counter={counter:,}, 누적시도 {total_tried:,}회 -- "
+            f"체크포인트 저장됨({ckpt_path.name}). 같은 해시/문자셋/길이 조건으로 다시 실행하면 "
+            f"이 지점부터 이어서 진행함.",
+            file=sys.stderr,
+        )
+        return None, total_tried, "stopped"
+
+    if ckpt_path.is_file():
+        ckpt_path.unlink()
+    return None, total_tried, "exhausted"
+
+
 def resolve_wordlist_path(spec: str) -> Path:
     direct = Path(spec)
     if direct.is_file():
@@ -529,6 +679,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crack", action="store_true", help="Attempt a local dictionary crack for fast unsalted digest guesses")
     parser.add_argument("--wordlist", default=str(DEFAULT_WORDLIST), help="Path or short name for --crack (default: SecLists 10k-most-common.txt)")
     parser.add_argument("--limit", type=int, default=DEFAULT_CRACK_LIMIT, help=f"Max words to try for --crack (default {DEFAULT_CRACK_LIMIT})")
+    parser.add_argument("--bruteforce", action="store_true", help="사전에 없어도 지정한 문자셋/길이 범위를 전부 전수조사(진짜 brute force, 찾을 때까지)")
+    parser.add_argument("--charset", default="lower+digits", choices=list(CHARSETS) + ["custom"], help="--bruteforce에 쓸 문자셋 (기본: lower+digits)")
+    parser.add_argument("--charset-custom", default=None, help="--charset custom일 때 직접 지정할 문자셋 문자열")
+    parser.add_argument("--min-length", type=int, default=1, help="--bruteforce 시작 길이 (기본 1)")
+    parser.add_argument("--max-length", type=int, default=None, help="--bruteforce 최대 길이 (기본: 무제한 -- 찾을 때까지 길이를 계속 늘림)")
+    parser.add_argument("--no-resume", action="store_true", help="--bruteforce 이전 중단 지점을 무시하고 처음부터 다시 시작")
+    parser.add_argument("--progress-interval", type=float, default=5.0, help="--bruteforce 진행상황 출력 주기(초, 기본 5)")
     parser.add_argument("--output", choices=["console", "json"], default="console", help="Report format (default console)")
     parser.add_argument("--output-file", default=None, help="Write report to this path instead of stdout (both --output modes)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
@@ -682,27 +839,53 @@ def main(argv: list[str] | None = None) -> int:
             wordlist_error = str(exc)
             if args.crack:
                 logger.error(wordlist_error)
-                if args.output == "json":
-                    _emit_json({**report, "error": wordlist_error}, args.output_file)
-                return 2
+                # --bruteforce는 워드리스트가 없어도 동작하므로, 같이 켜져 있으면 여기서
+                # 끝내지 않고 사전 공격만 건너뛴 채 계속 진행한다.
+                if not args.bruteforce:
+                    if args.output == "json":
+                        _emit_json({**report, "error": wordlist_error}, args.output_file)
+                    return 2
+
+    if args.bruteforce and args.charset == "custom" and not args.charset_custom:
+        parser.error("--charset custom 사용시 --charset-custom 문자열이 필요함")
+        return 2
 
     crack_results: list[dict] = []
+    bruteforce_results: list[dict] = []
     cracker_commands: list[dict] = []
     for g in guesses:
-        if g.crackable_locally and args.crack and wordlist_path is not None and g.john_format in _DIGEST_FUNCS:
-            start = time.monotonic()
-            found, tried = crack_fast_digest(value.strip(), g.john_format, wordlist_path, args.limit)
-            elapsed = time.monotonic() - start
-            crack_results.append({
-                "name": g.name, "wordlist": str(wordlist_path), "tried": tried,
-                "elapsed_seconds": round(elapsed, 1), "found": found,
-            })
+        if g.crackable_locally and g.john_format in _DIGEST_FUNCS:
+            found_word: str | None = None
+            if args.crack and wordlist_path is not None:
+                start = time.monotonic()
+                found_word, tried = crack_fast_digest(value.strip(), g.john_format, wordlist_path, args.limit)
+                elapsed = time.monotonic() - start
+                crack_results.append({
+                    "name": g.name, "wordlist": str(wordlist_path), "tried": tried,
+                    "elapsed_seconds": round(elapsed, 1), "found": found_word,
+                })
+            if args.bruteforce and found_word is None:
+                charset = CHARSETS[args.charset] if args.charset != "custom" else args.charset_custom
+                start = time.monotonic()
+                bf_found, bf_tried, bf_status = bruteforce_fast_digest(
+                    value.strip(), g.john_format, charset, args.min_length, args.max_length,
+                    resume=not args.no_resume, progress_interval=args.progress_interval,
+                )
+                elapsed = time.monotonic() - start
+                bruteforce_results.append({
+                    "name": g.name, "charset": args.charset, "charset_chars": charset,
+                    "min_length": args.min_length, "max_length": args.max_length,
+                    "tried": bf_tried, "elapsed_seconds": round(elapsed, 1),
+                    "found": bf_found, "status": bf_status,
+                })
         elif not g.crackable_locally and wordlist_path is not None:
             hc_cmd = build_hashcat_command(g, value.strip(), wordlist_path)
             john_cmd = build_john_command(g, "(해시를 파일에 저장 후 그 경로로 교체)", wordlist_path)
             cracker_commands.append({"name": g.name, "hashcat_command": hc_cmd, "john_command": john_cmd})
     if crack_results:
         report["crack_results"] = crack_results
+    if bruteforce_results:
+        report["bruteforce_results"] = bruteforce_results
     if cracker_commands:
         report["cracker_commands"] = cracker_commands
 
@@ -748,6 +931,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  FOUND after {cr['tried']} word(s) in {cr['elapsed_seconds']}s: {cr['found']!r}")
         else:
             print(f"  Not found after {cr['tried']} word(s) in {cr['elapsed_seconds']}s.")
+
+    for br in bruteforce_results:
+        length_range = f"{br['min_length']}~{br['max_length'] if br['max_length'] is not None else '무제한'}"
+        print(f"\n[전수조사: {br['name']}] charset={br['charset']} length={length_range}")
+        if br["found"] is not None:
+            print(f"  FOUND after {br['tried']:,}회 in {br['elapsed_seconds']}s: {br['found']!r}")
+        elif br["status"] == "stopped":
+            print(f"  정지됨(사용자 중단) -- {br['tried']:,}회 시도, {br['elapsed_seconds']}s. 같은 조건으로 재실행하면 이어서 진행됨.")
+        else:
+            print(f"  Not found -- 지정 범위 전부 전수조사 완료({br['tried']:,}회, {br['elapsed_seconds']}s).")
 
     for cc in cracker_commands:
         print(f"\n[{cc['name']}: GPU/전용 크래커 권장 -- 이 스크립트는 직접 실행하지 않음]")

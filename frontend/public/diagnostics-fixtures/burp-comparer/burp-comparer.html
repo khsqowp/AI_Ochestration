@@ -111,7 +111,13 @@
     const OFF = MAX + 1;
     V[1 + OFF] = 0;
     for (let d = 0; d <= MAX; d++) {
-      const win = new Int32Array(2 * d + 1); // idx = k + d, k in [-d, d]
+      // backtrack()의 get(k)는 항상 "반대 parity"(= 이전 회차까지 기록된 값)를 조회한다 --
+      // 그래서 trace[d]는 이번 회차(d)를 갱신하기 "전" V 상태의 스냅샷이어야 한다. 예전 코드는
+      // 이번 회차 자체를 채우다가 해를 찾으면 즉시 끊어서 저장했는데, 그러면 아직 안 채워진
+      // (0으로 남은) 자리를 역추적이 읽어 엉뚱한 x/y로 튀고 결국 a[x-1]/b[y-1]이 undefined가
+      // 되어 esc()에서 "Cannot read properties of undefined (reading 'replace')"로 터졌음.
+      trace.push(V.slice(OFF - d, OFF + d + 1));
+      let solved = false;
       for (let k = -d; k <= d; k += 2) {
         let x;
         if (k === -d || (k !== d && V[k - 1 + OFF] < V[k + 1 + OFF])) x = V[k + 1 + OFF];
@@ -119,10 +125,9 @@
         let y = x - k;
         while (x < N && y < M && a[x] === b[y]) { x++; y++; }
         V[k + OFF] = x;
-        win[k + d] = x;
-        if (x >= N && y >= M) { trace.push(win); return backtrack(trace, a, b, d); }
+        if (x >= N && y >= M) solved = true;
       }
-      trace.push(win);
+      if (solved) return backtrack(trace, a, b, d);
     }
     throw new Error('diff did not converge');
   }

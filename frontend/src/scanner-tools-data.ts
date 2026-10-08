@@ -157,10 +157,11 @@ export const SCANNER_TOOLS: ScannerTool[] = [
   {
     id: 'crypto-identifier',
     name: '해시/인코딩 식별기',
-    tagline: '정체불명 문자열 자동 디코드(base64/hex/base58/base85/JWT/XOR 등) + 해시 포맷 추정 + 로컬 사전 크랙',
+    tagline: '정체불명 문자열 자동 디코드(base64/hex/base58/base85/JWT/XOR 등) + 해시 포맷 추정 + 로컬 사전 크랙 + 진짜 전수조사(브루트포스)',
     standalone: true,
     notes: [
       '무솔트 빠른 해시(md5/sha1/sha256 등)만 --crack으로 로컬 크랙 -- 워드리스트 직접 지정 필요.',
+      '--bruteforce: 사전에 없는 값도 지정한 문자셋/길이 범위를 전부 전수조사(진짜 brute force, 레인보우테이블/사전 공격의 보완). --max-length 생략하면 찾을 때까지 길이를 계속 늘리며 무한 진행. Ctrl+C로 언제든 정지 가능(체크포인트 자동 저장, 재실행시 그 지점부터 이어서 진행) -- 정답을 찾으면 즉시 멈춤.',
       'bcrypt 등 느린 포맷은 hashcat/john 명령어를 "출력만" 함(자동 실행 안 함, 로컬에 해당 도구 없으면 명령어만 참고).',
       '디코더에 base58/ascii85/base85/HTML엔티티/유니코드·JS 이스케이프/ROT47/gzip·zlib 압축해제(쿠키값 등)/단일 바이트 XOR 브루트포스(영어 평문 유사도로 상위 5개 정렬)/JWT 전용 구조 분석(header·payload를 그 자리에서 JSON으로) 추가.',
       'NTLM을 MD5와 별개 포맷으로 정확히 구분해 크랙(순수 파이썬 MD4 구현 내장 -- 예전엔 길이만 보고 MD5로만 크랙 시도해서 진짜 NTLM 값은 사전에 답이 있어도 못 찾던 버그, 수정됨). MySQL 4.1+ PASSWORD()(이중 SHA1, "*"+40자리hex)도 전용 처리로 추가(예전엔 일반 SHA1로만 시도해서 항상 실패했음).',
