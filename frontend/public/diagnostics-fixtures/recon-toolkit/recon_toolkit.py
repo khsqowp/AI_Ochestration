@@ -86,6 +86,13 @@ def normalize_cookie_line(raw: str) -> str:
 DEFAULT_USER_AGENT = "recon-toolkit/1.0 (+rate-limited; contact: local-security-testing)"
 MAX_BODY_BYTES = 512 * 1024
 MAX_CRAWL_BODY_BYTES = 2 * 1024 * 1024
+DEFAULT_TECH_CAP = 400
+PROFILE_DEFAULTS = {
+    "quiet": dict(workers=2, min_interval=1.5, max_requests=400, tech_cap=150),
+    "normal": dict(workers=3, min_interval=0.5, max_requests=1000, tech_cap=DEFAULT_TECH_CAP),
+    "fast": dict(workers=10, min_interval=0.1, max_requests=2000, tech_cap=2000),
+}
+
 MAX_TOTAL_REQUESTS = 3000  # 전체(대상 1개 기준) 하드 상한, --force로만 초과 허용
 
 
@@ -324,11 +331,13 @@ def fetch(
                 elapsed_ms = (time.monotonic() - start) * 1000
                 length = len(body) if want_body else int(resp.headers.get("Content-Length", 0) or 0)
                 logger.info("[요청] GET %s -> %d (%dB, %.0fms)", url, status, length, elapsed_ms)
-                return status, length, elapsed_ms, body, None, {k.lower(): v for k, v in resp.headers.items()}
+                return status, length, elapsed_ms, body, None, {**{k.lower(): v for k, v in resp.headers.items()},
+                    "set-cookie": ", ".join(resp.headers.get_all("Set-Cookie", []))}
         except urllib.error.HTTPError as exc:
             elapsed_ms = (time.monotonic() - start) * 1000
             body = exc.read(max_body_bytes) if want_body else b""
-            headers = {k.lower(): v for k, v in exc.headers.items()} if exc.headers else None
+            headers = {**{k.lower(): v for k, v in exc.headers.items()},
+                       "set-cookie": ", ".join(exc.headers.get_all("Set-Cookie", []))} if exc.headers else None
             logger.info("[요청] GET %s -> %d (%dB, %.0fms)", url, exc.code, len(body), elapsed_ms)
             return exc.code, len(body), elapsed_ms, body, None, headers
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
@@ -342,18 +351,46 @@ def fetch(
     return None, None, 0.0, b"", f"Request failed after {max_retries + 1} attempt(s): {last_error}", None
 
 
+def passive_tech_signals(headers: dict[str, str] | None, body: bytes | None) -> dict[str, float]:
+    """기존 응답만으로 기술을 추정한다. 신호는 제외 기준으로 사용하지 않는다."""
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    signals: dict[str, float] = {}
+    server = " ".join(headers.get(k, "") for k in ("server", "x-powered-by")).lower()
+    for tech, markers in {"tomcat": ("apache-coyote", "tomcat"), "apache": ("apache/",),
+                          "nginx": ("nginx",), "iis": ("microsoft-iis",)}.items():
+        if any(marker in server for marker in markers):
+            signals[tech] = 0.8
+    cookies = headers.get("set-cookie", "")
+    for name, tech in (("JSESSIONID", "tomcat"), ("ASP.NET_SessionId", "iis")):
+        if re.search(r"(?:^|[,;]\s*)" + re.escape(name) + r"\s*=", cookies, re.IGNORECASE):
+            signals[tech] = max(signals.get(tech, 0.0), 0.7)
+    text = (body or b"").decode("utf-8", errors="replace").lower()
+    for marker, tech, confidence in (("apache tomcat/", "tomcat", 0.6), ("nginx", "nginx", 0.3)):
+        if marker in text:
+            signals[tech] = max(signals.get(tech, 0.0), confidence)
+    return signals
+
+
+def _merge_tech_signals(signals: dict[str, float], headers: dict[str, str] | None, body: bytes | None) -> None:
+    for tech, confidence in passive_tech_signals(headers, body).items():
+        signals[tech] = max(signals.get(tech, 0.0), confidence)
+
+
 def detect_fallback_baseline(
     base_url: str, timeout: int, user_agent: str, max_retries: int, ssl_context: ssl.SSLContext | None,
     extra_headers: dict[str, str] | None = None,
+    signals: dict[str, float] | None = None,
 ) -> tuple[int, int] | None:
     """SPA 캐치올(존재하지 않는 경로에도 200 응답) 감지용 베이스라인 -- 없으면
     프로브 자체가 실패한 경우(None)."""
     probe_path = f"__nx_{uuid.uuid4().hex[:16]}__"
     url = urljoin(base_url.rstrip("/") + "/", probe_path)
-    status, length, _elapsed, _body, error, _headers = fetch(url, timeout, user_agent, max_retries, False, ssl_context, extra_headers)
+    status, length, _elapsed, body, error, headers = fetch(url, timeout, user_agent, max_retries, True, ssl_context, extra_headers)
+    if signals is not None:
+        _merge_tech_signals(signals, headers, body)
     if error or status is None:
         return None
-    return status, length or 0
+    return status, (0 if status >= 400 else int((headers or {}).get("content-length", 0) or 0))
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +445,7 @@ def _build_root_candidates(start_url: str) -> list[str]:
 def discover_root(
     start_url: str, *, timeout: int, user_agent: str, max_retries: int, ssl_context: ssl.SSLContext | None,
     rate_limiter: HostRateLimiter, robots: RobotsCache, extra_headers: dict[str, str] | None, budget: int,
+    signals: dict[str, float] | None = None,
 ) -> RootDiscoveryResult:
     candidates = _build_root_candidates(start_url)
     probes: list[RootProbe] = []
@@ -422,7 +460,9 @@ def discover_root(
                 continue
             host_key = urlparse(url).hostname or url
             rate_limiter.wait(host_key)
-            status, _len, _el, _body, error, _headers = fetch(url, timeout, user_agent, max_retries, False, ssl_context, extra_headers)
+            status, _len, _el, body, error, headers = fetch(url, timeout, user_agent, max_retries, True, ssl_context, extra_headers)
+            if signals is not None:
+                _merge_tech_signals(signals, headers, body)
             spent += 1
             ok = bool(status and status == 200 and not error)
             probes.append(RootProbe(candidate=cand, marker=marker, status_code=status, hit=ok))
@@ -716,8 +756,12 @@ def _is_hit(r: ProbeResult, baseline: tuple[int, int] | None) -> bool:
 # ---------------------------------------------------------------------------
 # 2단계: 기본 파일 / 백업 파일 탐색
 # ---------------------------------------------------------------------------
-def build_fingerprint_targets(techs: list[str], include_generic: bool) -> list[tuple[str, str]]:
+def build_fingerprint_targets(techs: list[str], include_generic: bool,
+                              signals: dict[str, float] | None = None,
+                              tech_cap: int | None = None, legacy_order: bool = False) -> list[tuple[str, str]]:
     targets: list[tuple[str, str]] = []
+    if signals and not legacy_order:
+        techs = sorted(techs, key=lambda tech: -signals.get(tech, 0.0))
     for tech in techs:
         builtin = BUILTIN_TECH_PATHS.get(tech)
         if builtin is not None:
@@ -740,21 +784,37 @@ def build_fingerprint_targets(techs: list[str], include_generic: bool) -> list[t
             if line not in seen_generic:
                 seen_generic.add(line)
                 merged.append(line)
-        targets.extend(("generic", p) for p in merged)
-    return targets
+        generic = [("generic", p) for p in merged]
+    else:
+        generic = []
+    if legacy_order:
+        return targets + generic
+    counts: dict[str, int] = {}
+    capped = []
+    for tech, path in targets:
+        counts[tech] = counts.get(tech, 0) + 1
+        if tech_cap is None or counts[tech] <= tech_cap:
+            capped.append((tech, path))
+    return generic + capped
 
 
 def run_default_scan_phase(
     root_url: str, args: argparse.Namespace, rate_limiter: HostRateLimiter, robots: RobotsCache,
     ssl_context: ssl.SSLContext | None, extra_headers: dict[str, str], budget: int,
+    signals: dict[str, float] | None = None,
 ) -> tuple[list[ProbeResult], tuple[int, int] | None, int]:
     """반환: (결과, SPA 캐치올 베이스라인, 사용한 요청 수)."""
-    baseline = detect_fallback_baseline(root_url, args.timeout, args.user_agent, args.retries, ssl_context, extra_headers)
+    signals = dict(signals or {})
+    baseline = detect_fallback_baseline(root_url, args.timeout, args.user_agent, args.retries, ssl_context, extra_headers, signals)
+    logger.info("[패시브 탐지] 추정 기술: %s", ", ".join(
+        f"{tech}({confidence:.1f})" for tech, confidence in sorted(signals.items(), key=lambda item: -item[1])
+    ) or "신호 없음")
     spent = 1
     if baseline and baseline[0] != 404:
         logger.warning("존재하지 않는 경로에도 %s(%dB)로 응답함(SPA 캐치올 추정) -- 동일 결과는 히트에서 제외", *baseline)
     techs = [t.strip().lower() for t in args.tech.split(",") if t.strip()]
-    targets = build_fingerprint_targets(techs, not args.no_generic)
+    targets = build_fingerprint_targets(techs, not args.no_generic, signals,
+                                        None if args.tech_explicit else args.tech_cap, args.tech_explicit)
     remaining = max(budget - spent, 0)
     if len(targets) > remaining:
         logger.warning("기본 파일 목록(%d) > 남은 예산(%d) -- 잘라냄", len(targets), remaining)
@@ -985,6 +1045,7 @@ def run_target(target: str, args: argparse.Namespace, cookie: str | None = None)
 
     budget = 10**9 if args.max_requests == 0 else args.max_requests
 
+    signals: dict[str, float] = {}
     if args.no_root_discovery:
         parsed = urlparse(target)
         root_path = parsed.path if parsed.path.endswith("/") else parsed.path + "/"
@@ -993,7 +1054,7 @@ def run_target(target: str, args: argparse.Namespace, cookie: str | None = None)
         root_budget = min(budget, 100)
         root = discover_root(
             target, timeout=args.timeout, user_agent=args.user_agent, max_retries=args.retries,
-            ssl_context=ssl_context, rate_limiter=rate_limiter, robots=robots, extra_headers=extra_headers, budget=root_budget,
+            ssl_context=ssl_context, rate_limiter=rate_limiter, robots=robots, extra_headers=extra_headers, budget=root_budget, signals=signals,
         )
         budget -= len(root.probes)
         logger.info(
@@ -1017,7 +1078,7 @@ def run_target(target: str, args: argparse.Namespace, cookie: str | None = None)
 
     def _run_phase(phase: str, phase_budget: int) -> None:
         if phase == "default":
-            report.default_results, report.default_baseline, _ = run_default_scan_phase(root.root_url, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget)
+            report.default_results, report.default_baseline, _ = run_default_scan_phase(root.root_url, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget, signals)
         elif phase == "traversal":
             report.traversal_results = run_traversal_phase(root.root_url, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget)
         elif phase == "crawl":
@@ -1134,7 +1195,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--phase-concurrency", type=int, default=1, help="선택한 단계 중 몇 개를 동시에 돌릴지 (기본 1=순차, 최대 3)")
     parser.add_argument("--target-concurrency", type=int, default=1, help="대상을 몇 개씩 동시에 돌릴지 (기본 1=순차, 대상 개수와 10 중 작은 값까지)")
 
-    parser.add_argument("--tech", default="tomcat,apache,nginx", help="(default 단계) 확인할 기술 스택, 쉼표 구분. 가능: " + ", ".join([*TECH_WORDLIST_KEYS, *BUILTIN_TECH_PATHS]))
+    parser.add_argument("--tech", default=None, help="(default 단계) 확인할 기술 스택, 쉼표 구분. 가능: " + ", ".join([*TECH_WORDLIST_KEYS, *BUILTIN_TECH_PATHS]))
     parser.add_argument("--no-generic", action="store_true", help="(default 단계) 내장 generic 민감파일 목록(.env, .git/HEAD 등) 제외")
     parser.add_argument("--mutate", action="store_true", help="(default 단계) 발견된 경로의 백업 확장자 변형(.bak/.old/~ 등)도 확인")
 
@@ -1150,11 +1211,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crawl-wordlist-limit", type=int, default=200, help="(crawl 단계) 워드리스트에서 실제 확인할 최대 경로 수 (기본 200)")
     parser.add_argument("--allow-external", action="store_true", help="(crawl 단계) 다른 도메인으로 나가는 링크도 추적 (기본은 같은 호스트만)")
 
-    parser.add_argument("--workers", type=int, default=3, help="동시 요청 수 (기본 3, 최대 10)")
-    parser.add_argument("--min-interval", type=float, default=0.5, help="같은 호스트에 대한 요청 사이 최소 간격, 초 단위 (기본 0.5)")
+    parser.add_argument("--profile", choices=("quiet", "normal", "fast"), default="normal",
+                        help="속도 프리셋 (기본 normal). quiet=2/1.5초/400/150, normal=3/0.5초/1000/400, fast=10/0.1초/2000/2000 (workers/간격/요청/tech-cap). 명시 옵션 우선")
+    parser.add_argument("--tech-cap", type=int, default=None,
+                        help="tech 미지정 시 기술별 경로 상한 (normal 400). generic 전체가 먼저 예산을 사용하며 명시 --tech는 기존 동작 유지")
+    parser.add_argument("--workers", type=int, default=None, help="동시 요청 수 (기본 3, 최대 10)")
+    parser.add_argument("--min-interval", type=float, default=None, help="같은 호스트에 대한 요청 사이 최소 간격, 초 단위 (기본 0.5)")
     parser.add_argument("--timeout", type=int, default=10, help="요청 1건당 타임아웃, 초 단위 (기본 10)")
     parser.add_argument("--retries", type=int, default=1, help="네트워크 오류 시 재시도 횟수 (기본 1)")
-    parser.add_argument("--max-requests", type=int, default=1000, help="대상 1개당 전체 요청 수 상한 (기본 1000, 0=제한 없음)")
+    parser.add_argument("--max-requests", type=int, default=None, help="대상 1개당 전체 요청 수 상한 (기본 1000, 0=제한 없음)")
     parser.add_argument("--ignore-robots", action="store_true", help="robots.txt 무시 (기본은 준수)")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT, help="커스텀 User-Agent 문자열")
     parser.add_argument("--cookies", action="append", default=[], help="모든 요청에 실어 보낼 Cookie 헤더, 'k=v; k2=v2' 형식(콜론 'k:v'도 허용). 반복 가능 -- 2번 이상 주면 세션/계정별로 전체 스캔을 각각 따로 돌려서 끝에 세션별로 구분된 결과를 출력함(예: --cookies \"JSESSIONID=aaa\" --cookies \"JSESSIONID=bbb\")")
@@ -1256,6 +1321,14 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    args.tech_explicit = args.tech is not None
+    if args.tech is None:
+        args.tech = "tomcat,apache,nginx"
+    for name, value in PROFILE_DEFAULTS[args.profile].items():
+        if getattr(args, name) is None:
+            setattr(args, name, value)
+    if args.tech_cap < 1:
+        parser.error("--tech-cap는 1 이상이어야 함")
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S", stream=sys.stderr)
 
     for t in args.targets:

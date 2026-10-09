@@ -78,6 +78,16 @@ TLS 검증 여부·쿠키·실행할 단계만 순서대로 묻는 대화형 간
 안전장치 (항상 켜짐, 끌 수 없음)
 --------------------------------
 - robots.txt 준수 (--ignore-robots로만 끌 수 있음)
+- --profile quiet|normal|fast (기본 normal); 개별 명시 옵션이 프리셋보다 우선
+  quiet: workers=2, min-interval=1.5초, max-requests=400, tech-cap=150
+  normal: workers=3, min-interval=0.5초, max-requests=1000, tech-cap=400
+  fast: workers=10, min-interval=0.1초, max-requests=2000, tech-cap=2000
+  fast는 --force를 자동 활성화하지 않음.
+  관제 있는 대상/프로덕션에선 --profile quiet 권장.
+- --tech-cap: tech 미지정 시 기술별 경로 상한. generic 36개와 quickhits 전체가
+  먼저 예산을 사용하고 남은 예산에 기술별 캡 적용. 예산이 작으면 generic 앞부분만 실행.
+  패시브 추정은 기존 응답에서 수집하며 기술 목록을 제외하지 않고 순서만 변경.
+  명시적 --tech 지정은 기존 기술 순서와 generic 후순위, 예산 처리를 유지.
 - 호스트별 최소 요청 간격 (--min-interval, 기본 0.5초)
 - 동시 요청 수 상한 (--workers, 최대 10)
 - 대상 1개당 전체 요청 수 상한 (--max-requests, 기본 1000, 안전상한 3000은 --force로만 초과)
