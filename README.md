@@ -43,7 +43,7 @@
 |---|---|
 | 🏢 **2D 오피스 대시보드** | 에이전트들이 실제로 "일하는" 모습을 시각화한 React 기반 UI |
 | 📰 **보안/경제 정보 수집** | 등록된 출처를 주기적으로 크롤링 → Gemini/DeepSeek/GPT 멀티모델 검토 파이프라인 → Markdown 아카이브 |
-| 🗂️ **지식 아카이브(Obsidian 호환)** | 원본 보존(`originals/`) + AI가 가공한 노트(`obsidian/`) 분리 저장, 중복 병합·주간 정리 자동화 |
+| 🗂️ **지식 아카이브(Obsidian 호환)** | 원본 보존(`inbox/archive_ochestration/`) + AI가 가공한 노트(`obsidian/`) 분리 저장, 중복 병합·주간 정리 자동화 |
 | 📅 **보안 캘린더** | 보안 이벤트/세미나/인시던트를 월별로 추적 |
 | 📈 **트레이딩 대시보드** | 크립토 실거래(펀딩비 차익거래) · 국장/미장 모의투자 스윙봇 · 모멘텀 로테이션 백테스트 현황을 실시간 표시 |
 | 🔁 **n8n 워크플로 연동** | 일정·웹훅·재시도가 필요한 실행 흐름(다이제스트 발송, Slack 알림 등)을 n8n이 전담 |
@@ -107,7 +107,7 @@ AI_Ochestration/
 ├── frontend/                # React + TypeScript (Vite)
 │   └── src/App.tsx          # 오피스 대시보드 + 전체 트레이딩 대시보드 UI
 ├── n8n/workflows/           # 다이제스트·아카이브·트레이딩 중단 알림 워크플로 템플릿
-├── originals/               # 원본 파일 보관(수정하지 않음)
+├── inbox/archive_ochestration/ # 원본 파일 보관(수정하지 않음)
 ├── obsidian/                # AI가 가공한 Markdown 지식베이스
 ├── scripts/db-backup.sh     # MySQL 자동 백업 스크립트
 ├── docs/trading-agent-plan.md
@@ -164,10 +164,10 @@ Gemini 수집 호출은 기본 최대 15분(`GEMINI_TIMEOUT_SECONDS`)까지 대�
 
 ## 파일 저장소 & n8n
 
-- `originals/`: 맥에서 직접 넣거나 화면으로 올린 원본 파일. 원본은 수정하지 않습니다.
+- `inbox/archive_ochestration/`: 맥에서 직접 넣거나 화면으로 올린 원본 파일. 원본은 수정하지 않습니다.
 - `obsidian/`: AI가 가공한 Markdown, 링크 노트, 요약 기록을 보관할 Obsidian 호환 지식베이스입니다.
 
-API 컨테이너는 `originals/`을 주기적으로 감지합니다. 새 파일은 변환 작업 큐에 등록되고, 웹 화면의 **수집 사이트** 메뉴에서 등록한 보안/경제 출처는 기본 30분마다 대상 여부를 확인해 각 사이트의 설정 주기(기본 6시간)에 맞춰 원문을 `originals/web/`에 보관합니다. 로컬·사설 네트워크 주소와 2MB를 초과하는 응답은 수집하지 않습니다.
+API 컨테이너는 `inbox/archive_ochestration/`을 주기적으로 감지합니다. 새 파일은 변환 작업 큐에 등록되고, 웹 화면의 **수집 사이트** 메뉴에서 등록한 보안/경제 출처는 기본 30분마다 대상 여부를 확인해 각 사이트의 설정 주기(기본 6시간)에 맞춰 원문을 `inbox/archive_ochestration/web/`에 보관합니다. 로컬·사설 네트워크 주소와 2MB를 초과하는 응답은 수집하지 않습니다.
 
 `http://localhost:5678`에서 n8n을 열 수 있습니다. n8n은 일정·웹훅·재시도 같은 실행 흐름만 담당하고, 작업·에이전트 상태의 기준 데이터는 계속 MySQL/Spring Boot에 둡니다. `n8n/workflows/*.json`은 시작 템플릿이므로 n8n UI에서 import한 뒤 활성화하고, 실제 Slack 웹훅 등 자격 증명은 코드에 넣지 말고 n8n의 Credentials 기능으로 등록하세요.
 

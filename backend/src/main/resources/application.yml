@@ -50,7 +50,7 @@ app:
     jwt-secret: ${JWT_SECRET:}
     allowed-origins: ${ALLOWED_ORIGINS:}
   files:
-    originals-path: ${ORIGINALS_PATH:../originals}
+    originals-path: ${ORIGINALS_PATH:../inbox/archive_ochestration}
     obsidian-path: ${OBSIDIAN_PATH:../obsidian}
     scan-delay-ms: ${FILE_SCAN_DELAY_MS:30000}
   n8n:

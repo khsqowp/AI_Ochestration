@@ -44,7 +44,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-orchestration}?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-orchestrator}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
-      ORIGINALS_PATH: /workspace/originals
+      ORIGINALS_PATH: /workspace/inbox/archive_ochestration
       OBSIDIAN_PATH: /workspace/obsidian
       TRADING_STATE_PATH: /workspace/trading-state/funding_arb_state.json
       KR_TRADING_STATE_PATH: /workspace/trading-state-kr/kr_swing_state.json
@@ -64,7 +64,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./originals:/workspace/originals
+      - ./inbox/archive_ochestration:/workspace/inbox/archive_ochestration
       - ./obsidian:/workspace/obsidian
       - trading_paper_state:/workspace/trading-state:ro
       - trading_kr_swing_state:/workspace/trading-state-kr:ro
@@ -119,7 +119,7 @@ services:
       - "127.0.0.1:5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./originals:/workspace/originals:ro
+      - ./inbox/archive_ochestration:/workspace/inbox/archive_ochestration:ro
       - ./obsidian:/workspace/obsidian
       - ./n8n/workflows:/workflows:ro
     networks: [app]

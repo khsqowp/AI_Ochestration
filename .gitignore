@@ -11,8 +11,8 @@ scripts/md-sync.local
 **/__pycache__/
 *.tsbuildinfo
 .DS_Store
-originals/**
-!originals/.gitkeep
+inbox/archive_ochestration/**
+!inbox/archive_ochestration/.gitkeep
 obsidian/**
 !obsidian/.gitkeep
 backups/**

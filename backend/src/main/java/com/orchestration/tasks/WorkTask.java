@@ -26,7 +26,7 @@ public class WorkTask {
   @Column(nullable = false) private Instant createdAt = Instant.now();
   private Instant completedAt;
   @Column(length = 1024) private String archivePath;
-  /** Relative path under originals/ for tasks created from an uploaded image; null for every other task. */
+  /** Relative path under the originals root (app.files.originals-path, currently inbox/archive_ochestration/) for tasks created from an uploaded image; null for every other task. */
   @Column(length = 1024) private String attachmentPath;
   @Lob @Column(columnDefinition = "LONGTEXT") private String finalReport;
   @Column(length = 500) private String failureReason;
