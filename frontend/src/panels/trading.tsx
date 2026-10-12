@@ -545,8 +545,8 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
   const overallReturnPct = startingCapital > 0 ? (totalPnl / startingCapital) * 100 : 0
   const drawdown = data?.broker?.drawdown ?? data?.drawdown ?? 0
   const hwm = data?.broker?.hwmUsdt ?? data?.hwmUsdt ?? 0
-  const leverage = data?.broker?.leverage ?? 0
   const grossNotional = data?.broker?.grossNotionalUsdt ?? 0
+  const grossMultiple = equity > 0 && grossNotional > 0 ? `${(grossNotional / equity).toFixed(1)}x` : '-'
   // 세션 = 마지막 리밸런스(정기 또는 수동 즉시매도 후 재진입) 이후 손익 — inception 이후 누적인
   // overallReturnPct 와 달리 리밸런스마다 0으로 리셋된다. "일간" 수익률(periodReturnPct, 'day' 탭)은
   // 달력상 24시간 창이라 세션과 무관하게 계속 이어진다.
@@ -562,17 +562,17 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
   const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
   const symbolSeries: Record<string, ChartPoint[]> = Object.fromEntries(Object.entries(data?.positionHistory ?? {}).map(([symbol, points]) => [symbol, (points ?? []).map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))]))
   const statusTone: BotTone = data?.halted ? 'deprecated' : 'live'
-  const statusLabel = data?.halted ? '⚠ 킬 스위치 발동 · 정지됨' : (live ? `가동 중 · mainnet ${leverage}x` : '가동 중 · 백테스트(페이퍼)')
+  const statusLabel = data?.halted ? '⚠ 킬 스위치 발동 · 정지됨' : (live ? `가동 중 · mainnet 총 ${grossMultiple}` : '가동 중 · 백테스트(페이퍼)')
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="모멘텀 로테이션 대시보드">
     <p className="source-intro">{live
-      ? `바이낸스 실계좌(mainnet) 코인 선물 상대모멘텀 롱숏 로테이션입니다. equity의 80% 배치 · ${leverage}배 · 47종목 중 14일 모멘텀 상위 12 롱 / 하위 12 숏 · 2일마다 리밸런스. 포트폴리오 손절: 고점대비 -20% 디레버(${leverage}배→1배), -35% 킬 스위치(전량 청산 후 정지).`
+      ? `바이낸스 실계좌(mainnet) 코인 선물 상대모멘텀 롱숏 로테이션입니다. 14일 모멘텀 · 3일마다 리밸런스 · 롱/숏 각 최대 8종목 · 규모는 equity의 약 2배 · 디레버 없음 · 손실 35% 도달 시 전량 청산 후 14일 쉬고 자동 재개 · BTC 14일 -10% 급락 시 전량 현금 대기.`
       : '코인 선물 상대모멘텀 롱숏 로테이션 백테스트(페이퍼) 현황입니다. 실주문 없음 — 가상자본 시뮬레이션.'}</p>
     <div className="trading-status-card">
       <BotStatusPill tone={statusTone} label={statusLabel}/>
       {data && sessionStartTs && <p className="trading-headline-stat">이번 세션 수익률({fmt(sessionStartTs)}부터) <b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}% ({sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)})</b> — 자동/수동 리밸런스가 일어날 때마다 0으로 다시 시작합니다.</p>}
       <p>잔고(바이낸스 API) {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>${equity.toFixed(2)}</b> : '-'} · 전체 누적손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} (미실현 {data ? unrealized.toFixed(2) : '-'})</p>
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
-      {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (디레버 20% / 킬 35%)</p>}
+      {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (킬 35%, 디레버 없음)</p>}
     </div>
     {data && !data.halted && <BotControlPanel bot="momentum-rotation" live={live}
       manualFlat={data.broker?.manualFlat} manualFlatTs={data.broker?.manualFlatTs}
