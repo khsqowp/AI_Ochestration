@@ -63,7 +63,7 @@ function extractUnique(text: string, regex: RegExp): string[] {
 }
 
 const ENDPOINT_RE = /(?:"|')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|')|https?:\/\/[^\s"'<>]+/g
-const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}"|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi
+const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi
 const COMMENT_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g
 
 export function JsParserModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
