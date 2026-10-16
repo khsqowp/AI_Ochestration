@@ -126,6 +126,17 @@
 .payload-builder-textarea { max-width:none; resize:vertical; line-height:1.5; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }
 .payload-builder-hint { margin:6px 0 2px; font-size:11px; line-height:1.5; color:#8a8591; }
 .payload-readout-group { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+/* 클릭재킹 PoC 빌더 전용: 캡처용으로 iframe 미리보기를 큼직하게 보여준다. 다른 payload-builder
+   도구들의 공용 클래스에는 영향 없게 clickjacking- 접두사로만 스코프를 건다. */
+.clickjacking-top-row { display:flex; gap:16px; align-items:flex-start; margin-top:10px; }
+.clickjacking-top-row > .clickjacking-url-col { flex:0 0 280px; }
+.clickjacking-top-row > .payload-readout { flex:1 1 auto; min-width:0; }
+@media (max-width:768px) { .clickjacking-top-row { flex-direction:column; } .clickjacking-top-row > .clickjacking-url-col { flex:1 1 auto; width:100%; } }
+.clickjacking-preview { margin-top:18px; }
+.clickjacking-preview-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#9a96a1; margin-bottom:6px; }
+.clickjacking-preview-frame, .clickjacking-preview-placeholder { width:100%; min-height:min(65vh, 600px); border-radius:12px; margin-top:4px; }
+.clickjacking-preview-frame { border:1px solid #eceaf0; background:#fff; display:block; }
+.clickjacking-preview-placeholder { border:1px dashed #d8d4e2; background:#faf9fc; color:#8a8591; font-size:12.5px; line-height:1.6; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; }
 .csrf-poc-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .csrf-action-btn { width:auto !important; margin-top:0 !important; flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px !important; font-size:12.5px; }
 .payload-readout-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#9a96a1; margin-bottom:4px; }
