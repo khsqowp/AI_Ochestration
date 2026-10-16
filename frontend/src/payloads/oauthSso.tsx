@@ -9,17 +9,20 @@ export function OAuthSsoBuilder() {
   const getRedirectVariants = (u: string) => {
     try {
       const parsed = new URL(u)
-      const origin = parsed.origin
       const hostname = parsed.hostname
-      const currentUri = parsed.searchParams.get('redirect_uri') || 'https://app.example.com/callback'
-      
       const domain = hostname.split('.').slice(-2).join('.')
-      
+
+      const makeVariant = (newRedirect: string) => {
+        const copy = new URL(u)
+        copy.searchParams.set('redirect_uri', newRedirect)
+        return copy.toString()
+      }
+
       return [
-        { label: '서브도메인 우회', value: u.replace(currentUri, `https://attacker.${domain}`) },
-        { label: '@ 트릭', value: u.replace(currentUri, `https://legit.com@evil.com`) },
-        { label: '경로 조작 (Path Traversal)', value: u.replace(currentUri, `https://legit.com/callback/../../evil.com`) },
-        { label: '오픈 리다이렉트 체이닝', value: u.replace(currentUri, `https://legit.com/callback?next=https://evil.com`) },
+        { label: '서브도메인 우회', value: makeVariant(`https://attacker.${domain}`) },
+        { label: '@ 트릭', value: makeVariant('https://legit.com@evil.com') },
+        { label: '경로 조작 (Path Traversal)', value: makeVariant('https://legit.com/callback/../../evil.com') },
+        { label: '오픈 리다이렉트 체이닝', value: makeVariant('https://legit.com/callback?next=https://evil.com') },
       ]
     } catch {
       return [

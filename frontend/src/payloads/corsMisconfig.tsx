@@ -20,7 +20,7 @@ export function CorsMisconfigBuilder() {
     { 
       label: '임의 Origin 반사 확인', 
       cmd: `curl -s -I -H "Origin: https://evil.com" ${base}`, 
-      note: '응답 헤더에 Access-Control-Allow-Origin: https://evil.com이 그대로 반사되면 취약' 
+      note: '응답 헤더에 Access-Control-Allow-Origin: https://evil.com이 그대로 반사되면 취약. Allow-Origin 반사와 Access-Control-Allow-Credentials: true가 동시에 뜨면 치명적'
     },
     { 
       label: 'null Origin 테스트', 
@@ -30,17 +30,12 @@ export function CorsMisconfigBuilder() {
     { 
       label: '서브도메인 우회 (evil-domain)', 
       cmd: `curl -s -I -H "Origin: https://evil-${domain}" ${base}`, 
-      note: '단순 문자열 포함 여부만 체크하는 설정인 경우 우회 가능' 
+      note: '단순 문자열 포함 여부만 체크하는 설정인 경우 우회 가능'
     },
-    { 
-      label: '서브도메인 우회 (domain-evil)', 
-      cmd: `curl -s -I -H "Origin: https://${domain}.evil.com" ${base}`, 
-      note: '도메인 접두사/접미사 검증 미흡 시 우회 가능' 
-    },
-    { 
-      label: 'Credentials 포함 여부 확인', 
-      cmd: `curl -s -I -H "Origin: https://evil.com" ${base}`, 
-      note: 'Allow-Origin 반사와 Access-Control-Allow-Credentials: true가 동시에 뜨면 치명적' 
+    {
+      label: '서브도메인 우회 (domain-evil)',
+      cmd: `curl -s -I -H "Origin: https://${domain}.evil.com" ${base}`,
+      note: '도메인 접두사/접미사 검증 미흡 시 우회 가능'
     },
   ]
 
