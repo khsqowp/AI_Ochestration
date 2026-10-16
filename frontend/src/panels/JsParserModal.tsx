@@ -6,10 +6,44 @@ import { DISCLAIMER, Note, Field, Readout } from '../payloads/shared'
 
 function beautifyJs(code: string): string {
   if (!code.trim()) return ''
-  const lines = code
-    .replace(/([{};])/g, '$1\n')
-    .split('\n')
+  
+  let result = ''
+  let quoteChar: string | null = null
+  let escaped = false
 
+  for (let i = 0; i < code.length; i++) {
+    const char = code[i]
+
+    if (escaped) {
+      result += char
+      escaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      result += char
+      escaped = true
+      continue
+    }
+
+    if (quoteChar) {
+      if (char === quoteChar) {
+        quoteChar = null
+      }
+      result += char
+    } else {
+      if (char === "'" || char === '"' || char === '`') {
+        quoteChar = char
+        result += char
+      } else if (char === '{' || char === '}' || char === ';') {
+        result += char + '\n'
+      } else {
+        result += char
+      }
+    }
+  }
+
+  const lines = result.split('\n')
   let indent = 0
   return lines
     .map(raw => raw.trim())
@@ -29,7 +63,7 @@ function extractUnique(text: string, regex: RegExp): string[] {
 }
 
 const ENDPOINT_RE = /(?:"|')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|')|https?:\/\/[^\s"'<>]+/g
-const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi
+const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}"|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi
 const COMMENT_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g
 
 export function JsParserModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {

