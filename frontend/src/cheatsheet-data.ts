@@ -116,6 +116,26 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'lfi-payloads', name: 'LFI / Path Traversal', base: '', options: [],
         note: '트래버설 변형(인코딩·더블 인코딩·널바이트)과 PHP wrapper(php://filter, expect://, data://) 조합을 생성합니다.',
       },
+      {
+        id: 'http-smuggling', name: 'HTTP Request Smuggling', base: '', options: [],
+        note: 'CL.TE/TE.CL/TE.TE 조합의 raw HTTP 요청 전문과 netcat 전송 안내를 생성합니다.',
+      },
+      {
+        id: 'cors-misconfig', name: 'CORS 미스컨피그 테스트', base: '', options: [],
+        note: 'Origin 반사·null Origin·서브도메인 우회·credentials 노출 여부를 확인하는 curl 명령을 생성합니다.',
+      },
+      {
+        id: 'file-upload-payloads', name: '파일 업로드 취약점 페이로드', base: '', options: [],
+        note: '확장자 우회, MIME/Content-Type 스푸핑, 매직바이트 폴리글랏, ZIP Slip, ImageTragick 페이로드 예시를 제공합니다.',
+      },
+      {
+        id: 'oauth-sso-payloads', name: 'OAuth/SSO 점검', base: '', options: [],
+        note: 'redirect_uri 변조 변형, state/PKCE 누락 점검, 토큰 유출 경로 체크리스트를 제공합니다.',
+      },
+      {
+        id: 'webshell-payloads', name: '웹쉘 레퍼런스', base: '', options: [],
+        note: 'PHP/JSP/ASPX/ASP/Perl 언어별 최소 동작 웹쉘 소스를 파라미터명 커스터마이즈해 생성합니다.',
+      },
     ],
   },
   {
@@ -133,6 +153,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
       {
         id: 'rainbow-crack', name: '레인보우 테이블 크랙', base: '', options: [],
         note: '해시값만 넣으면 내장 사전으로 크랙을 시도하고, 원본값을 넣으면 MD5/SHA1/SHA256/SHA384/SHA512 를 계산합니다(해시값을 같이 넣으면 일치 여부 검증). 전부 브라우저 안에서만 계산됩니다.',
+      },
+      {
+        id: 'jwt-forge', name: 'JWT 위조/분석', base: '', options: [],
+        note: 'JWT 디코딩, alg:none 변조, RS256→HS256 key confusion 재서명, kid 조작, 약한 시크릿 사전대입 명령을 생성합니다.',
       },
     ],
   },

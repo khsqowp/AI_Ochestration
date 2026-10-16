@@ -17,6 +17,12 @@ import { LfiPayloadBuilder } from '../payloads/lfi'
 import { CdnProxyBypassBuilder } from '../payloads/cdnProxyBypass'
 import { CloudMisconfigBuilder } from '../payloads/cloudMisconfig'
 import { ModernStackReconBuilder } from '../payloads/modernStackRecon'
+import { HttpSmugglingBuilder } from '../payloads/httpSmuggling'
+import { CorsMisconfigBuilder } from '../payloads/corsMisconfig'
+import { FileUploadPayloadBuilder } from '../payloads/fileUploadPayloads'
+import { JwtForgeBuilder } from '../payloads/jwtForge'
+import { OAuthSsoBuilder } from '../payloads/oauthSso'
+import { WebshellPayloadBuilder } from '../payloads/webshell'
 
 const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'xss-payloads': XssPayloadBuilder,
@@ -32,6 +38,12 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'cdn-proxy-bypass': CdnProxyBypassBuilder,
   'cloud-misconfig': CloudMisconfigBuilder,
   'modern-stack-recon': ModernStackReconBuilder,
+  'http-smuggling': HttpSmugglingBuilder,
+  'cors-misconfig': CorsMisconfigBuilder,
+  'file-upload-payloads': FileUploadPayloadBuilder,
+  'jwt-forge': JwtForgeBuilder,
+  'oauth-sso-payloads': OAuthSsoBuilder,
+  'webshell-payloads': WebshellPayloadBuilder,
 }
 
 /* 치트시트 도구 하나를 곧장 보여주는 모달. 타일 그리드(DiagnosticsPage)에서 도구를 클릭하면
