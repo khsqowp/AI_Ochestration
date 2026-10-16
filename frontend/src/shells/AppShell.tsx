@@ -17,6 +17,7 @@ const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean; exte
   { to: '/dashboard/debate', label: '토론', adminOnly: true },
   { to: '/dashboard/역량강화', label: '역량 강화', adminOnly: true },
   { to: '/dashboard/admin', label: '관리', adminOnly: true },
+  { to: '/dashboard/feedback', label: '개선함' },
 ]
 
 export function AppShell() {

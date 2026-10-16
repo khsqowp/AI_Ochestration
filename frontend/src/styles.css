@@ -473,6 +473,26 @@
 .invest-tabs a small { font-size:9.5px; color:#9a96a1; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
 .invest-tabs a.active { background:#eeecfc; color:#4e43a5; }
 .invest-tabs a.active small { color:#8478c8; }
+.feedback-page { max-width:1100px; margin-inline:auto; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
+.feedback-header, .feedback-list-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.feedback-header h1 { margin:2px 0 5px; font-size:26px; }
+.feedback-header p:not(.eyebrow) { margin:0; color:#777281; font-size:13px; }
+.feedback-count { flex:0 0 auto; padding:8px 12px; border-radius:999px; background:#eeecfc; color:#51469d; font-size:12px; font-weight:750; }
+.feedback-form, .feedback-card { border:1px solid #e7e4ed; border-radius:14px; background:#fff; box-shadow:0 4px 14px #25203a0a; }
+.feedback-form { display:flex; flex-direction:column; gap:13px; padding:18px; }
+.feedback-form-title, .feedback-form-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.feedback-form-title { justify-content:flex-start; color:#5c50ad; }
+.feedback-form-title h2, .feedback-list-heading h2 { margin:0; color:#302d39; font-size:17px; }
+.feedback-form label { display:flex; flex-direction:column; gap:6px; color:#514d5a; font-size:12px; font-weight:700; }
+.feedback-form input, .feedback-form textarea { width:100%; border:1px solid #dcd8e5; border-radius:9px; padding:10px 12px; background:#fff; color:#302d39; font:inherit; font-size:13px; resize:vertical; }
+.feedback-form input:focus, .feedback-form textarea:focus { outline:2px solid #8d80df55; border-color:#8d80df; }
+.feedback-form-footer small { color:#8b8792; }
+.feedback-list-section { display:flex; flex-direction:column; gap:12px; }
+.feedback-list { display:grid; gap:10px; }
+.feedback-card { padding:15px 17px; }
+.feedback-card h3 { margin:0 0 5px; color:#302d39; font-size:15px; }
+.feedback-card small { color:#898492; font-size:11px; }
+.feedback-card p { margin:13px 0 0; color:#514d5a; font-size:13px; line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
 
 /* ── 구역(zone) 리사이즈 레이아웃 — 대시보드 / 노트 생성 ──────── */
 .dashboard-page, .notes-page { display:flex; flex-direction:column; }

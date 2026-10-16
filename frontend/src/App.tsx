@@ -14,6 +14,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { NotesPage } from './pages/NotesPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { DebatePage } from './pages/DebatePage'
+import { FeedbackPage } from './pages/FeedbackPage'
 
 const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then(m => ({ default: m.DiagnosticsPage })))
 const DiagToolPage = lazy(() => import('./pages/DiagToolPage').then(m => ({ default: m.DiagToolPage })))
@@ -46,6 +47,7 @@ export function App() {
               <Route path="diag" element={<DiagnosticsPage/>}/>
               <Route path="diag/:toolId" element={<DiagToolPage/>}/>
               <Route path="llm" element={<LocalLlmPage/>}/>
+              <Route path="feedback" element={<FeedbackPage/>}/>
               <Route element={<RequireAdmin/>}>
                 <Route path="order" element={<OrderBoardPage/>}/>
                 <Route path="invest/*" element={<InvestPage/>}/>

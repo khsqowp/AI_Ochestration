@@ -73,6 +73,9 @@ class SecurityConfig {
         // 개인 할 일 목록 — 계정별로 스코프되어 있어 USER+ADMIN 모두 자신의 항목을 읽고 쓸 수 있어야 함
         .requestMatchers("/api/todos/**").authenticated()
 
+        // 개선 제보 — 작성과 조회는 로그인 사용자, 개인/전체 조회 범위는 FeedbackService에서 계정 기준으로 제한
+        .requestMatchers("/api/feedback/**").authenticated()
+
         // 오마카세 마지막 조회 위치 — 계정별로 스코프되어 있어 USER+ADMIN 모두 자신의 기록을 읽고 쓸 수 있어야 함.
         // 오마카세 본문 페이지(/omakase)는 비로그인도 보지만, 위치 저장/복원은 로그인 사용자 전용 기능이라
         // 이 하위 API만 인증을 요구한다.
