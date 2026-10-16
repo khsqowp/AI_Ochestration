@@ -137,6 +137,24 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     ],
   },
   {
+    id: 'cloud',
+    name: '클라우드 · 솔루션 설정 진단',
+    tools: [
+      {
+        id: 'cdn-proxy-bypass', name: 'CDN / 프록시 우회 빌더', base: '', options: [],
+        note: 'Web Cache Deception 변형, IP 스푸핑 헤더 조합(curl), 경로 정규화 불일치를 이용한 ACL 우회 변형을 생성합니다.',
+      },
+      {
+        id: 'cloud-misconfig', name: '클라우드(AWS/IMDS) 점검', base: '', options: [],
+        note: 'AWS/GCP/Azure 등 IMDS 메타데이터 탈취, ECS 컨테이너 메타데이터 탈취, S3 버킷 ACL/권한 점검 명령을 제공합니다.',
+      },
+      {
+        id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
+        note: 'Spring Boot Actuator, Swagger/OpenAPI, Next.js 소스맵, Supabase/Firebase 설정 노출 경로를 대상 URL에 조합해 생성합니다.',
+      },
+    ],
+  },
+  {
     id: 'tools',
     name: '펜테스트 도구',
     tools: [
@@ -769,24 +787,6 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'gt-blind', flag: '{"password": {"$gt": ""}}', label: '블라인드 NoSQLi(비교 연산자)', description: '$gt/$lt 연산자로 참/거짓을 유도해 데이터를 추정합니다.' },
           { id: 'js-injection', flag: "'; return true; var x='", label: '서버 사이드 JS 인젝션 시도', description: '$where 등 JavaScript가 실행되는 구문에 삽입해 로직 우회를 시도합니다.' },
         ],
-      },
-    ],
-  },
-  {
-    id: 'cloud',
-    name: '클라우드 · 솔루션 설정 진단',
-    tools: [
-      {
-        id: 'cdn-proxy-bypass', name: 'CDN / 프록시 우회 빌더', base: '', options: [],
-        note: 'Web Cache Deception 변형, IP 스푸핑 헤더 조합(curl), 경로 정규화 불일치를 이용한 ACL 우회 변형을 생성합니다.',
-      },
-      {
-        id: 'cloud-misconfig', name: '클라우드(AWS/IMDS) 점검', base: '', options: [],
-        note: 'AWS/GCP/Azure 등 IMDS 메타데이터 탈취, ECS 컨테이너 메타데이터 탈취, S3 버킷 ACL/권한 점검 명령을 제공합니다.',
-      },
-      {
-        id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
-        note: 'Spring Boot Actuator, Swagger/OpenAPI, Next.js 소스맵, Supabase/Firebase 설정 노출 경로를 대상 URL에 조합해 생성합니다.',
       },
     ],
   },
