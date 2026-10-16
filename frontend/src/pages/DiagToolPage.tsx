@@ -7,6 +7,7 @@ import { ScannerToolsModal } from '../panels/ScannerToolsModal'
 import { RouteTreeModal } from '../panels/RouteTreeModal'
 import { BurpComparerModal } from '../panels/BurpComparerModal'
 import { BurpHistoryViewerModal } from '../panels/BurpHistoryViewerModal'
+import { JsParserModal } from '../panels/JsParserModal'
 
 const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'prompt-injection': PromptInjectionModal,
@@ -14,6 +15,7 @@ const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'route-tree': RouteTreeModal,
   'burp-comparer': BurpComparerModal,
   'burp-history-viewer': BurpHistoryViewerModal,
+  'js-parser': JsParserModal,
 }
 
 export function DiagToolPage() {

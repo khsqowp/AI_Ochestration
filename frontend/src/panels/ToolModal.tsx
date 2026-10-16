@@ -12,6 +12,11 @@ import { SmartDecoderBuilder } from '../payloads/decoder'
 import { SmartDecoderTreeBuilder } from '../payloads/decoderTree'
 import { RainbowTableBuilder } from '../payloads/rainbow'
 import { ClickjackingPoCBuilder } from '../payloads/clickjacking'
+import { AdvancedPayloadBuilder } from '../payloads/advancedPayloads'
+import { LfiPayloadBuilder } from '../payloads/lfi'
+import { CdnProxyBypassBuilder } from '../payloads/cdnProxyBypass'
+import { CloudMisconfigBuilder } from '../payloads/cloudMisconfig'
+import { ModernStackReconBuilder } from '../payloads/modernStackRecon'
 
 const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'xss-payloads': XssPayloadBuilder,
@@ -22,6 +27,11 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'smart-decoder-tree': SmartDecoderTreeBuilder,
   'rainbow-crack': RainbowTableBuilder,
   'clickjacking-poc': ClickjackingPoCBuilder,
+  'advanced-payloads': AdvancedPayloadBuilder,
+  'lfi-payloads': LfiPayloadBuilder,
+  'cdn-proxy-bypass': CdnProxyBypassBuilder,
+  'cloud-misconfig': CloudMisconfigBuilder,
+  'modern-stack-recon': ModernStackReconBuilder,
 }
 
 /* 치트시트 도구 하나를 곧장 보여주는 모달. 타일 그리드(DiagnosticsPage)에서 도구를 클릭하면

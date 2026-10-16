@@ -108,6 +108,14 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'clickjacking-poc', name: 'Clickjacking PoC', base: '', options: [],
         note: '대상 URL을 iframe으로 감싼 PoC HTML을 생성합니다. 로컬에서 열었을 때 대상 페이지가 그대로 로드되면 클릭재킹에 취약합니다.',
       },
+      {
+        id: 'advanced-payloads', name: 'SSTI / XXE / 역직렬화', base: '', options: [],
+        note: '템플릿 엔진별 수식 평가·RCE 구문(SSTI), 파일 열람·SSRF·OOB용 DTD(XXE), 언어별 역직렬화 가젯 체인 실행 명령(ysoserial/phpggc/pickle)을 참고용으로 제공합니다.',
+      },
+      {
+        id: 'lfi-payloads', name: 'LFI / Path Traversal', base: '', options: [],
+        note: '트래버설 변형(인코딩·더블 인코딩·널바이트)과 PHP wrapper(php://filter, expect://, data://) 조합을 생성합니다.',
+      },
     ],
   },
   {
@@ -213,6 +221,21 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'no404', flag: '-no404', label: '404 페이지 자동 감지 끄기', description: '커스텀 404 페이지 때문에 오탐이 발생할 때 사용합니다.' },
           { id: 'nolookup', flag: '-nolookup', label: '역방향 DNS 조회 생략', description: '호스트명 조회 과정을 건너뛰어 속도를 높입니다.' },
           { id: 'nocache', flag: '-nocache', label: '캐시 미사용', description: '이전 점검 결과 캐시를 쓰지 않고 새로 점검합니다.' },
+        ],
+      },
+      {
+        id: 'nuclei', name: 'Nuclei', base: 'nuclei', targetPlaceholder: '대상 URL',
+        options: [
+          { id: 'u', flag: '-u', label: '대상 URL', description: '취약점 스캔을 수행할 대상 URL을 지정합니다.', needsValue: true, placeholder: 'https://example.com' },
+          { id: 't', flag: '-t', label: '템플릿 경로/태그', description: '사용할 특정 템플릿 파일이나 디렉터리를 지정합니다.', needsValue: true, placeholder: 'templates/exposed-panels' },
+          { id: 'severity', flag: '-severity', label: '심각도 필터', description: '지정한 심각도의 템플릿만 실행합니다.', needsValue: true, placeholder: 'critical,high' },
+          { id: 'tags', flag: '-tags', label: '태그 필터', description: '특정 태그가 포함된 템플릿만 실행합니다.', needsValue: true, placeholder: 'cve,exposure' },
+          { id: 'as', flag: '-as', label: '자동 스캔', description: '대상 기술 스택을 탐지해 맞는 템플릿을 자동으로 선택해 스캔합니다.' },
+          { id: 'headless', flag: '-headless', label: 'Headless 브라우저 사용', description: 'JS 렌더링이 필요한 템플릿을 실행하기 위해 headless 브라우저를 사용합니다.' },
+          { id: 'rl', flag: '-rl', label: '속도 제한(Rate Limit)', description: '초당 요청 수를 제한해 대상 부하를 줄입니다.', needsValue: true, placeholder: '10' },
+          { id: 'c', flag: '-c', label: '동시성(Concurrency)', description: '동시에 실행할 템플릿 수를 지정합니다.', needsValue: true, placeholder: '25' },
+          { id: 'json-export', flag: '-json-export', label: 'JSON 결과 저장', description: '스캔 결과를 JSON 파일로 저장합니다.', needsValue: true, placeholder: 'result.json' },
+          { id: 'nc', flag: '-nc', label: '색상 출력 제거', description: '터미널 색상 코드를 제거해 로그 저장을 쉽게 합니다.' },
         ],
       },
       {
@@ -746,6 +769,24 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'gt-blind', flag: '{"password": {"$gt": ""}}', label: '블라인드 NoSQLi(비교 연산자)', description: '$gt/$lt 연산자로 참/거짓을 유도해 데이터를 추정합니다.' },
           { id: 'js-injection', flag: "'; return true; var x='", label: '서버 사이드 JS 인젝션 시도', description: '$where 등 JavaScript가 실행되는 구문에 삽입해 로직 우회를 시도합니다.' },
         ],
+      },
+    ],
+  },
+  {
+    id: 'cloud',
+    name: '클라우드 · 솔루션 설정 진단',
+    tools: [
+      {
+        id: 'cdn-proxy-bypass', name: 'CDN / 프록시 우회 빌더', base: '', options: [],
+        note: 'Web Cache Deception 변형, IP 스푸핑 헤더 조합(curl), 경로 정규화 불일치를 이용한 ACL 우회 변형을 생성합니다.',
+      },
+      {
+        id: 'cloud-misconfig', name: '클라우드(AWS/IMDS) 점검', base: '', options: [],
+        note: 'AWS/GCP/Azure 등 IMDS 메타데이터 탈취, ECS 컨테이너 메타데이터 탈취, S3 버킷 ACL/권한 점검 명령을 제공합니다.',
+      },
+      {
+        id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
+        note: 'Spring Boot Actuator, Swagger/OpenAPI, Next.js 소스맵, Supabase/Firebase 설정 노출 경로를 대상 URL에 조합해 생성합니다.',
       },
     ],
   },
