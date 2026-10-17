@@ -4,10 +4,12 @@ import { UserManagementModal } from '../panels/UserManagementModal'
 import { UsageModal } from '../panels/UsageModal'
 import { DigestModal } from '../panels/DigestModal'
 import { AccessLogPanel } from '../panels/AccessLogPanel'
+import { CardBenefitsPanel } from '../panels/CardBenefitsPanel'
 
 const BASE = '/dashboard/admin'
 const TABS = [
   { to: `${BASE}/settings`, label: '설정' },
+  { to: `${BASE}/cards`, label: '카드' },
   { to: `${BASE}/users`, label: '사용자' },
   { to: `${BASE}/usage`, label: '사용량·비용' },
   { to: `${BASE}/digest`, label: '다이제스트' },
@@ -26,6 +28,7 @@ export function AdminPage() {
     <Routes>
       <Route index element={<Navigate to={`${BASE}/settings`} replace/>}/>
       <Route path="settings" element={<SettingsPanel embedded onOpenDigest={() => navigate(`${BASE}/digest`)}/>}/>
+      <Route path="cards" element={<CardBenefitsPanel embedded/>}/>
       <Route path="users" element={<UserManagementModal embedded/>}/>
       <Route path="usage" element={<UsageModal embedded/>}/>
       <Route path="digest" element={<DigestModal embedded/>}/>
