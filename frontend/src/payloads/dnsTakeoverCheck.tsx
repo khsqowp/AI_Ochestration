@@ -28,9 +28,10 @@ export function DnsTakeoverCheckBuilder() {
 
       <div className="payload-readout-group">
         <strong className="payload-group-title">서브도메인 열거</strong>
-        <Readout title="subfinder" value={`subfinder -d ${d} -silent`} wrap="anywhere" />
-        <Readout title="amass (passive)" value={`amass enum -passive -d ${d}`} wrap="anywhere" />
-        <Readout title="crt.sh 인증서 이름" value={`curl -s "https://crt.sh/?q=%25.${d}&output=json" | jq -r '.[].name_value' | sort -u`} wrap="anywhere" />
+        <Readout title="subfinder" value={`subfinder -d ${d} -silent | sed "s/\\.${d}$//" > subdomains.txt`} wrap="anywhere" />
+        <Readout title="amass (passive)" value={`amass enum -passive -d ${d} | sed "s/\\.${d}$//" > subdomains.txt`} wrap="anywhere" />
+        <Readout title="crt.sh 인증서 이름" value={`curl -s "https://crt.sh/?q=%25.${d}&output=json" | jq -r '.[].name_value' | sed "s/\\.${d}$//" | sort -u > subdomains.txt`} wrap="anywhere" />
+        <Note>위 세 명령 모두 서브도메인 접두사만 subdomains.txt에 저장합니다(도메인 접미사 제거) — 아래 "CNAME 일괄 확인" 스크립트가 `$sub.{d}` 형태로 다시 붙여 쓰기 때문입니다.</Note>
       </div>
 
       <div className="payload-readout-group">

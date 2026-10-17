@@ -58,7 +58,9 @@ export function CdnProxyBypassBuilder() {
         <strong className="payload-group-title">CDN 뒤 원본 IP 탐색</strong>
         <Readout title="crt.sh 인증서 검색" value={`https://crt.sh/?q=%25.${domain}`} wrap="anywhere" />
         <Note>crt.sh의 인증서 이름에서 서브도메인과 원본 노출 후보를 확인하고, SecurityTrails·Censys 등의 과거 DNS 레코드로 CDN 적용 전 IP 후보를 교차 확인합니다.</Note>
-        <Readout title="Host 헤더로 원본 IP 후보 확인" value={`curl -sS -H "Host: ${domain}" https://[원본 IP 후보]/`} wrap="anywhere" />
+        <Readout title="HTTP로 원본 IP 후보 확인 (Host 헤더)" value={`curl -sS -H "Host: ${domain}" http://[원본 IP 후보]/`} wrap="anywhere" />
+        <Readout title="HTTPS로 원본 IP 후보 확인 (--resolve, SNI 포함)" value={`curl -sSk --resolve ${domain}:443:[원본 IP 후보] https://${domain}/`} wrap="anywhere" />
+        <Note>HTTPS는 Host 헤더만 바꿔서는 TLS SNI/인증서 검증이 그대로 원래 호스트명을 안 쓰기 때문에 결과가 왜곡됩니다. --resolve로 도메인을 IP 후보에 강제 매핑해야 SNI까지 맞게 접속됩니다(-k는 인증서가 해당 IP용이 아니라 경고가 날 수 있어 추가).</Note>
       </div>
     </div>
   )

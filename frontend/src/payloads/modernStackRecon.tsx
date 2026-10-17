@@ -41,7 +41,7 @@ export function ModernStackReconBuilder() {
 
       <div className="payload-readout-group">
         <strong className="payload-group-title">기술스택 핑거프린팅 (헤더/쿠키 시그니처)</strong>
-        <Readout title="Server / X-Powered-By 헤더 확인" value={`curl -sI ${target}`} wrap="anywhere" />
+        <Readout title="Server / X-Powered-By / Set-Cookie 헤더 확인 (GET)" value={`curl -sS -D - -o /dev/null ${target}`} wrap="anywhere" />
         <Readout title="프레임워크별 쿠키 이름" value={'PHPSESSID → PHP\nJSESSIONID → Java\nlaravel_session → Laravel\nconnect.sid → Express'} wrap="pre" />
       </div>
     </div>
