@@ -136,6 +136,8 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'webshell-payloads', name: '웹쉘 레퍼런스', base: '', options: [],
         note: 'PHP/JSP/ASPX/ASP/Perl 언어별 최소 동작 웹쉘 소스를 파라미터명 커스터마이즈해 생성합니다.',
       },
+      { id: 'reverse-shell', name: '역쉘(Reverse Shell) 원라이너', base: '', options: [] },
+      { id: 'os-command-injection', name: 'OS Command Injection 페이로드', base: '', options: [] },
     ],
   },
   {
@@ -176,6 +178,9 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
         note: 'Spring Boot Actuator, Swagger/OpenAPI, Next.js 소스맵, Supabase/Firebase 설정 노출 경로를 대상 URL에 조합해 생성합니다.',
       },
+      { id: 'git-secrets-exposure', name: '소스/시크릿 노출 점검 (.git, .env)', base: '', options: [] },
+      { id: 'cloud-storage-check', name: '클라우드 스토리지 버킷 권한 점검', base: '', options: [] },
+      { id: 'dns-takeover-check', name: 'DNS Zone Transfer / 서브도메인 테이크오버', base: '', options: [] },
     ],
   },
   {

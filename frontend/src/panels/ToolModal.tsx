@@ -23,6 +23,11 @@ import { FileUploadPayloadBuilder } from '../payloads/fileUploadPayloads'
 import { JwtForgeBuilder } from '../payloads/jwtForge'
 import { OAuthSsoBuilder } from '../payloads/oauthSso'
 import { WebshellPayloadBuilder } from '../payloads/webshell'
+import { ReverseShellBuilder } from '../payloads/reverseShell'
+import { GitSecretsExposureBuilder } from '../payloads/gitSecretsExposure'
+import { CloudStorageCheckBuilder } from '../payloads/cloudStorageCheck'
+import { OsCommandInjectionBuilder } from '../payloads/osCommandInjection'
+import { DnsTakeoverCheckBuilder } from '../payloads/dnsTakeoverCheck'
 
 const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'xss-payloads': XssPayloadBuilder,
@@ -44,6 +49,11 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'jwt-forge': JwtForgeBuilder,
   'oauth-sso-payloads': OAuthSsoBuilder,
   'webshell-payloads': WebshellPayloadBuilder,
+  'reverse-shell': ReverseShellBuilder,
+  'git-secrets-exposure': GitSecretsExposureBuilder,
+  'cloud-storage-check': CloudStorageCheckBuilder,
+  'os-command-injection': OsCommandInjectionBuilder,
+  'dns-takeover-check': DnsTakeoverCheckBuilder,
 }
 
 /* 치트시트 도구 하나를 곧장 보여주는 모달. 타일 그리드(DiagnosticsPage)에서 도구를 클릭하면
