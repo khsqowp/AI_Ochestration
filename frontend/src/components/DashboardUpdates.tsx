@@ -6,6 +6,15 @@ type UpdateGroup = {
 // Public-facing product updates, kept separate from private task execution history.
 const updates: UpdateGroup[] = [
   {
+    date: '2026-10-18',
+    items: [
+      '진단 페이지 카테고리 재구성: 클라우드를 클라우드 설정/CDN·프록시/기술스택/Git·시크릿/DNS·서브도메인 5개로 분리',
+      '카테고리마다 전용 아이콘·색상 적용해 한눈에 구분되도록 개선, 작은 글씨 가독성 개선',
+      '웹쉘 레퍼런스에 업로드 필터 우회용 위장 포맷(HTML/PDF/DOCX/TXT/MD/JPG/JPEG/MKV/MP4) 추가',
+      '역쉘, Git·시크릿 노출 점검, 클라우드 스토리지 버킷 권한 점검, OS Command Injection, DNS 테이크오버 점검 도구 추가',
+    ],
+  },
+  {
     date: '2026-10-17',
     items: [
       '개선함 페이지 추가 및 권한별 열람 범위 적용',
