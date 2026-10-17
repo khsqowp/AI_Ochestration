@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Binary, X } from 'lucide-react'
+import { Binary, Download, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
 import { DISCLAIMER, Note, Field, Readout } from '../payloads/shared'
@@ -80,6 +80,14 @@ export function JsParserModal({ onClose, embedded }: { onClose?: () => void; emb
     <div className="explorer-preview tool-modal-body">
       <div className="explorer-preview-body cheatsheet-options-body">
         <Note>{DISCLAIMER}</Note>
+        <div className="diag-file-list">
+          <a className="diag-file-download diag-offline-bundle" href="/diagnostics-fixtures/js-parser/offline-js-parser.html" download="offline-js-parser.html">
+            <Download size={14}/><span><b>폐쇄망용 독립 파일 다운로드</b><small>외부 통신·라이브러리 없이 브라우저에서 실행합니다. 입력 코드는 브라우저 밖으로 전송되지 않습니다.</small></span>
+          </a>
+          <a className="diag-file-download" href="/diagnostics-fixtures/js-parser/설명서.txt" download="JS-오프라인-분석기-설명서.txt">
+            <Download size={14}/><span><b>오프라인 사용 설명서</b><small>기능과 분석 한계를 안내합니다.</small></span>
+          </a>
+        </div>
         <div className="js-parser-layout">
           <div className="js-parser-input-section">
             <div className="js-parser-field">

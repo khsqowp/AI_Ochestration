@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JavaScript 오프라인 분석기</title>
+<style>
+:root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2{font-size:16px;margin:0 0 10px}.muted{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}button,.file{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover,.file:hover{background:#f4f1ff}textarea{display:block;width:100%;min-height:260px;resize:vertical;border:1px solid #d8d4e3;border-radius:9px;padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.result{min-width:0}.result pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;background:#f7f6fa;border:1px solid #e8e6ed;border-radius:8px;padding:12px;min-height:84px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace}.empty{color:#777;font-size:13px}@media(max-width:600px){body{padding:12px}.card{padding:14px}}
+</style>
+</head>
+<body><main class="wrap">
+<header><h1>JavaScript Beautifier & 추출기</h1><p class="muted">독립 실행형 파일 · 외부 통신·라이브러리 없음 · 입력은 현재 브라우저에서만 처리됩니다.</p></header>
+<p class="warning">승인된 진단 자료만 분석하세요. 이 도구는 간단한 문자열 기반 정리와 정규식 후보 추출을 제공합니다. 완전한 JavaScript 파서가 아니므로 결과를 코드의 의미나 실제 취약점으로 단정하지 마세요.</p>
+<section class="card"><h2>분석할 JavaScript</h2><div class="controls"><label class="file">파일 열기 <input id="file" type="file" accept=".js,.mjs,.cjs,.txt,text/javascript,text/plain" hidden></label><button id="clear">비우기</button></div><textarea id="source" spellcheck="false" placeholder="분석할 JavaScript 코드를 붙여넣거나 파일을 여세요."></textarea></section>
+<section class="results">
+<article class="card result"><h2>Beautified JS (간단 정리)</h2><pre id="beautified" class="empty">입력 대기 중</pre><button data-copy="beautified">결과 복사</button></article>
+<article class="card result"><h2>API 엔드포인트 후보</h2><pre id="endpoints" class="empty">발견된 항목 없음</pre><button data-copy="endpoints">결과 복사</button></article>
+<article class="card result"><h2>키·시크릿·토큰 후보</h2><pre id="secrets" class="empty">발견된 항목 없음</pre><button data-copy="secrets">결과 복사</button></article>
+<article class="card result"><h2>주석</h2><pre id="comments" class="empty">발견된 항목 없음</pre><button data-copy="comments">결과 복사</button></article>
+</section><p id="status" class="muted" role="status" aria-live="polite"></p>
+</main><script>
+const $=id=>document.getElementById(id), source=$('source');
+function beautify(code){if(!code.trim())return '';let result='',quote=null,escaped=false;for(let i=0;i<code.length;i++){const c=code[i];if(escaped){result+=c;escaped=false;continue}if(c==='\\'){result+=c;escaped=true;continue}if(quote){if(c===quote)quote=null;result+=c}else if(c==='"'||c==="'"||c==='`'){quote=c;result+=c}else if(c==='{'||c==='}'||c===';'){result+=c+'\n'}else result+=c}let indent=0;return result.split('\n').map(x=>x.trim()).filter(Boolean).map(line=>{if(line.startsWith('}'))indent=Math.max(0,indent-1);const formatted='  '.repeat(indent)+line;if(line.endsWith('{'))indent++;return formatted}).join('\n')}
+function unique(text,re){return [...new Set(text.match(re)||[])].map(x=>x.trim())}
+function show(id,items,empty='발견된 항목 없음'){const el=$(id);el.textContent=items.length?items.join('\n\n'):empty;el.classList.toggle('empty',!items.length)}
+function render(){const text=source.value;show('beautified',text.trim()?[beautify(text)]:[],'입력 대기 중');show('endpoints',unique(text,/(?:"|\')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|\')|https?:\/\/[^\s"'<>]+/g));show('secrets',unique(text,/(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi));show('comments',unique(text,/\/\/[^\n]*|\/\*[\s\S]*?\*\//g))}
+source.addEventListener('input',render);$('file').addEventListener('change',async e=>{const f=e.target.files?.[0];if(f){source.value=await f.text();render();$('status').textContent=f.name+' 파일을 브라우저에서 읽었습니다.'}});$('clear').addEventListener('click',()=>{source.value='';$('file').value='';render();$('status').textContent='입력을 비웠습니다.'});document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{const text=$(button.dataset.copy).textContent||'';try{await navigator.clipboard.writeText(text);$('status').textContent='복사했습니다.'}catch{$('status').textContent='클립보드 권한이 없어 복사하지 못했습니다. 결과를 직접 선택해 복사하세요.'}}));render();
+</script></body></html>

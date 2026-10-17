@@ -27,6 +27,11 @@ export function PromptInjectionModal({ onClose, embedded }: { onClose?: () => vo
   return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">진단 · AI 안전</p><h2><ShieldAlert size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>프롬프트 인젝션</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
     <p className="diag-warning">승인된 환경의 방어 검증용이다. 실제 비밀·개인정보·실제 외부 수신자 대신 가짜 카나리와 모의 대상만 사용한다.</p>
+    <div className="diag-file-list">
+      <a className="diag-file-download diag-offline-bundle" href="/diagnostics-fixtures/prompt-injection-offline-bundle.zip" download="prompt-injection-offline-bundle.zip">
+        <Download size={14}/><span><b>폐쇄망용 진단 자료 다운로드</b><small>독립 실행 안내서와 기준선·테스트 입력 자료를 포함한 ZIP입니다. 압축을 풀고 prompt-injection-offline.html을 열어 사용하세요.</small></span>
+      </a>
+    </div>
     <div className="period-tabs diag-tabs">
       {TABS.map(t => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>{t.label}</button>)}
     </div>
