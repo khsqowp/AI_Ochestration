@@ -183,6 +183,7 @@ export function SqliPayloadBuilder() {
 
   return <div className="payload-builder">
     <Note>{DISCLAIMER}</Note>
+    <Note>범용 SQL Injection 페이로드 빌더입니다. 실제 DB에 연결된 환경에서 쓰는 엔진별 점검 구문은 "데이터베이스 (SQL)" 카테고리의 SQL Injection 테스트 구문을 참고하십시오.</Note>
 
     <Pick label="대상 DBMS" value={dbmsId} onChange={setDbmsId} options={DBMS_LIST.map(d => ({ id: d.id, label: d.label }))}/>
     <Pick label="삽입 컨텍스트 (원본 리터럴)" value={ctxId} onChange={setCtxId} options={CTX.map(c => ({ id: c.id, label: c.label }))}/>

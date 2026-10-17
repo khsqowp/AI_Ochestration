@@ -5,6 +5,7 @@ export function CdnProxyBypassBuilder() {
   const [url, setUrl] = useState('')
   const trimmed = url.trim()
   const target = trimmed || 'https://TARGET'
+  const domain = (trimmed || 'TARGET.COM').replace(/^https?:\/\//, '').replace(/\/.*$/, '')
 
   const wcdVariants = [
     { label: 'CSS Static', ext: '.css' },
@@ -55,9 +56,9 @@ export function CdnProxyBypassBuilder() {
 
       <div className="payload-readout-group">
         <strong className="payload-group-title">CDN 뒤 원본 IP 탐색</strong>
-        <Readout title="crt.sh 인증서 검색" value="https://crt.sh/?q=%25.<대상 도메인>" wrap="anywhere" />
+        <Readout title="crt.sh 인증서 검색" value={`https://crt.sh/?q=%25.${domain}`} wrap="anywhere" />
         <Note>crt.sh의 인증서 이름에서 서브도메인과 원본 노출 후보를 확인하고, SecurityTrails·Censys 등의 과거 DNS 레코드로 CDN 적용 전 IP 후보를 교차 확인합니다.</Note>
-        <Readout title="Host 헤더로 원본 IP 후보 확인" value={'curl -sS -H "Host: <원본으로 추정되는 도메인>" https://<원본 IP 후보>/'} wrap="anywhere" />
+        <Readout title="Host 헤더로 원본 IP 후보 확인" value={`curl -sS -H "Host: ${domain}" https://[원본 IP 후보]/`} wrap="anywhere" />
       </div>
     </div>
   )

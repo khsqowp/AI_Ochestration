@@ -94,7 +94,7 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
       },
       {
         id: 'sqli-payloads', name: 'SQL Injection 페이로드', base: '', options: [],
-        note: 'DBMS·삽입 컨텍스트·기법(UNION·에러·불리언·시간·스태킹)을 골라 범용 인젝션 문자열을 만듭니다. DB 엔진별 전용 점검 구문은 "데이터베이스 점검" 카테고리의 SQL Injection 테스트 구문을 참고하십시오.',
+        note: 'DBMS·삽입 컨텍스트·기법(UNION·에러·불리언·시간·스태킹)을 골라 범용 인젝션 문자열을 만듭니다. DB 엔진별 전용 점검 구문은 "데이터베이스 (SQL)" 카테고리의 SQL Injection 테스트 구문을 참고하십시오.',
       },
       {
         id: 'ssrf-payloads', name: 'SSRF 페이로드', base: '', options: [],
