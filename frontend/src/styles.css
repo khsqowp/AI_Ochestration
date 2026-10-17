@@ -736,7 +736,7 @@
 .geo-ocean { fill:#0c0b14; }
 .geo-land path { fill:#1e1b2b; stroke:#2c2840; stroke-width:.4; }
 .geo-heat-blob { fill:#7667dc; opacity:.16; }
-.geo-dot { fill:#c9b8ff; stroke:#0c0b14; stroke-width:.6; cursor:pointer; }
+.geo-dot { fill:#c9b8ff; stroke:#0c0b14; stroke-width:.6; vector-effect:non-scaling-stroke; cursor:pointer; }
 .geo-dot.session { fill:#ff5a7a; }
 .geo-dot:hover { fill:#fff; }
 .geo-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#6b6577; font-size:12px; pointer-events:none; }
