@@ -27,6 +27,13 @@ export function DnsTakeoverCheckBuilder() {
       <TextInput label="네임서버 (AXFR 테스트용)" value={ns} onChange={setNs} placeholder="ns1.example.com" />
 
       <div className="payload-readout-group">
+        <strong className="payload-group-title">서브도메인 열거</strong>
+        <Readout title="subfinder" value={`subfinder -d ${d} -silent`} wrap="anywhere" />
+        <Readout title="amass (passive)" value={`amass enum -passive -d ${d}`} wrap="anywhere" />
+        <Readout title="crt.sh 인증서 이름" value={`curl -s "https://crt.sh/?q=%25.${d}&output=json" | jq -r '.[].name_value' | sort -u`} wrap="anywhere" />
+      </div>
+
+      <div className="payload-readout-group">
         <strong className="payload-group-title">DNS Zone Transfer (AXFR) 테스트</strong>
         <Readout title="dig axfr" value={`dig axfr @${server} ${d}`} wrap="anywhere" />
         <Readout title="fierce (대안, NS 자동 수집)" value={`fierce --domain ${d}`} wrap="anywhere" />

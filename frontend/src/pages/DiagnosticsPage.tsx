@@ -1,52 +1,49 @@
-import { type ComponentType } from 'react'
-import { AppWindow, Binary, Database, FolderSearch, GitCompare, History, Route, ShieldAlert, SquareTerminal, Terminal, Zap, Cloud } from 'lucide-react'
+import { type ComponentType, type CSSProperties } from 'react'
+import {
+  AppWindow, Binary, CloudCog, Compass, Database, FileCode2, FlaskConical,
+  FolderSearch, GitBranch, Layers, Network, Radar, Route, SquareTerminal,
+  Terminal, Wrench,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
 
-/* 진단 탭 -- 바둑판식 타일 그리드가 시작 화면이고, 타일을 누르면 그 항목 하나만 다루는
-   모달이 곧장 열린다(카테고리 목록을 거치지 않음). 치트시트 카테고리(cheatsheet-data.ts)는
-   그대로 재사용하고, 진단 섹션(프롬프트 인젝션)만 별도 타일로 앞에 붙인다. */
-
-const CATEGORY_ICON: Record<string, ComponentType<{ size?: number }>> = {
-  payloads: Zap,
-  decoder: Binary,
-  tools: Terminal,
-  linux: SquareTerminal,
-  windows: AppWindow,
-  database: Database,
-  cloud: Cloud,
+/* 진단 탭의 타일은 항목별 모달로 연결되며, 카테고리별 색상은 섹션에서 상속한다. */
+const CATEGORY_META: Record<string, { icon: ComponentType<{ size?: number }>; color: string }> = {
+  payloads: { icon: FlaskConical, color: '#7667dc' },
+  decoder: { icon: Binary, color: '#2f9e68' },
+  'cloud-config': { icon: CloudCog, color: '#4338ca' },
+  cdn: { icon: Network, color: '#0e9488' },
+  techstack: { icon: Layers, color: '#c2740c' },
+  'git-secrets': { icon: GitBranch, color: '#d14343' },
+  'dns-takeover': { icon: Radar, color: '#a3298a' },
+  tools: { icon: Wrench, color: '#475569' },
+  linux: { icon: SquareTerminal, color: '#334155' },
+  windows: { icon: AppWindow, color: '#0284c7' },
+  database: { icon: Database, color: '#713f12' },
 }
 
 export function DiagnosticsPage() {
   return <div className="page diag-page">
     <div className="diag-grid">
-      <section className="diag-section">
-        <h3 className="diag-section-title"><ShieldAlert size={14}/>진단</h3>
+      <section className="diag-section" style={{ '--diag-accent': '#6b7280' } as CSSProperties}>
+        <h3 className="diag-section-title"><Compass size={14}/>분석 도구</h3>
         <div className="diag-tile-grid">
-          <Link className="diag-tile" to="/dashboard/diag/prompt-injection">
-            <ShieldAlert size={20}/><span>프롬프트 인젝션</span>
-          </Link>
           <Link className="diag-tile" to="/dashboard/diag/scanner-tools">
             <FolderSearch size={20}/><span>정찰/취약점 스캐너</span>
           </Link>
           <Link className="diag-tile" to="/dashboard/diag/route-tree">
             <Route size={20}/><span>경로 트리 분석기</span>
           </Link>
-          <Link className="diag-tile" to="/dashboard/diag/burp-comparer">
-            <GitCompare size={20}/><span>Burp Comparer</span>
-          </Link>
-          <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
-            <History size={20}/><span>Burp History 뷰어</span>
-          </Link>
           <Link className="diag-tile" to="/dashboard/diag/js-parser">
-            <Binary size={20}/><span>JS Beautifier & 추출기</span>
+            <FileCode2 size={20}/><span>JS Beautifier & 추출기</span>
           </Link>
         </div>
       </section>
 
       {CHEATSHEET_CATEGORIES.map(category => {
-        const Icon = CATEGORY_ICON[category.id] ?? Terminal
-        return <section className="diag-section" key={category.id}>
+        const meta = CATEGORY_META[category.id] ?? { icon: Terminal, color: '#7667dc' }
+        const Icon = meta.icon
+        return <section className="diag-section" key={category.id} style={{ '--diag-accent': meta.color } as CSSProperties}>
           <h3 className="diag-section-title"><Icon size={14}/>{category.name}</h3>
           <div className="diag-tile-grid">
             {category.tools.map(t => <Link className="diag-tile" key={t.id} to={`/dashboard/diag/${t.id}`}>

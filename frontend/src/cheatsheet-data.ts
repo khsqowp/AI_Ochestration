@@ -94,7 +94,7 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
       },
       {
         id: 'sqli-payloads', name: 'SQL Injection 페이로드', base: '', options: [],
-        note: 'DBMS·삽입 컨텍스트·기법(UNION·에러·불리언·시간·스태킹)을 골라 인젝션 문자열을 만듭니다.',
+        note: 'DBMS·삽입 컨텍스트·기법(UNION·에러·불리언·시간·스태킹)을 골라 범용 인젝션 문자열을 만듭니다. DB 엔진별 전용 점검 구문은 "데이터베이스 점검" 카테고리의 SQL Injection 테스트 구문을 참고하십시오.',
       },
       {
         id: 'ssrf-payloads', name: 'SSRF 페이로드', base: '', options: [],
@@ -138,6 +138,7 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
       },
       { id: 'reverse-shell', name: '역쉘(Reverse Shell) 원라이너', base: '', options: [] },
       { id: 'os-command-injection', name: 'OS Command Injection 페이로드', base: '', options: [] },
+      { id: 'prompt-injection', name: '프롬프트 인젝션', base: '', options: [], note: 'LLM 대상 프롬프트 인젝션 시나리오와 탈옥 패턴을 테스트합니다.' },
     ],
   },
   {
@@ -163,23 +164,47 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     ],
   },
   {
-    id: 'cloud',
-    name: '클라우드 · 솔루션 설정 진단',
+    id: 'cloud-config',
+    name: '클라우드 설정 점검',
+    tools: [
+      {
+        id: 'cloud-misconfig', name: '클라우드(AWS/IMDS) 점검', base: '', options: [],
+        note: 'AWS/GCP/Azure 등 IMDS 메타데이터 탈취, ECS 컨테이너 메타데이터 탈취, S3 버킷 ACL/권한 점검 명령을 제공합니다.',
+      },
+      { id: 'cloud-storage-check', name: '클라우드 스토리지 버킷 권한 점검', base: '', options: [] },
+    ],
+  },
+  {
+    id: 'cdn',
+    name: 'CDN / 프록시',
     tools: [
       {
         id: 'cdn-proxy-bypass', name: 'CDN / 프록시 우회 빌더', base: '', options: [],
         note: 'Web Cache Deception 변형, IP 스푸핑 헤더 조합(curl), 경로 정규화 불일치를 이용한 ACL 우회 변형을 생성합니다.',
       },
-      {
-        id: 'cloud-misconfig', name: '클라우드(AWS/IMDS) 점검', base: '', options: [],
-        note: 'AWS/GCP/Azure 등 IMDS 메타데이터 탈취, ECS 컨테이너 메타데이터 탈취, S3 버킷 ACL/권한 점검 명령을 제공합니다.',
-      },
+    ],
+  },
+  {
+    id: 'techstack',
+    name: '기술스택 노출 점검',
+    tools: [
       {
         id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
         note: 'Spring Boot Actuator, Swagger/OpenAPI, Next.js 소스맵, Supabase/Firebase 설정 노출 경로를 대상 URL에 조합해 생성합니다.',
       },
+    ],
+  },
+  {
+    id: 'git-secrets',
+    name: 'Git / 시크릿 노출',
+    tools: [
       { id: 'git-secrets-exposure', name: '소스/시크릿 노출 점검 (.git, .env)', base: '', options: [] },
-      { id: 'cloud-storage-check', name: '클라우드 스토리지 버킷 권한 점검', base: '', options: [] },
+    ],
+  },
+  {
+    id: 'dns-takeover',
+    name: 'DNS / 서브도메인',
+    tools: [
       { id: 'dns-takeover-check', name: 'DNS Zone Transfer / 서브도메인 테이크오버', base: '', options: [] },
     ],
   },
@@ -463,6 +488,8 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'x', flag: '-x', label: '원격 명령 실행 시도', description: '인증에 성공하면 지정한 명령을 원격에서 실행합니다.', needsValue: true, placeholder: '실행할 명령' },
         ],
       },
+      { id: 'burp-comparer', name: 'Burp Comparer', base: '', options: [], note: 'Burp에서 내보낸 두 응답/요청을 비교합니다.' },
+      { id: 'burp-history-viewer', name: 'Burp History 뷰어', base: '', options: [], note: 'Burp 프록시 히스토리 export 파일을 열어 탐색합니다.' },
     ],
   },
   {
@@ -796,8 +823,8 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         ],
       },
       {
-        id: 'sql-injection', name: 'SQL Injection 테스트 구문', base: '', joiner: '\n',
-        note: '각 구문은 상황에 맞는 대안 테스트 페이로드입니다 — 실제 점검 대상에는 사전에 허가된 범위 안에서만 사용하세요.',
+        id: 'sql-injection', name: 'SQL Injection 테스트 구문 (DB 연동 환경)', base: '', joiner: '\n',
+        note: '실제 DB에 연결된 환경에서 쓰는 엔진별 구문 모음입니다. 범용 페이로드는 "페이로드 빌더" 카테고리의 SQL Injection 페이로드를 참고하십시오.',
         options: [
           { id: 'auth-bypass', flag: "' OR '1'='1' -- ", label: '인증 우회 시도', description: '항상 참이 되는 조건으로 로그인 폼 등의 인증 로직 우회 여부를 확인합니다.' },
           { id: 'union-columns', flag: "' UNION SELECT NULL,NULL-- ", label: 'UNION 기반 컬럼 수 확인', description: 'NULL 개수를 늘려가며 원본 쿼리의 컬럼 수를 추정합니다.' },
