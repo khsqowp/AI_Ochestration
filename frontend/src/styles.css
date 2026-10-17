@@ -524,6 +524,17 @@
 .rail-section.is-collapsed .rail-section-body { display:none; }
 .rail-section.is-collapsed .rail-section-head { margin-bottom:0; }
 .progress-section { display:flex; flex-direction:column; gap:16px; }
+.dashboard-updates { display:flex; flex-direction:column; gap:16px; color:#383542; }
+.dashboard-updates-header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding-bottom:12px; border-bottom:1px solid #ece9f0; }
+.dashboard-updates-eyebrow { color:#7667d8; font-size:9px; font-weight:850; letter-spacing:.14em; }
+.dashboard-updates-header h2 { margin:3px 0 0; color:#393543; font-size:18px; }
+.dashboard-updates-caption { color:#8a8592; font-size:11px; }
+.dashboard-updates-list { display:grid; gap:18px; }
+.dashboard-update-group { display:grid; grid-template-columns:92px minmax(0,1fr); gap:10px; align-items:start; }
+.dashboard-update-group h3 { margin:2px 0 0; color:#6556c8; font-size:12px; font-weight:800; white-space:nowrap; }
+.dashboard-update-group ul { display:grid; gap:9px; margin:0; padding:0; list-style:none; }
+.dashboard-update-group li { position:relative; padding-left:13px; color:#514d5a; font-size:12px; line-height:1.55; }
+.dashboard-update-group li::before { position:absolute; top:.65em; left:0; width:4px; height:4px; border-radius:50%; background:#9388e6; content:""; }
 .notes-agent-roster h3, .dashboard-panel-section h3, .zone-panel > h3, .notes-prompt-zone > h3 { margin:0 0 12px; font-size:14px; color:#4a4656; }
 
 /* 리사이즈 핸들(경계 바) */
@@ -607,6 +618,7 @@
   .invest-tabs a { flex:0 0 auto; }
 
   .dashboard-panel-section, .progress-section, .notes-agent-roster { padding:14px; border-radius:12px; }
+  .dashboard-update-group { grid-template-columns:1fr; gap:5px; }
   .panel-embedded.file-explorer, .panel-embedded.graph-view, .panel-embedded.trading-hub { min-height:auto; }
   .panel-embedded .explorer-body { min-height:auto; flex-direction:column; }
   .panel-embedded .explorer-sidebar { flex:0 0 auto; max-height:38vh; border-right:0; border-bottom:1px solid #eceaf0; padding-right:0; }

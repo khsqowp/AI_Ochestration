@@ -3,7 +3,7 @@ import { useAppState } from '../context/AppState'
 import { OfficeDashboard } from '../panels/OfficeDashboard'
 import { SourceRegistry } from '../panels/SourceRegistry'
 import { DigestModal } from '../panels/DigestModal'
-import { ProgressSection } from '../components/ProgressSection'
+import { DashboardUpdates } from '../components/DashboardUpdates'
 
 export function DashboardPage() {
   const {
@@ -32,7 +32,7 @@ export function DashboardPage() {
       <Panel id="bottom" order={2} minSize={18}>
         <PanelGroup direction="horizontal" autoSaveId="dash:cols" className="zone-split">
           <Panel id="progress" order={1} defaultSize={isAdmin ? 38 : 100} minSize={16} className="zone zone-panel zone-scroll">
-            <ProgressSection/>
+            <DashboardUpdates/>
           </Panel>
           {isAdmin && <>
             <PanelResizeHandle className="rz-bar"><span className="rz-grip"/></PanelResizeHandle>
