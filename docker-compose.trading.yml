@@ -10,7 +10,7 @@
 #   실행:
 #     docker compose -f docker-compose.trading.yml \
 #       --profile momentum-rotation --profile kr-rotation --profile us-rotation \
-#       --profile crypto-tick-stream --profile tick-stream --profile paper-trading \
+#       --profile tick-stream --profile paper-trading \
 #       up -d
 #   중지: docker compose -f docker-compose.trading.yml down   (볼륨은 external 이라 -v 로도 안 지워짐)
 
@@ -152,7 +152,6 @@ services:
       - path: .env
         required: false
     environment:
-      CRYPTO_TICK_STATE_PATH: /app/crypto-tick-state/crypto_tick_state.json
       # 실거래 — 2026-10-11 전략 변경(docs/research/final_integration.md §4 후보1 + 총노출 2x):
       # 14일룩백/리밸3일/상하위 8개, 달러중립. 총노출 = equity * DEPLOY_PCT(0.5) * LEVERAGE(4) = 2.0x,
       # 초기증거금 사용 = 총노출/LEVERAGE = equity 의 50%. 디레버 사다리 폐기(DELEVER_DD=1.0 = 비활성;
@@ -177,15 +176,13 @@ services:
       MOMENTUM_ROTATION_PROFIT_LOCK_ACTIVATION: "0.20"
       MOMENTUM_ROTATION_PROFIT_LOCK_TRAIL: "0.25"
       MOMENTUM_ROTATION_PROFIT_LOCK_COOLDOWN_DAYS: "3"
-      # 체결가 자체는 이미 실시간 웹소켓(crypto-tick-stream)인데, 대시보드/state.json은 이 사이클
-      # 주기로만 갱신돼서 화면이 최대 2분 묵어 보이는 게 진짜 원인이었음(2026-09-20). 매매판단
-      # (리밸런스 2일 주기)엔 영향 없음, 순수 조회/표시 빈도만 올림 — fetch_positions/fetch_balance
-      # weight 낮아서(각 ~5, 분당한도 2400) 8배로 늘려도 여유 충분.
+      # 가격 조회는 배치 REST(fetch_tickers) 1회로 함(2026-10-13, crypto-tick-stream 웹소켓
+      # 기능 제거 — 아카이브 디스크사용량 문제로 폐기). 매매판단(리밸런스 2일 주기)엔 영향 없음,
+      # fetch_positions/fetch_balance weight 낮아서(각 ~5, 분당한도 2400) 여유 충분.
       MOMENTUM_ROTATION_CHECK_INTERVAL_SECONDS: "15"
     volumes:
       - trading_momentum_rotation_state:/app/data
       - trading_control:/app/control
-      - trading_crypto_tick_state:/app/crypto-tick-state:ro
     networks: [trading]
     profiles: ["momentum-rotation"]
     restart: unless-stopped
@@ -206,16 +203,6 @@ services:
       - ./trading-tick-archive:/app/archive
     networks: [trading]
     profiles: ["kr-opening-scan"]
-    restart: unless-stopped
-
-  trading-crypto-tick-stream:
-    build: ./trading
-    entrypoint: ["python", "-u", "-m", "app.crypto_tick_stream"]
-    volumes:
-      - trading_crypto_tick_state:/app/data
-      - ./trading-tick-archive:/app/archive
-    networks: [trading]
-    profiles: ["crypto-tick-stream"]
     restart: unless-stopped
 
   trading-tick-stream:
@@ -265,9 +252,6 @@ volumes:
   trading_tick_state:
     external: true
     name: ochestration_trading_tick_state
-  trading_crypto_tick_state:
-    external: true
-    name: ochestration_trading_crypto_tick_state
   # 2단계: api 가 :ro 로 읽어 "펀딩 아비" 탭에 표시 — external 전환. 이름은 다른 볼륨들의
   # ochestration_trading_* 관례가 아니라 컴포즈가 처음에 자동 생성한 실제 이름 그대로 참조한다
   # (재생성하면 그동안 쌓인 페이퍼 매매 기록이 날아가므로 볼륨을 새로 안 만들고 기존 것을 그대로 씀).
