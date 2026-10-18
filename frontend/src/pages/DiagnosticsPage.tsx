@@ -1,8 +1,9 @@
 import { type ComponentType, type CSSProperties } from 'react'
 import {
   AppWindow, Binary, Bomb, Bug, CloudCog, Compass, Crosshair, Database,
-  FileCode2, FlaskConical, FolderSearch, GitBranch, KeyRound, Layers,
-  Network, Radar, Route, ServerCog, SquareTerminal, Terminal,
+  FileCode2, FlaskConical, FolderSearch, GitBranch, GitCompare, History,
+  KeyRound, Layers, Network, Radar, Route, ServerCog, SquareTerminal,
+  Terminal,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
@@ -26,6 +27,12 @@ const CATEGORY_META: Record<string, { icon: ComponentType<{ size?: number }>; co
   database: { icon: Database, color: '#713f12' },
 }
 
+/* network-recon부터는 표준 펜테스트 도구 모음, linux부터는 OS 명령어 모음 — 구분용 라벨. */
+const GROUP_LABELS: Record<string, string> = {
+  'network-recon': 'TOOL',
+  linux: 'OS',
+}
+
 export function DiagnosticsPage() {
   return <div className="page diag-page">
     <div className="diag-grid">
@@ -41,20 +48,30 @@ export function DiagnosticsPage() {
           <Link className="diag-tile" to="/dashboard/diag/js-parser">
             <FileCode2 size={20}/><span>JS Beautifier & 추출기</span>
           </Link>
+          <Link className="diag-tile" to="/dashboard/diag/burp-comparer">
+            <GitCompare size={20}/><span>Burp Comparer</span>
+          </Link>
+          <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
+            <History size={20}/><span>Burp History 뷰어</span>
+          </Link>
         </div>
       </section>
 
       {CHEATSHEET_CATEGORIES.map(category => {
         const meta = CATEGORY_META[category.id] ?? { icon: Terminal, color: '#7667dc' }
         const Icon = meta.icon
-        return <section className="diag-section" key={category.id} style={{ '--diag-accent': meta.color } as CSSProperties}>
-          <h3 className="diag-section-title"><Icon size={14}/>{category.name}</h3>
-          <div className="diag-tile-grid">
-            {category.tools.map(t => <Link className="diag-tile" key={t.id} to={`/dashboard/diag/${t.id}`}>
-              <Icon size={20}/><span>{t.name}</span>
-            </Link>)}
-          </div>
-        </section>
+        const groupLabel = GROUP_LABELS[category.id]
+        return <div className="diag-group" key={category.id}>
+          {groupLabel && <div className="diag-group-divider"><span>{groupLabel}</span></div>}
+          <section className="diag-section" style={{ '--diag-accent': meta.color } as CSSProperties}>
+            <h3 className="diag-section-title"><Icon size={14}/>{category.name}</h3>
+            <div className="diag-tile-grid">
+              {category.tools.map(t => <Link className="diag-tile" key={t.id} to={`/dashboard/diag/${t.id}`}>
+                <Icon size={20}/><span>{t.name}</span>
+              </Link>)}
+            </div>
+          </section>
+        </div>
       })}
     </div>
   </div>

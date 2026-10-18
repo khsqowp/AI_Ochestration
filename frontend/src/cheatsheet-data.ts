@@ -417,8 +417,6 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'random-user-agent', flag: '--random-user-agent', label: 'User-Agent 무작위화', description: '매 요청마다 다른 브라우저인 것처럼 위장합니다.' },
         ],
       },
-      { id: 'burp-comparer', name: 'Burp Comparer', base: '', options: [], note: 'Burp에서 내보낸 두 응답/요청을 비교합니다.' },
-      { id: 'burp-history-viewer', name: 'Burp History 뷰어', base: '', options: [], note: 'Burp 프록시 히스토리 export 파일을 열어 탐색합니다.' },
     ],
   },
   {

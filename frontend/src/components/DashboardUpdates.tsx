@@ -13,6 +13,7 @@ const updates: UpdateGroup[] = [
       '웹쉘 레퍼런스에 업로드 필터 우회용 위장 포맷(HTML/PDF/DOCX/TXT/MD/JPG/JPEG/MKV/MP4) 추가',
       '역쉘, Git·시크릿 노출 점검, 클라우드 스토리지 버킷 권한 점검, OS Command Injection, DNS 테이크오버 점검 도구 추가',
       '펜테스트 도구 카테고리를 네트워크 정찰/웹 공격·퍼징/인증·크리덴셜 공격/내부망(AD·SMB)/익스플로잇 프레임워크 5개로 분리',
+      '표준 도구(TOOL)·OS 명령어(OS) 섹션 구분 라벨 추가, Burp Comparer·History 뷰어를 상단 분석 도구로 재배치',
     ],
   },
   {

@@ -235,6 +235,13 @@
 .position-history-section .source-actions { flex-wrap:wrap; margin-bottom:4px; }
 .trading-dashboard-embedded { flex:1; min-height:0; overflow-y:auto; padding-right:4px; }
 .trading-dashboard-embedded .trading-status-card { margin-top:0; }
+.coin-strategy-board-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 0 16px; padding:13px 16px; border:1px solid #e8e5ef; border-radius:12px; background:#faf9fd; color:#494454; font-size:13px; font-weight:800; }
+.coin-strategy-board-head small { color:#817b89; font-size:11px; font-weight:650; }
+.coin-strategy-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+.coin-strategy-card { min-width:0; min-height:104px; display:flex; flex-direction:column; justify-content:space-between; gap:12px; padding:15px 16px; border:1px solid #e9e6ef; border-radius:13px; background:#fff; box-shadow:0 2px 7px #322c3c0a; }
+.coin-strategy-card span { display:-webkit-box; overflow:hidden; color:#625d6b; font-size:12px; font-weight:750; line-height:1.4; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.coin-strategy-card b { font-size:24px; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.coin-strategy-updated { margin:13px 2px 0; color:#97929f; text-align:right; font-size:10px; }
 .position-table-section { margin:26px 0; }
 .position-table-section > b { display:block; margin-bottom:12px; font-size:15px; font-weight:800; color:#28242e; }
 .position-table-wrap { width:100%; overflow-x:auto; border:1px solid #e6e4ec; border-radius:14px; box-shadow:0 2px 6px #3a35400d; background:#fff; }
@@ -874,6 +881,9 @@
 .diag-tile { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:18px 10px; border-radius:13px; background:#faf9fc; border:1px solid #eceaf0; color:#4b4654; font-size:13px; font-weight:650; text-align:center; text-decoration:none; transition:background .12s ease, border-color .12s ease, transform .12s ease; }
 .diag-tile:hover { background:#eeecfc; border-color:#ded9f1; transform:translateY(-1px); }
 .diag-tile svg { color:var(--diag-accent, #7667dc); }
+.diag-group-divider { display:flex; align-items:center; gap:10px; margin:2px 0 14px; }
+.diag-group-divider span { font-size:11px; font-weight:800; letter-spacing:.1em; color:#8a8591; white-space:nowrap; }
+.diag-group-divider::after { content:''; flex:1 1 auto; height:1px; background:#e4e1ea; }
 
 /* 진단/치트시트 단일 도구 모달 */
 .tool-modal-body { min-height:0; }
