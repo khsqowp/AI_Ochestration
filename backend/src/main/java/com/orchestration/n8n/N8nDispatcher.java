@@ -8,6 +8,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,10 +29,10 @@ public class N8nDispatcher {
 
   N8nDispatcher(N8nProperties properties) { this.properties = properties; }
 
-  public void dispatchFileIntake(FileIntakeJob job) {
+  public CompletableFuture<Integer> dispatchFileIntake(FileIntakeJob job) {
     if (!properties.dispatchEnabled()) {
       log.info("n8n_file_intake_skipped jobId={} reason=dispatch_disabled", job.getId());
-      return;
+      return CompletableFuture.completedFuture(null);
     }
     String json = "{\"jobId\":\"" + job.getId() + "\",\"sourcePath\":\"" + escape(job.getSourcePath())
         + "\",\"fileName\":\"" + escape(job.getFileName()) + "\",\"extension\":\"" + escape(job.getExtension()) + "\"}";
@@ -40,9 +41,8 @@ public class N8nDispatcher {
         .header("Content-Type", "application/json").header("X-Webhook-Secret", properties.webhookSecret())
         .POST(HttpRequest.BodyPublishers.ofString(json)).build();
     log.info("n8n_file_intake_dispatching jobId={} sourcePath={}", job.getId(), job.getSourcePath());
-    client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-        .thenAccept(response -> log.info("n8n_file_intake_dispatched jobId={} status={}", job.getId(), response.statusCode()))
-        .exceptionally(exception -> { log.warn("n8n_file_intake_dispatch_failed jobId={}", job.getId(), exception); return null; });
+    return client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+        .thenApply(response -> { log.info("n8n_file_intake_dispatched jobId={} status={}", job.getId(), response.statusCode()); return response.statusCode(); });
   }
 
   public void dispatchDigest(DigestService.DigestResult digest) {

@@ -31,6 +31,7 @@
     <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId><version>5.5.1</version></dependency>
     <dependency><groupId>kr.dogfoot</groupId><artifactId>hwplib</artifactId><version>1.1.9</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
   </dependencies>
   <build><plugins>
     <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin>
@@ -49,8 +50,11 @@
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-surefire-plugin</artifactId>
-      <configuration><argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine></configuration>
+      <!-- jdk.httpclient.allowRestrictedHeaders must be a real JVM flag (not a runtime
+           System.setProperty call) so it is in effect before any test class's static initializers or
+           bean construction can touch java.net.http and lock in the JDK's restricted-headers allowlist;
+           SourceCollectionServiceTest's IP-pinned fetch (item 9) sends an explicit Host header. -->
+      <configuration><argLine>-javaagent:${org.mockito:mockito-core:jar} -Djdk.httpclient.allowRestrictedHeaders=host</argLine></configuration>
     </plugin>
   </plugins></build>
 </project>
-

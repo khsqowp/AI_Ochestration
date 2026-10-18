@@ -13,7 +13,11 @@ import com.orchestration.files.FileProperties;
 import com.orchestration.tasks.LlmGateway;
 import com.orchestration.tasks.TaskService;
 import com.orchestration.tasks.TaskWorkflowRunner;
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +50,39 @@ class SourceCollectionServiceTest {
         mock(TaskService.class), mock(SecurityCalendarService.class), mock(LlmGateway.class),
         mock(GeminiCollectionBatchRepository.class), snapshots, mock(TaskWorkflowRunner.class), mock(Executor.class),
         mock(CollectionSettingService.class));
+  }
+
+  @Test
+  void pinnedHttpRequest_usesValidatedAddressAndOriginalHostHeader() throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/", exchange -> {
+      byte[] body = exchange.getRequestHeaders().getFirst("Host").getBytes(StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders(200, body.length);
+      try (var output = exchange.getResponseBody()) { output.write(body); }
+    });
+    server.start();
+    try {
+      URI uri = URI.create("http://research.example:" + server.getAddress().getPort() + "/");
+      HttpResponse<byte[]> response = service.sendToValidatedAddress(uri, InetAddress.getByName("127.0.0.1"));
+      assertThat(response.statusCode()).isEqualTo(200);
+      assertThat(new String(response.body(), StandardCharsets.UTF_8)).isEqualTo("research.example:" + server.getAddress().getPort());
+    } finally { server.stop(0); }
+  }
+
+  @Test
+  void oversizedResponse_failsWhileStreaming() throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/large", exchange -> {
+      exchange.sendResponseHeaders(200, 2_000_001);
+      try (var output = exchange.getResponseBody()) { output.write(new byte[2_000_001]); }
+      catch (java.io.IOException ignored) { } // client cancels when the bound is crossed
+    });
+    server.start();
+    try {
+      URI uri = URI.create("http://research.example:" + server.getAddress().getPort() + "/large");
+      assertThatThrownBy(() -> service.sendToValidatedAddress(uri, InetAddress.getByName("127.0.0.1")))
+          .hasMessageContaining("response exceeds 2MB limit");
+    } finally { server.stop(0); }
   }
 
   @Test

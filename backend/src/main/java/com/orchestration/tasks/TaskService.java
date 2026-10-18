@@ -67,24 +67,22 @@ public class TaskService {
   public WorkTask get(UUID id) { return tasks.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)); }
   @Transactional(readOnly = true)
   public List<WorkTask> recent() { return tasks.findTop20ByOrderByCreatedAtDesc(); }
-  /** Only a FAILED task can be retried -- retrying a RUNNING task spins up a second concurrent execution
-   * of the same task ID (the original run is still in flight), and retrying a COMPLETED/CANCELLED/QUEUED/
-   * AWAITING_BATCH task would re-run a pipeline that either already finished or is already scheduled. */
+  /** Atomically claims a FAILED task so overlapping retry requests cannot launch the same workflow twice. */
+  @Transactional
   public void retry(UUID id) {
-    WorkTask task = get(id);
-    if (task.getStatus() != TaskStatus.FAILED) {
-      throw new ResponseStatusException(HttpStatus.CONFLICT, "실패한 작업만 재시도할 수 있습니다.");
+    if (tasks.claimRetry(id, TaskStatus.QUEUED, TaskStatus.FAILED) == 0) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 재시도 중이거나 처리된 작업입니다.");
     }
-    runner.getObject().execute(id);
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override public void afterCommit() { runner.getObject().execute(id); }
+    });
   }
-  /** Covers both RUNNING (mid-pipeline when the process died) and QUEUED (already committed to the DB but
-   * whose in-memory afterCommit() submission to the workflow executor was lost with the old process) --
-   * without the QUEUED half, a task queued right before a redeploy is silently orphaned forever, stuck at
-   * QUEUED with no in-flight execution anywhere to ever finish it. */
+  /** Covers RUNNING tasks interrupted by a stopped process and QUEUED tasks whose in-memory submission
+   * was lost or rejected by the bounded workflow executor. */
   @Transactional
   public List<UUID> recoverInterrupted() {
     List<UUID> recovered = tasks.findByStatusIn(List.of(TaskStatus.RUNNING, TaskStatus.QUEUED)).stream().map(WorkTask::getId).toList();
-    recovered.forEach(id -> event(id, "RECOVERY", "서버 재시작으로 중단된 작업입니다. 같은 작업을 처음부터 다시 대기열에 넣었습니다.", null));
+    recovered.forEach(id -> event(id, "RECOVERY", "중단되었거나 대기열에서 누락된 작업을 처음부터 다시 대기열에 넣었습니다.", null));
     return recovered;
   }
   @Transactional(readOnly = true)

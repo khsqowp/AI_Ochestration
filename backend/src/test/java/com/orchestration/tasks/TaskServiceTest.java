@@ -179,34 +179,31 @@ class TaskServiceTest {
   @Test
   void retry_reExecutesTheWorkflowRunner_whenTaskHasFailed() {
     UUID id = UUID.randomUUID();
-    WorkTask task = new WorkTask("제목", "지시", TaskDomain.SECURITY, TaskOrigin.MANUAL);
-    task.fail("일시적 오류");
-    when(tasks.findById(id)).thenReturn(Optional.of(task));
+    when(tasks.claimRetry(id, TaskStatus.QUEUED, TaskStatus.FAILED)).thenReturn(1);
     when(runnerProvider.getObject()).thenReturn(runner);
+    TransactionSynchronizationManager.initSynchronization();
 
     service.retry(id);
 
+    verify(runner, never()).execute(any());
+    TransactionSynchronizationManager.getSynchronizations().forEach(sync -> sync.afterCommit());
     verify(runner).execute(id);
   }
 
   @Test
-  void retry_throwsNotFound_insteadOfExecuting_whenTaskDoesNotExist() {
+  void retry_throwsConflict_insteadOfExecuting_whenTaskDoesNotExist() {
     UUID id = UUID.randomUUID();
-    when(tasks.findById(id)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.retry(id)).isInstanceOf(ResponseStatusException.class);
+    assertThatThrownBy(() -> service.retry(id))
+        .isInstanceOf(ResponseStatusException.class)
+        .extracting(exception -> ((ResponseStatusException) exception).getStatusCode().value())
+        .isEqualTo(409);
     verify(runnerProvider, never()).getObject();
   }
 
   @Test
   void retry_throwsConflict_insteadOfExecuting_whenTaskIsStillRunning() {
-    // High #4 -- retry() had no status guard at all: retrying a task the workflow runner was still
-    // mid-pipeline on spun up a second concurrent execution of the same task ID.
     UUID id = UUID.randomUUID();
-    WorkTask task = new WorkTask("제목", "지시", TaskDomain.SECURITY, TaskOrigin.MANUAL);
-    task.start();
-    when(tasks.findById(id)).thenReturn(Optional.of(task));
-
     assertThatThrownBy(() -> service.retry(id))
         .isInstanceOf(ResponseStatusException.class)
         .extracting(exception -> ((ResponseStatusException) exception).getStatusCode().value())
@@ -217,10 +214,6 @@ class TaskServiceTest {
   @Test
   void retry_throwsConflict_insteadOfExecuting_whenTaskAlreadyCompleted() {
     UUID id = UUID.randomUUID();
-    WorkTask task = new WorkTask("제목", "지시", TaskDomain.SECURITY, TaskOrigin.MANUAL);
-    task.complete("보고서", "security/note.md");
-    when(tasks.findById(id)).thenReturn(Optional.of(task));
-
     assertThatThrownBy(() -> service.retry(id))
         .isInstanceOf(ResponseStatusException.class)
         .extracting(exception -> ((ResponseStatusException) exception).getStatusCode().value())

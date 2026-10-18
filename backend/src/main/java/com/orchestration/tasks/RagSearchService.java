@@ -101,8 +101,13 @@ public class RagSearchService {
         String content = Files.readString(path, StandardCharsets.UTF_8);
         if (!matchesOrigin(content, origin)) continue;
         String relative = root.relativize(path).toString();
-        float[] vector = embeddingService.vectorFor(relative, content);
-        scored.add(new ScoredNote(relative, content, embeddingService.cosineSimilarity(questionVector, vector)));
+        var cached = embeddingService.cachedVectorFor(relative, content);
+        if (cached.isEmpty()) {
+          log.debug("rag_note_embedding_pending path={}", relative);
+          embeddingService.refreshAsync(relative, content);
+          continue;
+        }
+        scored.add(new ScoredNote(relative, content, embeddingService.cosineSimilarity(questionVector, cached.get())));
       } catch (Exception exception) {
         log.warn("rag_note_skipped path={}", path, exception);
       }

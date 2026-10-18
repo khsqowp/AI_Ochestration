@@ -23,5 +23,8 @@ public class FileIntakeJob {
   public IntakeStatus getStatus() { return status; }
   public Instant getDiscoveredAt() { return discoveredAt; }
   public String getNote() { return note; }
+  void markDispatchSucceeded() { status = IntakeStatus.COMPLETED; note = null; }
+  void markDispatchRetrying(int attempt) { status = IntakeStatus.PROCESSING; note = "n8n 전송 재시도 중 (" + attempt + "회차)"; }
+  void markDispatchFailed(String reason) { status = IntakeStatus.FAILED; note = reason == null ? "n8n 전송 실패" : reason.substring(0, Math.min(reason.length(), 500)); }
+  void markDispatchIgnored() { status = IntakeStatus.IGNORED; note = "n8n 전송 비활성화"; }
 }
-

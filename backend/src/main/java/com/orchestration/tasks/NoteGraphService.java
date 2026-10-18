@@ -31,16 +31,15 @@ public class NoteGraphService {
 
   private final FileProperties files;
   private final NoteEmbeddingService embeddingService;
-  private final NoteGraphEdgeRepository edges;
+  private final NoteGraphEdgeWriter edgeWriter;
 
-  NoteGraphService(FileProperties files, NoteEmbeddingService embeddingService, NoteGraphEdgeRepository edges) {
+  NoteGraphService(FileProperties files, NoteEmbeddingService embeddingService, NoteGraphEdgeWriter edgeWriter) {
     this.files = files;
     this.embeddingService = embeddingService;
-    this.edges = edges;
+    this.edgeWriter = edgeWriter;
   }
 
   @Scheduled(cron = "${app.archive.graph-refresh-cron:0 0 6 * * *}", zone = "Asia/Seoul")
-  @org.springframework.transaction.annotation.Transactional
   public void refresh() {
     try {
       runNow();
@@ -50,7 +49,6 @@ public class NoteGraphService {
   }
 
   /** Manual trigger for the nightly refresh, so it can be verified without waiting for 06:00. */
-  @org.springframework.transaction.annotation.Transactional
   public GraphRefreshResult runNow() throws Exception {
     Path root = Path.of(files.obsidianPath()).toAbsolutePath().normalize();
     if (!Files.exists(root)) return new GraphRefreshResult(0, 0);
@@ -85,8 +83,7 @@ public class NoteGraphService {
       neighbors.sort(Comparator.comparingDouble(Scored::score).reversed());
       neighbors.stream().limit(TOP_K).forEach(neighbor -> refreshed.add(new NoteGraphEdge(note.path(), neighbor.path(), neighbor.score())));
     }
-    edges.deleteAllInBatch();
-    edges.saveAll(refreshed);
+    edgeWriter.replace(refreshed);
     log.info("note_graph_refresh_completed notes={} edges={}", notes.size(), refreshed.size());
     return new GraphRefreshResult(notes.size(), refreshed.size());
   }

@@ -4,13 +4,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-/** Shared "ensure this note's embedding is current" logic, reused by RagSearchService's live question
- * answering and NoteGraphService's scheduled similarity-graph refresh, so both pay for a fresh embedding
- * call only when a note's text actually changed since it was last embedded. */
+/** Cached embeddings for live RAG queries, with background refresh on misses; the nightly graph job
+ * can still use vectorFor synchronously to ensure every note's embedding is current. */
 @Service
 public class NoteEmbeddingService {
+  private static final Logger log = LoggerFactory.getLogger(NoteEmbeddingService.class);
   private static final int EMBED_INPUT_LIMIT = 6000;
 
   private final LlmGateway llm;
@@ -21,6 +25,22 @@ public class NoteEmbeddingService {
     this.llm = llm;
     this.embeddings = embeddings;
     this.json = json;
+  }
+
+  public Optional<float[]> cachedVectorFor(String relativePath, String content) throws Exception {
+    String hash = sha256(content);
+    var existing = embeddings.findByPath(relativePath);
+    if (existing.isEmpty() || !existing.get().getContentHash().equals(hash)) return Optional.empty();
+    return Optional.of(json.readValue(existing.get().getVectorJson(), float[].class));
+  }
+
+  @Async("embeddingRefreshExecutor")
+  public void refreshAsync(String relativePath, String content) {
+    try {
+      vectorFor(relativePath, content);
+    } catch (Exception exception) {
+      log.warn("note_embedding_refresh_failed path={}", relativePath, exception);
+    }
   }
 
   public float[] vectorFor(String relativePath, String content) throws Exception {

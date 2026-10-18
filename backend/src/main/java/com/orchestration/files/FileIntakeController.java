@@ -20,8 +20,9 @@ public class FileIntakeController {
   @PostMapping("/upload")
   public FileIntakeResponse upload(@RequestParam("file") MultipartFile file) throws java.io.IOException {
     if (file.isEmpty() || file.getSize() > 50L * 1024 * 1024) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "50MB 이하 파일만 업로드할 수 있습니다.");
-    java.util.Optional<java.util.UUID> analysisTaskId = service.saveUpload(file.getOriginalFilename(), file.getBytes());
-    return service.recent().stream().findFirst().map(job -> FileIntakeResponse.from(job, analysisTaskId.map(Object::toString).orElse(null))).orElseThrow();
+    FileIntakeService.EnqueueResult result = service.saveUpload(file.getOriginalFilename(), file.getBytes())
+        .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "업로드 파일의 수집 작업이 이미 존재합니다."));
+    return FileIntakeResponse.from(result.job(), result.analysisTaskId().map(Object::toString).orElse(null));
   }
   record FileIntakeResponse(String id, String sourcePath, String fileName, String extension, IntakeStatus status, String discoveredAt, String note, String analysisTaskId) {
     static FileIntakeResponse from(FileIntakeJob job) { return from(job, null); }

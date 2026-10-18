@@ -9,11 +9,13 @@ import com.orchestration.tasks.TaskService;
 import com.orchestration.tasks.TaskWorkflowRunner;
 import com.orchestration.tasks.WorkTask;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,6 +36,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Flow;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SSLParameters;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -52,6 +60,11 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SourceCollectionService {
+  static {
+    String allowed = System.getProperty("jdk.httpclient.allowRestrictedHeaders", "");
+    if (!Arrays.stream(allowed.split(",")).anyMatch(header -> header.trim().equalsIgnoreCase("host")))
+      System.setProperty("jdk.httpclient.allowRestrictedHeaders", allowed.isBlank() ? "host" : allowed + ",host");
+  }
   private static final Logger log = LoggerFactory.getLogger(SourceCollectionService.class);
   private static final String USER_AGENT = "OrchestrationLabResearchCollector/0.2 (personal research)";
   private static final int MAX_RESPONSE_BYTES = 2_000_000;
@@ -85,6 +98,7 @@ public class SourceCollectionService {
   // collecting this source" gate, not reentrant per-thread ownership, so even the same thread must never
   // be treated as already allowed to enter a second time.
   private final Map<UUID, java.util.concurrent.Semaphore> collectionLocks = new java.util.concurrent.ConcurrentHashMap<>();
+  private final Map<UUID, CollectionRequestStatus> manualCollections = new ConcurrentHashMap<>();
 
   SourceCollectionService(ResearchSourceService sources, FileProperties files, TaskService tasks, SecurityCalendarService calendar,
       LlmGateway llm, GeminiCollectionBatchRepository batches, PageSnapshotRepository snapshots, TaskWorkflowRunner runner,
@@ -119,6 +133,28 @@ public class SourceCollectionService {
   }
 
   public CollectionResult collectNow(UUID id) { return collect(sources.get(id), true); }
+
+  public UUID collectNowAsync(UUID id) {
+    sources.get(id); // reject an unknown source before accepting the request
+    UUID requestId = UUID.randomUUID();
+    manualCollections.put(requestId, new CollectionRequestStatus("PROCESSING", null, null));
+    try {
+      collectionExecutor.execute(() -> {
+        try { manualCollections.put(requestId, new CollectionRequestStatus("COMPLETED", collectNow(id), null)); }
+        catch (Exception exception) {
+          log.warn("manual_source_collection_failed sourceId={} requestId={}", id, requestId, exception);
+          manualCollections.put(requestId, new CollectionRequestStatus("FAILED", null, exception.getMessage()));
+        }
+      });
+    } catch (RuntimeException exception) { manualCollections.remove(requestId); throw exception; }
+    return requestId;
+  }
+
+  public CollectionRequestStatus collectionStatus(UUID requestId) {
+    CollectionRequestStatus status = manualCollections.get(requestId);
+    if (status == null) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "수집 요청을 찾을 수 없습니다.");
+    return status;
+  }
 
   private CollectionResult collect(ResearchSource source, boolean manual) {
     CrawlOutcome outcome = crawl(source, manual);
@@ -181,7 +217,6 @@ public class SourceCollectionService {
           firstFetch = false;
           HttpResponse<byte[]> response = sendValidated(target.uri());
           if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IOException("HTTP " + response.statusCode());
-          if (response.body().length > MAX_RESPONSE_BYTES) throw new IOException("response exceeds 2MB limit");
           String contentType = response.headers().firstValue("content-type").orElse("");
           Path destination = destinationFor(source, target.uri(), contentType);
           Files.createDirectories(destination.getParent());
@@ -351,12 +386,7 @@ public class SourceCollectionService {
   private HttpResponse<byte[]> sendValidated(URI uri) throws Exception {
     URI current = uri;
     for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      rejectPrivateTarget(current);
-      HttpRequest request = HttpRequest.newBuilder(current).timeout(Duration.ofSeconds(30))
-          .header("User-Agent", USER_AGENT)
-          .header("Accept", "text/html,application/xhtml+xml,application/xml,text/xml,text/plain;q=0.8,*/*;q=0.1")
-          .GET().build();
-      HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+      HttpResponse<byte[]> response = sendToValidatedAddress(current, resolveAndValidate(current));
       int status = response.statusCode();
       if (status < 300 || status >= 400) return response;
       URI location = response.headers().firstValue("Location").map(current::resolve)
@@ -364,6 +394,56 @@ public class SourceCollectionService {
       current = normalize(location);
     }
     throw new IOException("too many redirects (>" + MAX_REDIRECTS + ")");
+  }
+
+  HttpResponse<byte[]> sendToValidatedAddress(URI uri, InetAddress address) throws Exception {
+    String ip = address.getHostAddress();
+    String authority = (ip.contains(":") ? "[" + ip + "]" : ip) + (uri.getPort() < 0 ? "" : ":" + uri.getPort());
+    String path = uri.getRawPath();
+    URI target = URI.create(uri.getScheme() + "://" + authority + (path == null || path.isEmpty() ? "/" : path)
+        + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery()));
+    String host = uri.getHost() + (uri.getPort() < 0 ? "" : ":" + uri.getPort());
+    HttpRequest request = HttpRequest.newBuilder(target).timeout(Duration.ofSeconds(30))
+        .header("Host", host).header("User-Agent", USER_AGENT)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml,text/xml,text/plain;q=0.8,*/*;q=0.1")
+        .GET().build();
+    HttpClient outgoing = client;
+    if ("https".equalsIgnoreCase(uri.getScheme())) {
+      SSLParameters parameters = new SSLParameters();
+      parameters.setServerNames(List.of(new SNIHostName(uri.getHost())));
+      // A non-null empty algorithm prevents HttpClient from replacing it with IP-based HTTPS checking.
+      // The original hostname is checked explicitly against the TLS session below.
+      parameters.setEndpointIdentificationAlgorithm("");
+      outgoing = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15))
+          .followRedirects(HttpClient.Redirect.NEVER).sslParameters(parameters).build();
+    }
+    HttpResponse<byte[]> response = outgoing.send(request, info -> new BoundedBodySubscriber());
+    if ("https".equalsIgnoreCase(uri.getScheme()) && !HttpsURLConnection.getDefaultHostnameVerifier()
+        .verify(uri.getHost(), response.sslSession().orElseThrow(() -> new SecurityException("missing TLS session"))))
+      throw new SecurityException("TLS certificate does not match " + uri.getHost());
+    return response;
+  }
+
+  private static final class BoundedBodySubscriber implements HttpResponse.BodySubscriber<byte[]> {
+    private final CompletableFuture<byte[]> body = new CompletableFuture<>();
+    private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    private Flow.Subscription subscription;
+    private int size;
+    public CompletionStage<byte[]> getBody() { return body; }
+    public void onSubscribe(Flow.Subscription subscription) { this.subscription = subscription; subscription.request(1); }
+    public void onNext(List<ByteBuffer> chunks) {
+      for (ByteBuffer chunk : chunks) {
+        int length = chunk.remaining();
+        if (length > MAX_RESPONSE_BYTES - size) {
+          subscription.cancel(); body.completeExceptionally(new IOException("response exceeds 2MB limit")); return;
+        }
+        size += length;
+        byte[] data = new byte[length]; chunk.get(data); bytes.write(data, 0, length);
+      }
+      subscription.request(1);
+    }
+    public void onError(Throwable error) { body.completeExceptionally(error); }
+    public void onComplete() { body.complete(bytes.toByteArray()); }
   }
 
   private RobotsRules fetchRobotsRules(URI root) {
@@ -484,9 +564,17 @@ public class SourceCollectionService {
   /** Package-visible so tests can exercise it directly with IP literals (no DNS lookup needed for those,
    * so this stays fully offline in tests) instead of only indirectly through a live crawl. */
   void rejectPrivateTarget(URI uri) throws Exception {
+    resolveAndValidate(uri);
+  }
+
+  InetAddress resolveAndValidate(URI uri) throws Exception {
+    InetAddress first = null;
     for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
       if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isSiteLocalAddress()) throw new SecurityException("private or local address is not a valid research source");
+      if (first == null) first = address;
     }
+    if (first == null) throw new SecurityException("research source has no resolved address");
+    return first;
   }
 
   private record CrawlOutcome(int saved, int failed, int changed, int visited, String warning, List<Path> savedPaths, List<Path> changedPaths) {}
@@ -508,4 +596,5 @@ public class SourceCollectionService {
     }
   }
   public record CollectionResult(int savedPages, int changedPages, int failedPages, int visitedPages, int crawlDepth, int maxPages, String warning, java.util.UUID analysisTaskId) {}
+  public record CollectionRequestStatus(String status, CollectionResult result, String error) {}
 }

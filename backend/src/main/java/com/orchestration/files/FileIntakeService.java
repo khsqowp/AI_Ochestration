@@ -9,10 +9,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +28,16 @@ public class FileIntakeService {
   private final FileIntakeRepository jobs;
   private final N8nDispatcher n8nDispatcher;
   private final DocumentExtractionService extraction;
+  private final long[] retryDelaysMs;
 
+  @Autowired
   FileIntakeService(FileProperties properties, FileIntakeRepository jobs, N8nDispatcher n8nDispatcher, DocumentExtractionService extraction) {
+    this(properties, jobs, n8nDispatcher, extraction, new long[] {5000, 15000});
+  }
+
+  FileIntakeService(FileProperties properties, FileIntakeRepository jobs, N8nDispatcher n8nDispatcher, DocumentExtractionService extraction, long[] retryDelaysMs) {
     this.properties = properties; this.jobs = jobs; this.n8nDispatcher = n8nDispatcher; this.extraction = extraction;
+    this.retryDelaysMs = retryDelaysMs;
   }
 
   @PostConstruct
@@ -76,24 +86,44 @@ public class FileIntakeService {
   private static final Pattern UPLOAD_UUID_PREFIX =
       Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}-");
 
-  private Optional<UUID> enqueueIfNew(Path file) {
+  private Optional<EnqueueResult> enqueueIfNew(Path file) {
     String sourcePath = originalsRoot().relativize(file.toAbsolutePath().normalize()).toString();
     if (jobs.existsBySourcePath(sourcePath)) return Optional.empty();
     String fileName = UPLOAD_UUID_PREFIX.matcher(file.getFileName().toString()).replaceFirst("");
     String extension = extensionOf(fileName);
     FileIntakeJob job = jobs.save(new FileIntakeJob(sourcePath, fileName, extension));
-    n8nDispatcher.dispatchFileIntake(job);
+    dispatchAttempt(job, 1);
     log.info("file_intake_queued sourcePath={} extension={}", sourcePath, extension);
     // Files under web/ are the source-collector's own crawl cache and already get analyzed as part of
     // that collection run (SourceCollectionService); reprocessing them here would duplicate that work.
-    if (sourcePath.startsWith("web/")) return Optional.empty();
-    return extraction.analyze(file, sourcePath, fileName, extension);
+    Optional<UUID> analysisTaskId = sourcePath.startsWith("web/") ? Optional.empty() : extraction.analyze(file, sourcePath, fileName, extension);
+    return Optional.of(new EnqueueResult(job, analysisTaskId));
+  }
+
+  private void dispatchAttempt(FileIntakeJob job, int attempt) {
+    CompletableFuture<Integer> dispatch;
+    try { dispatch = n8nDispatcher.dispatchFileIntake(job); }
+    catch (Exception exception) { dispatch = CompletableFuture.failedFuture(exception); }
+    dispatch.whenComplete((status, error) -> {
+      synchronized (job) {
+        if (error == null && status == null) { job.markDispatchIgnored(); jobs.save(job); return; }
+        if (error == null && status >= 200 && status < 300) { job.markDispatchSucceeded(); jobs.save(job); return; }
+        if (attempt <= retryDelaysMs.length) {
+          job.markDispatchRetrying(attempt + 1); jobs.save(job);
+          CompletableFuture.runAsync(() -> dispatchAttempt(job, attempt + 1),
+              CompletableFuture.delayedExecutor(retryDelaysMs[attempt - 1], TimeUnit.MILLISECONDS));
+        } else {
+          job.markDispatchFailed(error == null ? "n8n HTTP " + status : "n8n 전송 실패: " + error.getMessage());
+          jobs.save(job);
+        }
+      }
+    });
   }
 
   @Transactional(readOnly = true)
   public List<FileIntakeJob> recent() { return jobs.findTop20ByOrderByDiscoveredAtDesc(); }
 
-  public Optional<UUID> saveUpload(String originalFilename, byte[] content) throws IOException {
+  public Optional<EnqueueResult> saveUpload(String originalFilename, byte[] content) throws IOException {
     String safeName = Path.of(originalFilename == null || originalFilename.isBlank() ? "upload" : originalFilename).getFileName().toString()
         .replaceAll("[^a-zA-Z0-9가-힣._ -]", "_");
     Path uploads = originalsRoot().resolve("uploads").resolve(java.time.LocalDate.now().toString());
@@ -107,4 +137,5 @@ public class FileIntakeService {
   private Path originalsRoot() { return Path.of(properties.originalsPath()).toAbsolutePath().normalize(); }
   private Path obsidianRoot() { return Path.of(properties.obsidianPath()).toAbsolutePath().normalize(); }
   private String extensionOf(String name) { int index = name.lastIndexOf('.'); return index < 1 ? "unknown" : name.substring(index + 1).toLowerCase(Locale.ROOT); }
+  public record EnqueueResult(FileIntakeJob job, Optional<UUID> analysisTaskId) {}
 }

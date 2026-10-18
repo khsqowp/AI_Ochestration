@@ -14,5 +14,6 @@ interface BlackBoxScenarioSessionRepository extends JpaRepository<BlackBoxScenar
   // every visit to the history tab; the AI-generated filter moved into the query itself (was previously
   // applied in-memory after fetching everything) since filtering after paging would return short pages.
   List<BlackBoxScenarioSession> findByOwnerIdAndAiGeneratedTrueOrderByStartedAtDesc(UUID ownerId, Pageable pageable);
-  List<BlackBoxScenarioSession> findByOwnerIdAndStatusOrderByClosedAtDesc(UUID ownerId, BlackBoxSessionStatus status);
+  List<BlackBoxScenarioSession> findTop8ByOwnerIdAndStatusAndAiGeneratedTrueAndPrimarySkillCodeAndScoreIsNotNullOrderByClosedAtDesc(UUID ownerId, BlackBoxSessionStatus status, String primarySkillCode);
+  List<BlackBoxScenarioSession> findTop200ByOwnerIdAndStatusAndAiGeneratedTrueAndScoreIsNotNullOrderByClosedAtDesc(UUID ownerId, BlackBoxSessionStatus status);
 }

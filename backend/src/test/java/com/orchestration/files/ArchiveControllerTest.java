@@ -61,4 +61,19 @@ class ArchiveControllerTest {
     assertThat(results).hasSize(1);
     assertThat(results.get(0).name()).isEqualTo("note.md");
   }
+
+  @Test
+  void filesAndSearchReuseTheSameSnapshotWithinFiveSeconds() throws IOException {
+    Path note = obsidian.resolve("note.md");
+    Files.writeString(note, "---\ntitle: Cached note\n---\nunique searchable text");
+
+    List<ArchiveController.FileEntry> first = controller.files();
+    Files.delete(note);
+
+    assertThat(first).hasSize(1);
+    assertThat(controller.files()).isSameAs(first);
+    assertThat(controller.search(encode("searchable")))
+        .extracting(ArchiveController.SearchResult::path).containsExactly("note.md");
+    assertThat(controller.search(encode("absent"))).isEmpty();
+  }
 }

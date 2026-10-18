@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Archive, FileText, FileUp, Layers, LockKeyhole, MessageCircle, TrendingUp, X } from 'lucide-react'
 import type { ArchiveFile, FileCategory, MarkdownDoc, SortDirection, SortField, Task } from '../lib/types'
 import { displayTitle, documentTitle, domainLabel, fileMatchesCategory, sortIndicator, toUrlSafeBase64 } from '../lib/util'
@@ -9,6 +9,9 @@ export function FileExplorer({ onClose, onTaskStarted, onOpenGraph, initialPath,
   const [readPaths, setReadPaths] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('archive-read-files') ?? '[]')) } catch { return new Set() } })
   const [sortField, setSortField] = useState<SortField>('date'); const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [category, setCategory] = useState<FileCategory>('all')
+  const filesAbortRef = useRef<AbortController | null>(null)
+  const searchAbortRef = useRef<AbortController | null>(null)
+  const openFileAbortRef = useRef<AbortController | null>(null)
   const toggleSort = (field: SortField) => { if (field === sortField) { setSortDirection(direction => direction === 'asc' ? 'desc' : 'asc') } else { setSortField(field); setSortDirection(field === 'date' ? 'desc' : 'asc') } }
   const sortedFiles = files.filter(file => fileMatchesCategory(file, category)).sort((a, b) => {
     const sign = sortDirection === 'asc' ? 1 : -1
@@ -21,19 +24,33 @@ export function FileExplorer({ onClose, onTaskStarted, onOpenGraph, initialPath,
     return sign * (dateCompare !== 0 ? dateCompare : a.modifiedAt.localeCompare(b.modifiedAt))
   })
   useEffect(() => {
-    const load = () => fetch('/api/archive/files', { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(setFiles).catch(() => setError('파일 목록을 불러오지 못했습니다.'))
+    const load = () => {
+      filesAbortRef.current?.abort()
+      const controller = new AbortController()
+      filesAbortRef.current = controller
+      fetch('/api/archive/files', { credentials: 'include', signal: controller.signal })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => { if (!controller.signal.aborted) setFiles(data) })
+        .catch(cause => { if (!controller.signal.aborted && cause?.name !== 'AbortError') setError('파일 목록을 불러오지 못했습니다.') })
+    }
     load()
     // Polls quietly while the explorer stays open so a file created by a task that finishes (or a
     // collection/archive sweep) mid-session shows up without the user having to close and reopen the panel.
     const timer = window.setInterval(load, 5000)
-    return () => window.clearInterval(timer)
+    return () => { window.clearInterval(timer); filesAbortRef.current?.abort() }
   }, [])
   const openFile = async (file: Pick<ArchiveFile, 'path'>) => {
+    openFileAbortRef.current?.abort()
+    const controller = new AbortController()
+    openFileAbortRef.current = controller
     setError('')
     try {
-      const response = await fetch(`/api/archive/content?path=${toUrlSafeBase64(file.path)}`, { credentials: 'include' })
+      const response = await fetch(`/api/archive/content?path=${toUrlSafeBase64(file.path)}`, { credentials: 'include', signal: controller.signal })
+      if (controller.signal.aborted) return
       if (!response.ok) { setError(`Markdown 미리보기를 열지 못했습니다. (HTTP ${response.status})`); return }
-      setSelected(await response.json())
+      const data = await response.json()
+      if (controller.signal.aborted) return
+      setSelected(data)
       setReadPaths(previous => {
         if (previous.has(file.path)) return previous
         const next = new Set(previous); next.add(file.path)
@@ -41,15 +58,29 @@ export function FileExplorer({ onClose, onTaskStarted, onOpenGraph, initialPath,
         return next
       })
     } catch (cause) {
+      if (controller.signal.aborted || (cause instanceof Error && cause.name === 'AbortError')) return
       // fetch 자체가 실패(네트워크 오류, 타임아웃, 응답이 JSON이 아님)하면 위 try 없이는 아무 반응도
       // 없이 조용히 실패해서 "클릭해도 안 열림"으로만 보였다 -- 항상 화면에 이유를 보여준다.
       console.error('archive_open_failed', file.path, cause)
       setError('Markdown 미리보기를 열지 못했습니다. (네트워크 오류 -- 콘솔 확인)')
     }
   }
+  useEffect(() => () => openFileAbortRef.current?.abort(), [])
   // 대시보드의 "최근 파일" 목록에서 특정 파일을 클릭했을 때, 목록만 보여주고 끝나지 않도록 곧바로 그 파일을 열어준다.
   useEffect(() => { if (!initialPath) return; openFile({ path: initialPath }); onInitialPathHandled?.() }, [initialPath])
-  useEffect(() => { if (query.trim().length < 2) { setResults([]); return } const timer = window.setTimeout(() => { fetch(`/api/archive/search?query=${toUrlSafeBase64(query)}`, { credentials: 'include' }).then(response => response.ok ? response.json() : []).then(setResults) }, 250); return () => window.clearTimeout(timer) }, [query])
+  useEffect(() => {
+    if (query.trim().length < 2) { setResults([]); return }
+    const timer = window.setTimeout(() => {
+      searchAbortRef.current?.abort()
+      const controller = new AbortController()
+      searchAbortRef.current = controller
+      fetch(`/api/archive/search?query=${toUrlSafeBase64(query)}`, { credentials: 'include', signal: controller.signal })
+        .then(response => response.ok ? response.json() : [])
+        .then(data => { if (!controller.signal.aborted) setResults(data) })
+        .catch(cause => { if (!controller.signal.aborted && cause?.name !== 'AbortError') console.error('archive_search_failed', cause) })
+    }, 250)
+    return () => { window.clearTimeout(timer); searchAbortRef.current?.abort() }
+  }, [query])
   const reprocess = async () => { if (!selected) return; setProcessing(true); const response = await fetch('/api/tasks', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `[재가공] ${documentTitle(selected)}`.slice(0, 160), domain: 'GENERAL', instruction: `아래 기존 Markdown 노트를 제2의 뇌용으로 재가공하세요. 핵심 요약, 중요도, 관련 개념, 기존 노트와의 연결 후보, 중복·오래된 정보, 필요한 경우 보강 조사 항목을 자연스러운 한국어 Markdown으로 정리하세요. 원본을 덮어쓰지 말고 새 연관 노트로 보관하세요.\n\n원본 경로: obsidian/${selected.path}\n\n원본 내용:\n${selected.body.slice(0, 4500)}` }) }); setProcessing(false); if (!response.ok) { setError('재가공 작업을 만들지 못했습니다.'); return } onTaskStarted(await response.json() as Task); onClose?.() }
   // 원본 노트가 짧아서 아쉬울 때 — 같은 요약을 반복하는 대신, 원본이 다루지 않은 다음 단계·더 깊은
   // 세부사항·실전 예시를 새 후속 노트로 이어 쓴다. 원본은 건드리지 않는다(reprocess 와 동일 원칙).

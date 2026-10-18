@@ -8,6 +8,7 @@ import { shouldDeferReload } from './AppState.logic'
 type AppStateValue = {
   session: Session | null
   sessionChecked: boolean
+  sessionError: boolean
   role: Role | null
   isAdmin: boolean
   loginError: string
@@ -55,6 +56,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
   const [session, setSession] = useState<Session | null>(null)
   const [sessionChecked, setSessionChecked] = useState(false)
+  const [sessionError, setSessionError] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
   const [notices, setNotices] = useState<Notice[]>([])
@@ -100,7 +102,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }).catch(() => undefined)
 
   useEffect(() => {
-    fetch('/api/auth/session', { credentials: 'include' }).then(r => r.json()).then(setSession).catch(() => setSession({ authenticationEnabled: false, user: { displayName: 'Developer', email: 'local', role: 'ADMIN' } })).finally(() => setSessionChecked(true))
+    fetch('/api/auth/session', { credentials: 'include' })
+      .then(response => { if (!response.ok) throw new Error(`Session check failed: HTTP ${response.status}`); return response.json() })
+      .then(data => { setSession(data); setSessionError(false) })
+      .catch(() => { setSession(null); setSessionError(true) })
+      .finally(() => setSessionChecked(true))
   }, [])
 
   // 인증되면(로그인 직후 포함) 한 번 로드하고, 후보 카운트는 30초 폴링.
@@ -117,6 +123,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setLoggingIn(false)
     if (!response.ok) { const body = await response.json().catch(() => null); setLoginError(body?.message ?? '로그인에 실패했습니다.'); return }
     setSession(await response.json())
+    setSessionError(false)
   }
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
@@ -229,7 +236,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const openFileInExplorer = (path: string) => navigate('/dashboard/notes', { state: { openFile: path } })
 
   const value: AppStateValue = {
-    session, sessionChecked, role, isAdmin, loginError, loggingIn, login, logout,
+    session, sessionChecked, sessionError, role, isAdmin, loginError, loggingIn, login, logout,
     notices, notify, dismissNotice, todos,
     recentTasks, taskTracks, activeTask, setActiveTask, taskEvents, setTaskEvents,
     chatInput, setChatInput, taskDomain, setTaskDomain, chatError, uploading,

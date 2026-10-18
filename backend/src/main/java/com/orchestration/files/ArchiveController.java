@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -25,6 +26,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/archive")
 public class ArchiveController {
   private static final long MAX_MARKDOWN_BYTES = 1_000_000;
+  private static final Duration FILES_CACHE_TTL = Duration.ofSeconds(5);
   private static final Pattern WIKI_LINK = Pattern.compile("\\[\\[([^\\]|#]+)(?:\\|[^\\]]+)?]]");
   private static final Pattern FRONT_MATTER_BLOCK = Pattern.compile("(?s)\\A---\\s*\\n(.*?)\\n---\\s*\\n?");
   private static final Pattern FRONT_MATTER_LINE = Pattern.compile("(?m)^([a-zA-Z_]+):\\s*(.*)$");
@@ -32,6 +34,7 @@ public class ArchiveController {
   private final ArchiveMaintenanceService maintenance;
   private final NoteGraphEdgeRepository graphEdges;
   private final NoteGraphService graphService;
+  private volatile CachedFiles filesCache;
   ArchiveController(FileProperties properties, ArchiveMaintenanceService maintenance, NoteGraphEdgeRepository graphEdges, NoteGraphService graphService) {
     this.properties = properties;
     this.maintenance = maintenance;
@@ -53,20 +56,34 @@ public class ArchiveController {
 
   @GetMapping("/files")
   public List<FileEntry> files() throws IOException {
+    return cachedFiles().entries();
+  }
+
+  private CachedFiles cachedFiles() throws IOException {
+    CachedFiles cached = filesCache;
+    if (cached != null && Instant.now().isBefore(cached.computedAt().plus(FILES_CACHE_TTL))) return cached;
+
     Path root = root();
     Path archivedRoot = root.resolve("_archived");
+    List<CachedMarkdown> markdowns;
     try (Stream<Path> paths = Files.walk(root, 5)) {
-      return paths.filter(Files::isRegularFile)
+      markdowns = paths.filter(Files::isRegularFile)
           .filter(path -> path.getFileName().toString().toLowerCase().endsWith(".md"))
           .filter(path -> !path.startsWith(archivedRoot))
-          .sorted(Comparator.comparing(Path::toString))
           .map(path -> {
-            FrontMatter frontMatter = parseFrontMatter(readLimited(path));
-            return new FileEntry(root.relativize(path).toString(), path.getFileName().toString(), size(path),
+            String content = readLimited(path);
+            FrontMatter frontMatter = parseFrontMatter(content);
+            FileEntry entry = new FileEntry(root.relativize(path).toString(), path.getFileName().toString(), size(path),
                 frontMatter.title(), frontMatter.domain(), frontMatter.topic(), frontMatter.date(), frontMatter.origin(), modifiedAt(path));
+            return new CachedMarkdown(entry, content);
           })
           .toList();
     }
+    List<FileEntry> entries = markdowns.stream().map(CachedMarkdown::entry)
+        .sorted(Comparator.comparing(FileEntry::path)).toList();
+    CachedFiles refreshed = new CachedFiles(Instant.now(), entries, markdowns);
+    filesCache = refreshed;
+    return refreshed;
   }
 
   @GetMapping("/content")
@@ -83,15 +100,12 @@ public class ArchiveController {
     String decoded = decodeParam(query);
     String term = decoded == null ? "" : decoded.trim().toLowerCase(java.util.Locale.ROOT);
     if (term.length() < 2) return List.of();
-    Path archivedRoot = root().resolve("_archived");
-    try (Stream<Path> paths = Files.walk(root(), 5)) {
-      return paths.filter(Files::isRegularFile).filter(path -> path.getFileName().toString().toLowerCase().endsWith(".md"))
-          .filter(path -> !path.startsWith(archivedRoot))
-          .filter(path -> contains(path, term)).limit(50).map(path -> {
-            String content = readLimited(path); String relative = rootUnchecked().relativize(path).toString();
-            return new SearchResult(relative, path.getFileName().toString(), excerpt(content, term));
-          }).toList();
-    }
+    return cachedFiles().markdowns().stream()
+        .filter(markdown -> markdown.entry().name().toLowerCase(java.util.Locale.ROOT).contains(term)
+            || markdown.content().toLowerCase(java.util.Locale.ROOT).contains(term))
+        .limit(50)
+        .map(markdown -> new SearchResult(markdown.entry().path(), markdown.entry().name(), excerpt(markdown.content(), term)))
+        .toList();
   }
 
   /** Collection-origin notes (auto-scraped news) are excluded from the graph entirely -- the user only
@@ -183,7 +197,6 @@ public class ArchiveController {
    * back to alphabetical-by-path order in the file list, which doesn't reflect when they actually
    * appeared. This gives the frontend a real instant to sort/tie-break by instead. */
   private Instant modifiedAt(Path path) { try { return Files.getLastModifiedTime(path).toInstant(); } catch (IOException ignored) { return Instant.EPOCH; } }
-  private boolean contains(Path path, String term) { return path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).contains(term) || readLimited(path).toLowerCase(java.util.Locale.ROOT).contains(term); }
   private String readLimited(Path path) { try { return Files.size(path) > MAX_MARKDOWN_BYTES ? "" : Files.readString(path, StandardCharsets.UTF_8); } catch (IOException ignored) { return ""; } }
   private String excerpt(String content, String term) { int index = content.toLowerCase(java.util.Locale.ROOT).indexOf(term); if (index < 0) return "파일 이름과 일치"; int start = Math.max(0, index - 55); int end = Math.min(content.length(), index + term.length() + 95); return content.substring(start, end).replaceAll("\\s+", " "); }
 
@@ -214,4 +227,6 @@ public class ArchiveController {
   record GraphNode(String path, String name, String category) {}
   record GraphEdge(String from, String to) {}
   record SearchResult(String path, String name, String excerpt) {}
+  private record CachedMarkdown(FileEntry entry, String content) {}
+  private record CachedFiles(Instant computedAt, List<FileEntry> entries, List<CachedMarkdown> markdowns) {}
 }

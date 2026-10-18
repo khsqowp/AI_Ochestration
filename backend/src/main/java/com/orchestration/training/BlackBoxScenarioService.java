@@ -142,8 +142,7 @@ class BlackBoxScenarioService {
   private String cleanVerdict(String value) { String verdict=clean(value, 30, "판정"); if(!List.of("취약점 확인", "추가 증거 필요", "취약점 아님").contains(verdict)) throw new IllegalArgumentException("판정 값이 올바르지 않습니다."); return verdict; }
   private void refreshBlackBoxAssessment(UUID ownerId, String skillCode) { refreshBlackBoxAssessment(ownerId,skillCode,null); }
   private void refreshBlackBoxAssessment(UUID ownerId, String skillCode, String evaluatedNextAction) {
-    List<BlackBoxScenarioSession> closed=sessions.findByOwnerIdAndStatusOrderByClosedAtDesc(ownerId, BlackBoxSessionStatus.CLOSED).stream()
-        .filter(item -> item.isAiGenerated() && item.getPrimarySkillCode().equals(skillCode) && item.getScore()!=null).limit(8).toList();
+    List<BlackBoxScenarioSession> closed=sessions.findTop8ByOwnerIdAndStatusAndAiGeneratedTrueAndPrimarySkillCodeAndScoreIsNotNullOrderByClosedAtDesc(ownerId, BlackBoxSessionStatus.CLOSED, skillCode);
     if(closed.isEmpty()) return; double average=closed.stream().mapToDouble(item -> item.getScore()).average().orElse(0);
     CompetencyAssessment assessment=assessments.findByOwnerIdAndSkillCode(ownerId, skillCode).orElseGet(() -> assessments.save(new CompetencyAssessment(ownerId, skillCode, 50, AssessmentConfidence.LOW, "블랙박스 사건 분석 기록을 수집 중입니다.", 0)));
     String next=evaluatedNextAction==null||evaluatedNextAction.isBlank()?(closed.size()<3?"서로 다른 사건을 더 풀어 신뢰도를 높이세요.":"반복 누락된 관측을 줄이는 사건을 선택하세요."):evaluatedNextAction;
@@ -159,8 +158,7 @@ class BlackBoxScenarioService {
   /** 레이더/추이 차트용 경량 조회 -- 메시지·관측 등 무거운 컬렉션은 건드리지 않아(hydrate 안 함)
    * 세션 본문을 끌어오지 않는다. */
   @Transactional(readOnly=true) List<ScorePoint> scoreTrend(UUID ownerId) {
-    return sessions.findByOwnerIdAndStatusOrderByClosedAtDesc(ownerId, BlackBoxSessionStatus.CLOSED).stream()
-        .filter(item -> item.isAiGenerated() && item.getScore()!=null)
+    return sessions.findTop200ByOwnerIdAndStatusAndAiGeneratedTrueAndScoreIsNotNullOrderByClosedAtDesc(ownerId, BlackBoxSessionStatus.CLOSED).stream()
         .map(item -> new ScorePoint(item.getPrimarySkillCode(), item.getScore(), item.getClosedAt()))
         .toList();
   }

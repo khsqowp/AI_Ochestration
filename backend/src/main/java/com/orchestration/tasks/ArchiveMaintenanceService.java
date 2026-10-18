@@ -6,21 +6,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -28,6 +23,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -41,7 +37,7 @@ import org.springframework.stereotype.Service;
  *
  * <p>Collection sources write one dated note per day (see {@link KnowledgeArchiveService}), under
  * a folder named after the source (e.g. the site name). Once a week is fully over, {@link
- * #mergeWeeklyCollectionNotes} folds that week's daily notes for each source into a single "주간 정리"
+ * WeeklyCollectionDigestService#mergeWeeklyCollectionNotes} folds that week's daily notes for each source into a single "주간 정리"
  * document, moves the daily originals into {@code _archived/}, and leaves the weekly note in that same
  * per-source folder — so a source's history reads as one file per week, indefinitely. Collection-origin
  * notes are deliberately excluded from {@link #reclassifyBySubject} for this reason: an earlier version
@@ -73,24 +69,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class ArchiveMaintenanceService {
   private static final Logger log = LoggerFactory.getLogger(ArchiveMaintenanceService.class);
-  private static final Pattern TITLE = Pattern.compile("(?m)^title:\\s*\"?([^\"\\n]+)\"?\\s*$");
-  private static final Pattern DOMAIN_LINE = Pattern.compile("(?m)^domain:\\s*([^\\n]+)\\s*$");
-  private static final Pattern TOPIC_LINE = Pattern.compile("(?m)^topic:\\s*.*$");
   private static final Pattern ORIGIN_LINE = Pattern.compile("(?m)^origin:\\s*(.*)$");
-  private static final Pattern FRONT_MATTER_BLOCK = Pattern.compile("(?s)\\A---\\s*\\n(.*?)\\n---\\s*\\n?");
-  private static final Pattern RELATED_SECTION = Pattern.compile("(?s)\\n## 관련 노트\\n.*$");
-  private static final Pattern DATE_PREFIX = Pattern.compile("^(\\d{4}-\\d{2}-\\d{2})-");
-  private static final Pattern DAILY_TITLE_DATE_SUFFIX = Pattern.compile("\\s*\\(\\d{4}-\\d{2}-\\d{2}\\)$");
   private static final Pattern GROUP_MARKER = Pattern.compile("===그룹:\\s*(.+?)\\s*===\\n");
   private static final Pattern CHUNK_HEADING = Pattern.compile("\\A## (.+)$", Pattern.MULTILINE);
   private static final double CANDIDATE_THRESHOLD = 0.42;
-  private static final double RELATED_THRESHOLD = 0.16;
   private static final int MAX_MERGES_PER_RUN = 20;
   private static final int MAX_RECLASSIFY_PER_RUN = 30;
   private static final int MAX_BUCKET_PER_RUN = 15;
   private static final int MAX_SPLITS_PER_RUN = 3;
-  private static final int MAX_RELATED_LINKS = 6;
-  private static final int MERGE_EXCERPT_CHARS = 6000;
   private static final int TOPIC_EXCERPT_CHARS = 1500;
   private static final int BUCKET_SPLIT_THRESHOLD_CHARS = 30000;
   private static final String TOPICS_SEGMENT = "topics";
@@ -102,9 +88,20 @@ public class ArchiveMaintenanceService {
   private final KnowledgeArchiveService archive;
   private final LlmGateway llm;
   private final SecurityCategoryClassifier categoryClassifier;
+  private final WeeklyCollectionDigestService weeklyCollectionDigestService;
+  private final RelatedNoteLinker relatedNoteLinker;
 
   ArchiveMaintenanceService(FileProperties files, KnowledgeArchiveService archive, LlmGateway llm, SecurityCategoryClassifier categoryClassifier) {
+    this(files, archive, llm, categoryClassifier, new WeeklyCollectionDigestService(), new RelatedNoteLinker(archive));
+  }
+
+  @Autowired
+  ArchiveMaintenanceService(FileProperties files, KnowledgeArchiveService archive, LlmGateway llm,
+      SecurityCategoryClassifier categoryClassifier, WeeklyCollectionDigestService weeklyCollectionDigestService,
+      RelatedNoteLinker relatedNoteLinker) {
     this.files = files; this.archive = archive; this.llm = llm; this.categoryClassifier = categoryClassifier;
+    this.weeklyCollectionDigestService = weeklyCollectionDigestService;
+    this.relatedNoteLinker = relatedNoteLinker;
   }
 
   /**
@@ -177,7 +174,7 @@ public class ArchiveMaintenanceService {
     // failure is visible in the result (and the manual "지금 정리" UI) instead of only ever showing up
     // as a WARN line in the container log that nobody's watching -- see the catch sites below.
     List<String> failures = new ArrayList<>();
-    List<String> weeklyDigested = mergeWeeklyCollectionNotes(root, failures);
+    List<String> weeklyDigested = weeklyCollectionDigestService.mergeWeeklyCollectionNotes(root, failures);
     List<Note> notes = scanNotes(root, archivedRoot);
     Set<Path> consumed = new HashSet<>();
     List<String> merged = new ArrayList<>();
@@ -211,7 +208,7 @@ public class ArchiveMaintenanceService {
     // Merging, reclassifying, and bucketing all move files around, so the in-memory `notes` list's paths
     // are stale for anything that moved — re-walk fresh before linking so writes land on where files
     // actually are now.
-    int linked = linkRelatedNotes(scanNotes(root, archivedRoot), failures);
+    int linked = relatedNoteLinker.linkRelatedNotes(scanNotes(root, archivedRoot), CANDIDATE_THRESHOLD, failures);
     return new MaintenanceResult(notes.size(), merged.size(), merged, reclassified.size(), reclassified,
         bucketed.size(), bucketed, splits.size(), splits, weeklyDigested.size(), weeklyDigested, linked,
         failures.size(), failures);
@@ -229,138 +226,6 @@ public class ArchiveMaintenanceService {
   }
 
   /**
-   * Cross-references notes that are related but not near-duplicate enough to merge (below
-   * CANDIDATE_THRESHOLD, above RELATED_THRESHOLD), using the same free local term-overlap heuristic as the
-   * merge pre-filter — no LLM call needed. Rewrites each note's "## 관련 노트" section from scratch every
-   * run rather than appending, so re-running the sweep never accumulates duplicate links as relationships
-   * change. Link targets are the *filename* stem (not the human title), since that's what
-   * {@link com.orchestration.files.ArchiveController#graph} resolves [[wikilinks]] against.
-   */
-  private int linkRelatedNotes(List<Note> notes, List<String> failures) {
-    int updated = 0;
-    for (Note note : notes) {
-      try {
-        List<String> relatedStems = new ArrayList<>();
-        for (Note other : notes) {
-          if (other.path().equals(note.path()) || !other.domain().equals(note.domain())) continue;
-          double overlap = archive.overlapRatio(note.content(), other.content());
-          if (overlap >= RELATED_THRESHOLD && overlap < CANDIDATE_THRESHOLD) relatedStems.add(stem(other.path()));
-          if (relatedStems.size() >= MAX_RELATED_LINKS) break;
-        }
-        String current = Files.readString(note.path(), StandardCharsets.UTF_8);
-        String withoutSection = RELATED_SECTION.matcher(current).replaceFirst("");
-        String next = relatedStems.isEmpty() ? withoutSection
-            : withoutSection.stripTrailing() + "\n\n## 관련 노트\n" + relatedStems.stream().map(s -> "- [[" + s + "]]").collect(Collectors.joining("\n")) + "\n";
-        if (!next.equals(current)) { Files.writeString(note.path(), next, StandardCharsets.UTF_8); updated++; }
-      } catch (Exception exception) {
-        log.warn("archive_link_failed path={}", note.relativePath(), exception);
-        failures.add(note.relativePath() + ": 관련 노트 링크 갱신 실패 (" + exception.getMessage() + ")");
-      }
-    }
-    return updated;
-  }
-
-  private String stem(Path path) { return path.getFileName().toString().replaceFirst("(?i)\\.md$", ""); }
-
-  /**
-   * Scans every {@code <domain>/<source>/} folder for daily collection notes ({@code
-   * KnowledgeArchiveService#archiveDaily} writes one per day) and, for each ISO-week-Saturday group whose
-   * week has fully ended (strictly before the current week), folds them into one
-   * {@code <weekStart>-<source>-주간-정리.md} document. Notes from the still-in-progress current week are
-   * left alone so they keep accumulating daily until their own week ends. Runs before {@link
-   * #reclassifyBySubject} so a freshly folded weekly note is still sitting in its write-time source
-   * folder, exactly where that step looks for un-reclassified collection notes.
-   */
-  private List<String> mergeWeeklyCollectionNotes(Path root, List<String> failures) throws IOException {
-    List<String> digested = new ArrayList<>();
-    if (!Files.exists(root)) return digested;
-    Path archivedRoot = root.resolve("_archived");
-    LocalDate currentWeekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
-    Map<Path, List<Path>> bySourceFolder = new LinkedHashMap<>();
-    try (Stream<Path> paths = Files.walk(root, 4)) {
-      paths.filter(Files::isRegularFile)
-          .filter(path -> !path.startsWith(archivedRoot))
-          .filter(this::isDailyCollectionNote)
-          .forEach(path -> bySourceFolder.computeIfAbsent(path.getParent(), key -> new ArrayList<>()).add(path));
-    }
-    for (Map.Entry<Path, List<Path>> entry : bySourceFolder.entrySet()) {
-      Map<LocalDate, List<Path>> byWeek = new TreeMap<>();
-      for (Path file : entry.getValue()) {
-        Matcher dateMatch = DATE_PREFIX.matcher(file.getFileName().toString());
-        if (!dateMatch.find()) continue;
-        LocalDate weekStart = LocalDate.parse(dateMatch.group(1)).with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
-        if (!weekStart.isBefore(currentWeekStart)) continue; // this week is still in progress
-        byWeek.computeIfAbsent(weekStart, key -> new ArrayList<>()).add(file);
-      }
-      for (Map.Entry<LocalDate, List<Path>> weekEntry : byWeek.entrySet()) {
-        try {
-          digested.add(mergeWeek(root, entry.getKey(), weekEntry.getKey(), weekEntry.getValue()));
-        } catch (Exception exception) {
-          log.warn("archive_weekly_digest_failed dir={} week={}", root.relativize(entry.getKey()), weekEntry.getKey(), exception);
-          failures.add(root.relativize(entry.getKey()) + " (" + weekEntry.getKey() + " 주): 주간 취합 실패 (" + exception.getMessage() + ")");
-        }
-      }
-    }
-    return digested;
-  }
-
-  /**
-   * A genuine not-yet-merged daily note's filename is exactly {@code <date>-<containing folder name>.md}
-   * — {@code KnowledgeArchiveService#archiveDaily} derives both from the same source stem. This must be an
-   * exact match, not just "starts with a date": the weekly-merged file this step itself produces is named
-   * {@code <date>-<source>-주간-정리.md}, which starts with a date too but has extra text after the source
-   * stem, and a note {@link #reclassifyBySubject} has since moved into {@code topics/<slug>/} keeps its
-   * original filename while sitting in a folder named after the topic slug instead — both would wrongly
-   * match a looser "starts with YYYY-MM-DD" check and get re-swept into another merge.
-   */
-  private boolean isDailyCollectionNote(Path path) {
-    String fileName = path.getFileName().toString();
-    Matcher dateMatch = DATE_PREFIX.matcher(fileName);
-    if (!dateMatch.find()) return false;
-    String sourceStem = path.getParent().getFileName().toString();
-    return fileName.substring(dateMatch.end()).equals(sourceStem + ".md");
-  }
-
-  private String mergeWeek(Path root, Path sourceDir, LocalDate weekStart, List<Path> dailyFiles) throws IOException {
-    dailyFiles.sort(Comparator.comparing(path -> path.getFileName().toString()));
-    LocalDate weekEnd = weekStart.plusDays(6);
-    String domain = root.relativize(sourceDir).getName(0).toString();
-    String sourceStem = sourceDir.getFileName().toString();
-    String baseTitle = null;
-    StringBuilder body = new StringBuilder();
-    for (Path file : dailyFiles) {
-      String content = Files.readString(file, StandardCharsets.UTF_8);
-      if (baseTitle == null) {
-        String title = extractTitle(content).orElse(sourceStem);
-        baseTitle = DAILY_TITLE_DATE_SUFFIX.matcher(title).replaceFirst("");
-      }
-      Matcher dateMatch = DATE_PREFIX.matcher(file.getFileName().toString());
-      String date = dateMatch.find() ? dateMatch.group(1) : weekStart.toString();
-      body.append("## ").append(date).append("\n\n").append(stripFrontMatterAndOpeningHeading(content).strip()).append("\n\n---\n\n");
-    }
-    if (baseTitle == null) baseTitle = sourceStem;
-    String weeklyTitle = baseTitle + " 주간 정리 (" + weekStart + " ~ " + weekEnd + ")";
-    String markdown = "---\n"
-        + "title: \"" + weeklyTitle.replace("\"", "'") + "\"\n"
-        + "date: " + LocalDate.now() + "\n"
-        + "domain: " + domain + "\n"
-        + "doc_type: pm-report\n"
-        + "origin: collection\n"
-        + "tags: [orchestration, " + domain + "]\n"
-        + "---\n\n"
-        + "# " + weeklyTitle + "\n\n"
-        + body.toString().stripTrailing() + "\n";
-    Path weeklyNote = sourceDir.resolve(weekStart + "-" + sourceStem + "-주간-정리.md");
-    Files.writeString(weeklyNote, markdown, StandardCharsets.UTF_8);
-    for (Path file : dailyFiles) {
-      Path archivedTarget = root.resolve("_archived").resolve(root.relativize(file));
-      Files.createDirectories(archivedTarget.getParent());
-      Files.move(file, archivedTarget, StandardCopyOption.REPLACE_EXISTING);
-    }
-    return root.relativize(weeklyNote) + " (" + dailyFiles.size() + "건)";
-  }
-
-  /**
    * Moves collection-origin notes that are still filed under their write-time source folder into
    * {@code <domain>/topics/<topic-slug>/}, based on a subject label the LLM assigns from the note's
    * title and opening content. Manual-origin notes skip this path entirely — they go through
@@ -368,8 +233,9 @@ public class ArchiveMaintenanceService {
    * note. Notes already under a {@code topics/} folder are skipped so this doesn't reclassify the same
    * note every week. Runs after merging so a just-merged primary note is reclassified using its
    * consolidated content rather than its pre-merge draft. Still-unmerged daily notes ({@link
-   * #isDailyCollectionNote}) are skipped too — they're transient by design (folded into one weekly
-   * document once their week ends, see {@link #mergeWeeklyCollectionNotes}), so classifying and moving
+   * WeeklyCollectionDigestService#isDailyCollectionNote}) are skipped too — they're transient by design
+   * (folded into one weekly document once their week ends, see {@link
+   * WeeklyCollectionDigestService#mergeWeeklyCollectionNotes}), so classifying and moving
    * them individually would both waste an LLM call on content that's about to be replaced and — worse —
    * relocate the file out from under the deterministic path {@code KnowledgeArchiveService#archiveDaily}
    * expects to find and append into on the next day's collection.
@@ -388,26 +254,26 @@ public class ArchiveMaintenanceService {
     List<String> moved = new ArrayList<>();
     for (Note note : notes) {
       if (moved.size() >= MAX_RECLASSIFY_PER_RUN) break;
-      if (consumed.contains(note.path()) || isReclassified(note) || MANUAL_ORIGIN.equals(note.origin()) || COLLECTION_ORIGIN.equals(note.origin()) || isDailyCollectionNote(note.path())) continue;
+      if (consumed.contains(note.path()) || isReclassified(note) || MANUAL_ORIGIN.equals(note.origin()) || COLLECTION_ORIGIN.equals(note.origin()) || weeklyCollectionDigestService.isDailyCollectionNote(note.path())) continue;
       try {
         String content = Files.exists(note.path()) ? Files.readString(note.path(), StandardCharsets.UTF_8) : note.content();
         // If a later collection for the same source pulled this note back out of topics/ (KnowledgeArchiveService's
         // "continue the existing note" match works by filename across the whole domain tree, topics/ included),
         // it still carries the "topic:" line from its earlier classification — reuse that label and just move it
         // home instead of spending another LLM call and duplicating the front-matter line.
-        Optional<String> existingLabel = extractTopic(content);
+        Optional<String> existingLabel = ArchiveNoteTextUtils.extractTopic(content);
         Optional<String> previousLabel = existingLabel.isPresent() ? Optional.empty() : readSourceTopicMemory(note.path());
         // classifyTopic is called directly (not through a swallow-and-return-blank wrapper) so a
         // classification failure surfaces to this catch block and gets recorded into `failures`, instead
         // of silently looking identical to "the model legitimately returned nothing".
         String label = existingLabel.isPresent() ? existingLabel.get() : classifyTopic(note, content, previousLabel);
         if (label.isBlank()) continue;
-        String slug = topicSlug(label);
+        String slug = ArchiveNoteTextUtils.topicSlug(label);
         if (slug.isBlank()) continue;
         Path domainRoot = root.resolve(note.domain());
         if (SecurityCategoryClassifier.SECURITY_DOMAIN.equals(note.domain())) {
           String category = existingSecurityCategory(note).orElse(null);
-          if (category == null) category = categoryClassifier.classify(extractTitle(content).orElse(note.relativePath()), content);
+          if (category == null) category = categoryClassifier.classify(ArchiveNoteTextUtils.extractTitle(content).orElse(note.relativePath()), content);
           domainRoot = domainRoot.resolve(category);
         }
         Path destination = uniqueDestination(domainRoot.resolve(TOPICS_SEGMENT).resolve(slug), note.path().getFileName().toString());
@@ -496,7 +362,7 @@ public class ArchiveMaintenanceService {
         String category = null;
         if (isSecurity) {
           category = existingSecurityCategory(note).orElse(null);
-          if (category == null) category = categoryClassifier.classify(extractTitle(content).orElse(note.relativePath()), content);
+          if (category == null) category = categoryClassifier.classify(ArchiveNoteTextUtils.extractTitle(content).orElse(note.relativePath()), content);
         }
         Path bucketsRoot = isSecurity ? root.resolve(note.domain()).resolve(category) : root.resolve(note.domain()).resolve(BUCKETS_SEGMENT);
         List<BucketInfo> existingBuckets = scanBucketsIn(bucketsRoot);
@@ -511,7 +377,7 @@ public class ArchiveMaintenanceService {
         } else {
           if (decision.newTitle() == null || decision.newTitle().isBlank()) continue;
           resolvedTitle = decision.newTitle();
-          bucketPath = uniqueDestination(bucketsRoot, topicSlug(resolvedTitle) + ".md");
+          bucketPath = uniqueDestination(bucketsRoot, ArchiveNoteTextUtils.topicSlug(resolvedTitle) + ".md");
         }
         appendIntoBucket(bucketPath, note.domain(), resolvedTitle, content);
         Path archived = archiveOriginal(root, note);
@@ -534,7 +400,7 @@ public class ArchiveMaintenanceService {
           .map(path -> {
             try {
               String content = Files.readString(path, StandardCharsets.UTF_8);
-              return new BucketInfo(path, extractTitle(content).orElse(path.getFileName().toString()));
+              return new BucketInfo(path, ArchiveNoteTextUtils.extractTitle(content).orElse(path.getFileName().toString()));
             } catch (IOException exception) {
               return null;
             }
@@ -560,8 +426,8 @@ public class ArchiveMaintenanceService {
         + "다른 설명이나 문장부호 없이 정확히 그 형식 한 줄만 출력하세요.";
     String bucketList = existing.isEmpty() ? "(아직 없음)"
         : IntStream.range(0, existing.size()).mapToObj(i -> (i + 1) + ". " + existing.get(i).title()).collect(Collectors.joining("\n"));
-    String title = extractTitle(content).orElse(note.relativePath());
-    String prompt = "기존 버킷 목록:\n" + bucketList + "\n\n분류할 노트 제목: " + title + "\n\n본문 일부:\n" + truncate(content, TOPIC_EXCERPT_CHARS);
+    String title = ArchiveNoteTextUtils.extractTitle(content).orElse(note.relativePath());
+    String prompt = "기존 버킷 목록:\n" + bucketList + "\n\n분류할 노트 제목: " + title + "\n\n본문 일부:\n" + ArchiveNoteTextUtils.truncate(content, TOPIC_EXCERPT_CHARS);
     LlmGateway.LlmResult result = llm.classifyWithDeepSeek(system, prompt);
     String raw = result.content().trim();
     if (raw.matches("\\d+")) {
@@ -580,8 +446,8 @@ public class ArchiveMaintenanceService {
    * section gets its own "## 제목" heading instead) into the target bucket document, creating the bucket
    * fresh on its first note. */
   private void appendIntoBucket(Path bucketPath, String domain, String bucketTitle, String noteContent) throws IOException {
-    String noteTitle = extractTitle(noteContent).orElse(bucketTitle);
-    String noteBody = stripFrontMatterAndOpeningHeading(noteContent);
+    String noteTitle = ArchiveNoteTextUtils.extractTitle(noteContent).orElse(bucketTitle);
+    String noteBody = ArchiveNoteTextUtils.stripFrontMatterAndOpeningHeading(noteContent);
     String section = "## " + noteTitle + "\n\n" + noteBody.strip() + "\n";
     if (Files.exists(bucketPath)) {
       String existing = Files.readString(bucketPath, StandardCharsets.UTF_8);
@@ -600,11 +466,6 @@ public class ArchiveMaintenanceService {
         + "---\n\n"
         + "# " + bucketTitle + "\n\n" + section;
     Files.writeString(bucketPath, markdown, StandardCharsets.UTF_8);
-  }
-
-  private String stripFrontMatterAndOpeningHeading(String content) {
-    String withoutFrontMatter = FRONT_MATTER_BLOCK.matcher(content).replaceFirst("");
-    return withoutFrontMatter.replaceFirst("\\A\\s*#{1,3}[ \\t]+.+\\n", "");
   }
 
   private Path archiveOriginal(Path root, Note note) throws IOException {
@@ -640,7 +501,7 @@ public class ArchiveMaintenanceService {
       try {
         String content = Files.readString(bucketPath, StandardCharsets.UTF_8);
         if (content.length() < BUCKET_SPLIT_THRESHOLD_CHARS) continue;
-        String domain = extractDomain(content).orElse(bucketPath.getParent().getParent().getFileName().toString());
+        String domain = ArchiveNoteTextUtils.extractDomain(content).orElse(bucketPath.getParent().getParent().getFileName().toString());
         List<SplitPart> parts = trySplitBucket(content);
         if (parts.isEmpty()) continue;
         writeSplitParts(root, bucketPath, domain, parts);
@@ -729,7 +590,7 @@ public class ArchiveMaintenanceService {
   private static final Pattern NOTE_CHUNK_DIVIDER = Pattern.compile("\n-{3,}\n");
 
   private List<String> splitIntoNoteChunks(String content) {
-    String withoutFrontMatterAndTitle = FRONT_MATTER_BLOCK.matcher(content).replaceFirst("")
+    String withoutFrontMatterAndTitle = ArchiveNoteTextUtils.FRONT_MATTER_BLOCK.matcher(content).replaceFirst("")
         .replaceFirst("\\A\\s*#{1,3}[ \t]+.+\n", "");
     List<String> rawChunks = Arrays.stream(NOTE_CHUNK_DIVIDER.split(withoutFrontMatterAndTitle))
         .map(String::strip).filter(s -> !s.isBlank()).toList();
@@ -753,7 +614,7 @@ public class ArchiveMaintenanceService {
   private void writeSplitParts(Path root, Path bucketPath, String domain, List<SplitPart> parts) throws IOException {
     Path bucketsDir = bucketPath.getParent();
     for (SplitPart part : parts) {
-      Path destination = uniqueDestination(bucketsDir, topicSlug(part.title()) + ".md");
+      Path destination = uniqueDestination(bucketsDir, ArchiveNoteTextUtils.topicSlug(part.title()) + ".md");
       String markdown = "---\n"
           + "title: \"" + part.title().replace("\"", "'") + "\"\n"
           + "date: " + LocalDate.now() + "\n"
@@ -775,30 +636,10 @@ public class ArchiveMaintenanceService {
         + "예: \"랜섬웨어 동향\", \"SQL 인젝션 방어\", \"금리 인상 전망\". 다른 설명이나 문장부호 없이 2~6단어 분량의 주제 명사구 한 줄만 출력하세요."
         + previousLabel.map(label -> " 이 수집 출처의 최근 분류 라벨은 \"" + label + "\"였습니다. 이번 내용도 같은 주제 범주면 그 라벨을 그대로 반환하고, "
             + "확실히 다른 주제로 바뀐 경우에만 새 라벨을 지으세요.").orElse("");
-    String title = extractTitle(content).orElse(note.relativePath());
-    String prompt = "제목: " + title + "\n\n본문 일부:\n" + truncate(content, TOPIC_EXCERPT_CHARS);
+    String title = ArchiveNoteTextUtils.extractTitle(content).orElse(note.relativePath());
+    String prompt = "제목: " + title + "\n\n본문 일부:\n" + ArchiveNoteTextUtils.truncate(content, TOPIC_EXCERPT_CHARS);
     LlmGateway.LlmResult result = llm.classifyWithDeepSeek(system, prompt);
     return result.content().trim().replaceAll("^[\"'“”\s]+|[\"'“”\s.]+$", "");
-  }
-
-  private Optional<String> extractTopic(String content) {
-    Matcher matcher = TOPIC_LINE.matcher(content);
-    if (!matcher.find()) return Optional.empty();
-    String line = matcher.group();
-    int colon = line.indexOf(':');
-    if (colon < 0) return Optional.empty();
-    String value = line.substring(colon + 1).trim().replaceAll("^\"|\"$", "");
-    return value.isBlank() ? Optional.empty() : Optional.of(value);
-  }
-
-  private Optional<String> extractDomain(String content) {
-    Matcher matcher = DOMAIN_LINE.matcher(content);
-    return matcher.find() ? Optional.of(matcher.group(1).trim()) : Optional.empty();
-  }
-
-  private String topicSlug(String label) {
-    String slug = label.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9가-힣]+", "-").replaceAll("(^-|-$)", "");
-    return slug.length() > 48 ? slug.substring(0, 48).replaceAll("-$", "") : slug;
   }
 
   private Path uniqueDestination(Path directory, String fileName) {
@@ -822,8 +663,8 @@ public class ArchiveMaintenanceService {
   private String withTopicFrontMatter(String content, String label) {
     String escaped = Matcher.quoteReplacement(label.replace("\"", "'"));
     String replacement = "topic: \"" + escaped + "\"";
-    if (TOPIC_LINE.matcher(content).find()) return TOPIC_LINE.matcher(content).replaceFirst(replacement);
-    if (DOMAIN_LINE.matcher(content).find()) return DOMAIN_LINE.matcher(content).replaceFirst("$0\n" + replacement);
+    if (ArchiveNoteTextUtils.TOPIC_LINE.matcher(content).find()) return ArchiveNoteTextUtils.TOPIC_LINE.matcher(content).replaceFirst(replacement);
+    if (ArchiveNoteTextUtils.DOMAIN_LINE.matcher(content).find()) return ArchiveNoteTextUtils.DOMAIN_LINE.matcher(content).replaceFirst("$0\n" + replacement);
     return content.replaceFirst("(?m)^---\\s*$", "---\n" + replacement);
   }
 
@@ -846,8 +687,8 @@ public class ArchiveMaintenanceService {
         + "같은 주제라면 두 노트의 내용을 중복 없이 하나로 합친 완성된 Markdown 노트를 새로 작성하세요. "
         + "제목, 소제목, 개념 설명, 핵심 정리 구조를 유지하고, 서로 다른 사실·수치·날짜·출처는 모두 보존하세요. "
         + "판단 근거나 병합 과정 같은 메타 설명은 절대 쓰지 마세요.";
-    String prompt = "노트 A (" + left.relativePath() + "):\n" + truncate(left.content())
-        + "\n\n노트 B (" + right.relativePath() + "):\n" + truncate(right.content());
+    String prompt = "노트 A (" + left.relativePath() + "):\n" + ArchiveNoteTextUtils.truncate(left.content())
+        + "\n\n노트 B (" + right.relativePath() + "):\n" + ArchiveNoteTextUtils.truncate(right.content());
     LlmGateway.LlmResult result = llm.decideWithDeepSeekLongForm(system, prompt, 9000);
     String content = result.content().trim();
     if (content.regionMatches(true, 0, "NOT_DUPLICATE", 0, "NOT_DUPLICATE".length())) return Optional.empty();
@@ -855,10 +696,10 @@ public class ArchiveMaintenanceService {
   }
 
   private void writeMerged(Path root, Note left, Note right, String mergedBody) throws IOException {
-    boolean leftIsPrimary = datePrefix(left.relativePath()).compareTo(datePrefix(right.relativePath())) <= 0;
+    boolean leftIsPrimary = ArchiveNoteTextUtils.datePrefix(left.relativePath()).compareTo(ArchiveNoteTextUtils.datePrefix(right.relativePath())) <= 0;
     Note primary = leftIsPrimary ? left : right;
     Note secondary = leftIsPrimary ? right : left;
-    String title = extractTitle(primary.content()).orElse(primary.relativePath());
+    String title = ArchiveNoteTextUtils.extractTitle(primary.content()).orElse(primary.relativePath());
     String markdown = "---\n"
         + "title: \"" + title.replace("\"", "'") + "\"\n"
         + "date: " + LocalDate.now() + "\n"
@@ -872,16 +713,6 @@ public class ArchiveMaintenanceService {
     Files.move(secondary.path(), archivedTarget, StandardCopyOption.REPLACE_EXISTING);
   }
 
-  private String truncate(String value) { return truncate(value, MERGE_EXCERPT_CHARS); }
-  private String truncate(String value, int limit) { return value.length() <= limit ? value : value.substring(0, limit) + "\n[길이 제한으로 일부 생략]"; }
-  private Optional<String> extractTitle(String content) { Matcher matcher = TITLE.matcher(content); return matcher.find() ? Optional.of(matcher.group(1).trim()) : Optional.empty(); }
-  private String datePrefix(String relativePath) {
-    String name = relativePath.contains("/") ? relativePath.substring(relativePath.lastIndexOf('/') + 1) : relativePath;
-    Matcher matcher = DATE_PREFIX.matcher(name);
-    return matcher.find() ? matcher.group(1) : "9999-99-99";
-  }
-
-  private record Note(Path path, String relativePath, String domain, String content, String origin) {}
   private record BucketInfo(Path path, String title) {}
   private record BucketDecision(BucketInfo existing, String newTitle) {}
   private record SplitPart(String title, String body) {}

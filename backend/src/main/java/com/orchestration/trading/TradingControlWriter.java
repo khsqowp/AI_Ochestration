@@ -1,5 +1,6 @@
 package com.orchestration.trading;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -79,10 +80,16 @@ public class TradingControlWriter {
     }
     try {
       Object parsed = objectMapper.readValue(Files.readString(controlPath), Map.class);
-      return parsed instanceof Map ? (Map<String, Object>) parsed : new LinkedHashMap<>();
-    } catch (IOException exception) {
-      log.warn("trading_control_read_failed, 새 파일로 덮어씀", exception);
-      return new LinkedHashMap<>();
+      if (!(parsed instanceof Map)) {
+        throw new IOException("control.json의 최상위 값이 객체가 아닙니다: " + controlPath);
+      }
+      return (Map<String, Object>) parsed;
+    } catch (JsonProcessingException exception) {
+      log.error("제어 파일이 손상된 것으로 보입니다: {}", controlPath, exception);
+      Path quarantinePath = controlPath.resolveSibling(
+          controlPath.getFileName() + ".corrupt-" + System.currentTimeMillis());
+      Files.move(controlPath, quarantinePath, StandardCopyOption.REPLACE_EXISTING);
+      throw new IOException("control.json이 손상되어 격리했습니다: " + quarantinePath, exception);
     }
   }
 

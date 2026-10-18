@@ -20,5 +20,14 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @EnableAsync
 @EnableConfigurationProperties({AuthProperties.class, DolphinProperties.class, FileProperties.class, N8nProperties.class, LlmProperties.class})
 public class OrchestrationApplication {
-  public static void main(String[] args) { SpringApplication.run(OrchestrationApplication.class, args); }
+  public static void main(String[] args) {
+    // Must run before ANY java.net.http.HttpClient/HttpRequest class is touched by any bean (e.g.
+    // SourceCollectionService's SSRF-safe IP-pinned fetch, which sends an explicit Host header) --
+    // the JDK reads this allowlist once, lazily, the first time a header is validated, and ignores
+    // later System.setProperty calls once that has happened. Setting it as literally the first
+    // statement in main(), before SpringApplication.run() constructs any bean, guarantees no such
+    // class has loaded yet.
+    System.setProperty("jdk.httpclient.allowRestrictedHeaders", "host");
+    SpringApplication.run(OrchestrationApplication.class, args);
+  }
 }

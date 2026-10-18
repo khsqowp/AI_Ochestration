@@ -2,6 +2,8 @@ package com.orchestration.trading;
 
 import java.io.IOException;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +20,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/trading/{bot}")
 public class TradingControlController {
+  private static final Logger log = LoggerFactory.getLogger(TradingControlController.class);
+
   private final TradingControlWriter control;
 
   TradingControlController(TradingControlWriter control) {
@@ -42,7 +46,8 @@ public class TradingControlController {
       Map<String, Object> slot = control.issue(bot, cmd, body == null ? null : body.reason());
       return Map.of("ok", true, "bot", bot, "command", slot);
     } catch (IOException exception) {
-      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "제어 파일 쓰기 실패: " + exception.getMessage());
+      log.error("제어 파일 쓰기에 실패했습니다. bot={} cmd={}", bot, cmd, exception);
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "제어 파일 쓰기에 실패했습니다.");
     }
   }
 

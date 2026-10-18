@@ -56,11 +56,15 @@ public class UsageController {
   }
 
   private BigDecimal calculateCurrentRate(String model, long input, long output, List<TaskEvent> rows) {
+    Map<Boolean, List<TaskEvent>> partitioned = rows.stream().collect(Collectors.partitioningBy(row -> row.getEstimatedCostUsd() != null));
+    BigDecimal stored = partitioned.get(true).stream().map(TaskEvent::getEstimatedCostUsd).reduce(BigDecimal.ZERO, BigDecimal::add);
+    long missingInput = partitioned.get(false).stream().map(TaskEvent::getInputTokens).filter(java.util.Objects::nonNull).mapToLong(Integer::longValue).sum();
+    long missingOutput = partitioned.get(false).stream().map(TaskEvent::getOutputTokens).filter(java.util.Objects::nonNull).mapToLong(Integer::longValue).sum();
     String normalized = model.toLowerCase();
-    if (normalized.contains("gemini")) return tokenCost(input, output, llm.geminiInputUsdPerMillion(), llm.geminiOutputUsdPerMillion());
-    if (normalized.contains("deepseek")) return tokenCost(input, output, llm.deepseekInputUsdPerMillion(), llm.deepseekOutputUsdPerMillion());
-    if (normalized.contains("gpt") || normalized.contains("openai")) return tokenCost(input, output, llm.openaiInputUsdPerMillion(), llm.openaiOutputUsdPerMillion());
-    return rows.stream().map(TaskEvent::getEstimatedCostUsd).filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+    if (normalized.contains("gemini")) return stored.add(tokenCost(missingInput, missingOutput, llm.geminiInputUsdPerMillion(), llm.geminiOutputUsdPerMillion()));
+    if (normalized.contains("deepseek")) return stored.add(tokenCost(missingInput, missingOutput, llm.deepseekInputUsdPerMillion(), llm.deepseekOutputUsdPerMillion()));
+    if (normalized.contains("gpt") || normalized.contains("openai")) return stored.add(tokenCost(missingInput, missingOutput, llm.openaiInputUsdPerMillion(), llm.openaiOutputUsdPerMillion()));
+    return stored;
   }
 
   private BigDecimal tokenCost(long input, long output, BigDecimal inputRate, BigDecimal outputRate) {

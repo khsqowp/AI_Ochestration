@@ -4,6 +4,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 
 import com.orchestration.n8n.N8nDispatcher;
 import java.io.IOException;
@@ -11,6 +13,8 @@ import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,6 +40,7 @@ class FileIntakeServiceTest {
   void stubDefaults() {
     when(jobs.existsBySourcePath(anyString())).thenReturn(false);
     when(jobs.save(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(n8nDispatcher.dispatchFileIntake(any())).thenReturn(CompletableFuture.completedFuture(null));
   }
 
   @Test
@@ -103,6 +108,26 @@ class FileIntakeServiceTest {
     service.discoverNewOriginals();
     service.discoverNewOriginals();
 
-    verify(jobs, times(1)).save(org.mockito.ArgumentMatchers.any());
+    verify(jobs, times(2)).save(org.mockito.ArgumentMatchers.any()); // creation plus ignored-dispatch status
+  }
+
+  @Test
+  void upload_returnsItsOwnJobAndMarksSuccessfulDispatch() throws IOException {
+    when(n8nDispatcher.dispatchFileIntake(any())).thenReturn(CompletableFuture.completedFuture(204));
+    when(extraction.analyze(any(), anyString(), anyString(), anyString())).thenReturn(Optional.empty());
+    FileIntakeService.EnqueueResult result = service().saveUpload("report.txt", new byte[] {1}).orElseThrow();
+    assertThat(result.job().getFileName()).isEqualTo("report.txt");
+    assertThat(result.job().getStatus()).isEqualTo(IntakeStatus.COMPLETED);
+  }
+
+  @Test
+  void dispatchFailure_retriesThenMarksJobFailed() throws IOException {
+    when(n8nDispatcher.dispatchFileIntake(any())).thenReturn(CompletableFuture.completedFuture(503));
+    when(extraction.analyze(any(), anyString(), anyString(), anyString())).thenReturn(Optional.empty());
+    FileProperties properties = new FileProperties(originals.toString(), originals.resolve("obsidian").toString(), 30000);
+    FileIntakeService target = new FileIntakeService(properties, jobs, n8nDispatcher, extraction, new long[] {0, 0});
+    FileIntakeJob job = target.saveUpload("report.txt", new byte[] {1}).orElseThrow().job();
+    org.awaitility.Awaitility.await().untilAsserted(() -> assertThat(job.getStatus()).isEqualTo(IntakeStatus.FAILED));
+    verify(n8nDispatcher, times(3)).dispatchFileIntake(job);
   }
 }

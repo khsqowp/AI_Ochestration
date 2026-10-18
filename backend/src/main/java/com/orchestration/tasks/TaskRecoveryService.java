@@ -2,6 +2,7 @@ package com.orchestration.tasks;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,5 +18,10 @@ class TaskRecoveryService {
   @EventListener(ApplicationReadyEvent.class)
   public void resumeInterruptedTasks() {
     tasks.recoverInterrupted().forEach(runner::execute);
+  }
+
+  @Scheduled(fixedDelay = 300_000)
+  public void recoverOrphanedTasks() {
+    resumeInterruptedTasks();
   }
 }

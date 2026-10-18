@@ -33,12 +33,14 @@ public class ResearchSourceController {
   @PutMapping("/{id}") public Response update(@PathVariable UUID id, @Valid @RequestBody UpdateRequest request) {
     return Response.from(service.update(id, new ResearchSourceService.UpdateResearchSource(request.name(), request.domain(), request.intervalHours(), request.crawlDepth(), request.maxPages(), request.note())));
   }
-  @PostMapping("/{id}/collect-now") public SourceCollectionService.CollectionResult collectNow(@PathVariable UUID id) { return collector.collectNow(id); }
+  @PostMapping("/{id}/collect-now") @ResponseStatus(HttpStatus.ACCEPTED) public CollectionRequestResponse collectNow(@PathVariable UUID id) { return new CollectionRequestResponse(collector.collectNowAsync(id)); }
+  @GetMapping("/collection-requests/{requestId}") public SourceCollectionService.CollectionRequestStatus collectionStatus(@PathVariable UUID requestId) { return collector.collectionStatus(requestId); }
   @PostMapping("/{id}/collected") @ResponseStatus(HttpStatus.NO_CONTENT) public void collected(@PathVariable UUID id) { service.markCollected(id); }
   @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@PathVariable UUID id) { service.delete(id); }
 
   record CollectionEnabledRequest(@NotNull Boolean enabled) {}
   record CollectionEnabledResponse(boolean enabled) {}
+  record CollectionRequestResponse(UUID requestId) {}
   record Request(@NotBlank @Size(max = 120) String name, @NotBlank @Size(max = 2048) String url, @NotNull ResearchDomain domain,
                  @Min(1) @Max(168) int intervalHours, @Min(0) @Max(2) int crawlDepth, @Min(1) @Max(100) int maxPages, @Size(max = 500) String note) {}
   record UpdateRequest(@NotBlank @Size(max = 120) String name, @NotNull ResearchDomain domain, @Min(1) @Max(168) int intervalHours,
