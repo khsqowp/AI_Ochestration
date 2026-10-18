@@ -14,6 +14,7 @@ const updates: UpdateGroup[] = [
       '역쉘, Git·시크릿 노출 점검, 클라우드 스토리지 버킷 권한 점검, OS Command Injection, DNS 테이크오버 점검 도구 추가',
       '펜테스트 도구 카테고리를 네트워크 정찰/웹 공격·퍼징/인증·크리덴셜 공격/내부망(AD·SMB)/익스플로잇 프레임워크 5개로 분리',
       '표준 도구(TOOL)·OS 명령어(OS) 섹션 구분 라벨 추가, Burp Comparer·History 뷰어를 상단 분석 도구로 재배치',
+      '오마카세 131개 문서를 검색엔진이 읽을 수 있는 정적 페이지(/omakase/문서별 URL)로 전환, sitemap.xml·robots.txt·검색엔진 소유권 인증 추가',
     ],
   },
   {
