@@ -1,8 +1,8 @@
 import { type ComponentType, type CSSProperties } from 'react'
 import {
-  AppWindow, Binary, CloudCog, Compass, Database, FileCode2, FlaskConical,
-  FolderSearch, GitBranch, Layers, Network, Radar, Route, SquareTerminal,
-  Terminal, Wrench,
+  AppWindow, Binary, Bomb, Bug, CloudCog, Compass, Crosshair, Database,
+  FileCode2, FlaskConical, FolderSearch, GitBranch, KeyRound, Layers,
+  Network, Radar, Route, ServerCog, SquareTerminal, Terminal,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
@@ -16,7 +16,11 @@ const CATEGORY_META: Record<string, { icon: ComponentType<{ size?: number }>; co
   techstack: { icon: Layers, color: '#c2740c' },
   'git-secrets': { icon: GitBranch, color: '#d14343' },
   'dns-takeover': { icon: Radar, color: '#a3298a' },
-  tools: { icon: Wrench, color: '#475569' },
+  'network-recon': { icon: Crosshair, color: '#1d4ed8' },
+  'web-attack': { icon: Bug, color: '#b91c1c' },
+  'credential-attack': { icon: KeyRound, color: '#a16207' },
+  'internal-network': { icon: ServerCog, color: '#15803d' },
+  exploitation: { icon: Bomb, color: '#581c87' },
   linux: { icon: SquareTerminal, color: '#334155' },
   windows: { icon: AppWindow, color: '#0284c7' },
   database: { icon: Database, color: '#713f12' },

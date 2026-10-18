@@ -209,8 +209,8 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     ],
   },
   {
-    id: 'tools',
-    name: '펜테스트 도구',
+    id: 'network-recon',
+    name: '네트워크 스캔 / 정찰',
     tools: [
       {
         id: 'nmap', name: 'Nmap', base: 'nmap', targetPlaceholder: '대상 IP 또는 도메인',
@@ -273,6 +273,27 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'd', flag: '-d', label: '디버그 출력', description: '스캔 동작을 매우 상세한 디버그 수준으로 표시합니다.' },
         ],
       },
+      {
+        id: 'netcat', name: 'Netcat (nc)', base: 'nc', targetPlaceholder: '호스트 포트',
+        options: [
+          { id: 'l', flag: '-l', label: '리슨 모드', description: '지정한 포트에서 연결을 대기합니다.' },
+          { id: 'v', flag: '-v', label: '상세 출력', description: '연결 상태를 화면에 표시합니다.' },
+          { id: 'p', flag: '-p', label: '로컬 포트 지정', description: '리슨 모드에서 사용할 로컬 포트를 지정합니다.', needsValue: true, placeholder: '포트' },
+          { id: 'z', flag: '-z', label: '포트 스캔 모드', description: '데이터 전송 없이 연결 가능 여부만 확인합니다.' },
+          { id: 'n', flag: '-n', label: 'DNS 조회 생략', description: 'IP만으로 접속해 속도를 높입니다.' },
+          { id: 'e', flag: '-e', label: '연결 시 프로그램 실행', description: '리버스·바인드 셸 구성에 사용됩니다.', needsValue: true, placeholder: '프로그램 경로' },
+          { id: 'u', flag: '-u', label: 'UDP 모드', description: 'TCP 대신 UDP로 통신합니다.' },
+          { id: 'k', flag: '-k', label: '연결 종료 후 재대기', description: '리슨 모드에서 연결이 끊겨도 계속 대기합니다.' },
+          { id: 'w', flag: '-w', label: '타임아웃 지정', description: '연결 대기 시간을 초 단위로 지정합니다.', needsValue: true, placeholder: '초' },
+          { id: '4', flag: '-4', label: 'IPv4만 사용', description: 'IPv6은 시도하지 않고 IPv4로만 접속합니다.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'web-attack',
+    name: '웹 공격 / 퍼징',
+    tools: [
       {
         id: 'nikto', name: 'Nikto', base: 'nikto',
         options: [
@@ -356,24 +377,6 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         ],
       },
       {
-        id: 'hydra', name: 'Hydra', base: 'hydra', targetPlaceholder: '대상 IP 서비스명(ssh, ftp 등)',
-        options: [
-          { id: 'l', flag: '-l', label: '단일 사용자명', description: '시도할 사용자명 하나를 지정합니다.', needsValue: true, placeholder: '사용자명' },
-          { id: 'P', flag: '-P', label: '비밀번호 목록 파일', description: '여러 비밀번호가 담긴 파일을 지정합니다.', needsValue: true, placeholder: '파일 경로' },
-          { id: 't', flag: '-t', label: '동시 시도 스레드 수', description: '병렬로 시도할 작업 수를 지정합니다.', needsValue: true, placeholder: '숫자' },
-          { id: 'L', flag: '-L', label: '사용자명 목록 파일', description: '여러 사용자명이 담긴 파일을 지정합니다.', needsValue: true, placeholder: '파일 경로' },
-          { id: 'f', flag: '-f', label: '첫 성공 시 중단', description: '유효한 계정을 하나 찾으면 즉시 종료합니다.' },
-          { id: 'V', flag: '-V', label: '시도 내용 상세 출력', description: '매 시도마다 사용한 계정·비밀번호를 화면에 표시합니다.' },
-          { id: 'o', flag: '-o', label: '결과를 파일로 저장', description: '찾아낸 계정·비밀번호를 파일에 기록합니다.', needsValue: true, placeholder: '파일명' },
-          { id: 'e', flag: '-e', label: '기본 자격증명 추가 시도', description: "'nsr' 조합(빈 값, 사용자명=비밀번호, 역순)을 추가로 시도합니다.", needsValue: true, placeholder: 'nsr' },
-          { id: 'M', flag: '-M', label: '대상 목록 파일 지정', description: '여러 대상을 한 번에 지정해 순차적으로 시도합니다.', needsValue: true, placeholder: '파일 경로' },
-          { id: 'C', flag: '-C', label: "'user:pass' 조합 파일 지정", description: '사용자명·비밀번호 쌍이 미리 정해진 목록을 사용합니다.', needsValue: true, placeholder: '파일 경로' },
-          { id: 'R', flag: '-R', label: '이전 세션 복원', description: '중단된 시도를 이전 지점부터 이어서 진행합니다.' },
-          { id: 'p', flag: '-p', label: '단일 비밀번호', description: '시도할 비밀번호 하나를 지정합니다.', needsValue: true, placeholder: '비밀번호' },
-          { id: 's', flag: '-s', label: '포트 지정', description: '기본 포트가 아닐 때 사용합니다.', needsValue: true, placeholder: '포트' },
-        ],
-      },
-      {
         id: 'gobuster', name: 'Gobuster', base: 'gobuster dir',
         note: 'dir(디렉터리·파일 탐색) 모드 기준입니다. gobuster dns, gobuster vhost 등 다른 하위 모드도 있습니다.',
         options: [
@@ -404,18 +407,40 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         ],
       },
       {
-        id: 'netcat', name: 'Netcat (nc)', base: 'nc', targetPlaceholder: '호스트 포트',
+        id: 'wpscan', name: 'WPScan', base: 'wpscan',
         options: [
-          { id: 'l', flag: '-l', label: '리슨 모드', description: '지정한 포트에서 연결을 대기합니다.' },
-          { id: 'v', flag: '-v', label: '상세 출력', description: '연결 상태를 화면에 표시합니다.' },
-          { id: 'p', flag: '-p', label: '로컬 포트 지정', description: '리슨 모드에서 사용할 로컬 포트를 지정합니다.', needsValue: true, placeholder: '포트' },
-          { id: 'z', flag: '-z', label: '포트 스캔 모드', description: '데이터 전송 없이 연결 가능 여부만 확인합니다.' },
-          { id: 'n', flag: '-n', label: 'DNS 조회 생략', description: 'IP만으로 접속해 속도를 높입니다.' },
-          { id: 'e', flag: '-e', label: '연결 시 프로그램 실행', description: '리버스·바인드 셸 구성에 사용됩니다.', needsValue: true, placeholder: '프로그램 경로' },
-          { id: 'u', flag: '-u', label: 'UDP 모드', description: 'TCP 대신 UDP로 통신합니다.' },
-          { id: 'k', flag: '-k', label: '연결 종료 후 재대기', description: '리슨 모드에서 연결이 끊겨도 계속 대기합니다.' },
-          { id: 'w', flag: '-w', label: '타임아웃 지정', description: '연결 대기 시간을 초 단위로 지정합니다.', needsValue: true, placeholder: '초' },
-          { id: '4', flag: '-4', label: 'IPv4만 사용', description: 'IPv6은 시도하지 않고 IPv4로만 접속합니다.' },
+          { id: 'url', flag: '--url', label: '대상 사이트 지정', description: '점검할 워드프레스 사이트의 URL을 지정합니다.', needsValue: true, placeholder: 'URL' },
+          { id: 'enumerate', flag: '--enumerate', label: '열거 항목 지정', description: 'p(플러그인)·t(테마)·u(사용자) 등 조사할 대상을 지정합니다.', needsValue: true, placeholder: 'p,t,u' },
+          { id: 'api-token', flag: '--api-token', label: '취약점 DB API 토큰 지정', description: 'WPScan Vulnerability Database 조회에 사용할 토큰을 지정합니다.', needsValue: true, placeholder: 'API 토큰' },
+          { id: 'usernames', flag: '--usernames', label: '대입 시도할 사용자명 목록', description: '무차별 대입에 시도할 사용자명 목록 파일을 지정합니다.', needsValue: true, placeholder: '파일 경로' },
+          { id: 'passwords', flag: '--passwords', label: '비밀번호 무차별 대입', description: '지정한 비밀번호 목록으로 로그인을 시도합니다.', needsValue: true, placeholder: '파일 경로' },
+          { id: 'random-user-agent', flag: '--random-user-agent', label: 'User-Agent 무작위화', description: '매 요청마다 다른 브라우저인 것처럼 위장합니다.' },
+        ],
+      },
+      { id: 'burp-comparer', name: 'Burp Comparer', base: '', options: [], note: 'Burp에서 내보낸 두 응답/요청을 비교합니다.' },
+      { id: 'burp-history-viewer', name: 'Burp History 뷰어', base: '', options: [], note: 'Burp 프록시 히스토리 export 파일을 열어 탐색합니다.' },
+    ],
+  },
+  {
+    id: 'credential-attack',
+    name: '인증 / 크리덴셜 공격',
+    tools: [
+      {
+        id: 'hydra', name: 'Hydra', base: 'hydra', targetPlaceholder: '대상 IP 서비스명(ssh, ftp 등)',
+        options: [
+          { id: 'l', flag: '-l', label: '단일 사용자명', description: '시도할 사용자명 하나를 지정합니다.', needsValue: true, placeholder: '사용자명' },
+          { id: 'P', flag: '-P', label: '비밀번호 목록 파일', description: '여러 비밀번호가 담긴 파일을 지정합니다.', needsValue: true, placeholder: '파일 경로' },
+          { id: 't', flag: '-t', label: '동시 시도 스레드 수', description: '병렬로 시도할 작업 수를 지정합니다.', needsValue: true, placeholder: '숫자' },
+          { id: 'L', flag: '-L', label: '사용자명 목록 파일', description: '여러 사용자명이 담긴 파일을 지정합니다.', needsValue: true, placeholder: '파일 경로' },
+          { id: 'f', flag: '-f', label: '첫 성공 시 중단', description: '유효한 계정을 하나 찾으면 즉시 종료합니다.' },
+          { id: 'V', flag: '-V', label: '시도 내용 상세 출력', description: '매 시도마다 사용한 계정·비밀번호를 화면에 표시합니다.' },
+          { id: 'o', flag: '-o', label: '결과를 파일로 저장', description: '찾아낸 계정·비밀번호를 파일에 기록합니다.', needsValue: true, placeholder: '파일명' },
+          { id: 'e', flag: '-e', label: '기본 자격증명 추가 시도', description: "'nsr' 조합(빈 값, 사용자명=비밀번호, 역순)을 추가로 시도합니다.", needsValue: true, placeholder: 'nsr' },
+          { id: 'M', flag: '-M', label: '대상 목록 파일 지정', description: '여러 대상을 한 번에 지정해 순차적으로 시도합니다.', needsValue: true, placeholder: '파일 경로' },
+          { id: 'C', flag: '-C', label: "'user:pass' 조합 파일 지정", description: '사용자명·비밀번호 쌍이 미리 정해진 목록을 사용합니다.', needsValue: true, placeholder: '파일 경로' },
+          { id: 'R', flag: '-R', label: '이전 세션 복원', description: '중단된 시도를 이전 지점부터 이어서 진행합니다.' },
+          { id: 'p', flag: '-p', label: '단일 비밀번호', description: '시도할 비밀번호 하나를 지정합니다.', needsValue: true, placeholder: '비밀번호' },
+          { id: 's', flag: '-s', label: '포트 지정', description: '기본 포트가 아닐 때 사용합니다.', needsValue: true, placeholder: '포트' },
         ],
       },
       {
@@ -441,6 +466,40 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'show', flag: '--show', label: '이미 크랙된 결과만 표시', description: '재계산 없이 기존에 찾아낸 비밀번호만 보여줍니다.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'internal-network',
+    name: '내부망 (AD/SMB)',
+    tools: [
+      {
+        id: 'enum4linux', name: 'enum4linux', base: 'enum4linux', targetPlaceholder: '대상 IP',
+        options: [
+          { id: 'a', flag: '-a', label: '전체 열거 실행', description: '사용자·그룹·공유·정책 등을 한 번에 모두 조회합니다.' },
+          { id: 'U', flag: '-U', label: '사용자 목록 조회', description: 'SMB를 통해 사용자 계정 목록을 조회합니다.' },
+          { id: 'S', flag: '-S', label: '공유 폴더 목록 조회', description: '공개된 SMB 공유 폴더 목록을 조회합니다.' },
+          { id: 'G', flag: '-G', label: '그룹 목록 조회', description: '등록된 그룹 목록을 조회합니다.' },
+          { id: 'P', flag: '-P', label: '비밀번호 정책 조회', description: '계정 잠금·비밀번호 정책 설정을 조회합니다.' },
+          { id: 'o', flag: '-o', label: 'OS 정보 조회', description: '대상의 운영체제 정보를 조회합니다.' },
+        ],
+      },
+      {
+        id: 'crackmapexec', name: 'CrackMapExec / NetExec', base: 'crackmapexec smb', targetPlaceholder: '대상 IP',
+        options: [
+          { id: 'u', flag: '-u', label: '사용자명 지정', description: '인증에 사용할 사용자명을 지정합니다.', needsValue: true, placeholder: '사용자명' },
+          { id: 'p', flag: '-p', label: '비밀번호 지정', description: '인증에 사용할 비밀번호를 지정합니다.', needsValue: true, placeholder: '비밀번호' },
+          { id: 'H', flag: '-H', label: 'NTLM 해시로 인증', description: '비밀번호 대신 해시 값으로 인증을 시도합니다(Pass-the-Hash).', needsValue: true, placeholder: 'NTLM 해시' },
+          { id: 'shares', flag: '--shares', label: '공유 폴더 목록 조회', description: '접근 가능한 SMB 공유 폴더 목록을 조회합니다.' },
+          { id: 'sam', flag: '--sam', label: 'SAM 데이터베이스 덤프 시도', description: '로컬 계정 해시를 추출합니다(관리자 권한 필요).' },
+          { id: 'x', flag: '-x', label: '원격 명령 실행 시도', description: '인증에 성공하면 지정한 명령을 원격에서 실행합니다.', needsValue: true, placeholder: '실행할 명령' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'exploitation',
+    name: '익스플로잇 프레임워크',
+    tools: [
       {
         id: 'metasploit', name: 'Metasploit (msfconsole) 콘솔 명령어', base: '', joiner: '\n',
         note: 'msfconsole을 실행한 뒤 콘솔 안에서 입력하는 명령어들입니다.',
@@ -455,41 +514,6 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
           { id: 'background', flag: 'background', label: '세션 백그라운드 전환', description: '현재 세션을 유지한 채 콘솔로 돌아갑니다.' },
         ],
       },
-      {
-        id: 'enum4linux', name: 'enum4linux', base: 'enum4linux', targetPlaceholder: '대상 IP',
-        options: [
-          { id: 'a', flag: '-a', label: '전체 열거 실행', description: '사용자·그룹·공유·정책 등을 한 번에 모두 조회합니다.' },
-          { id: 'U', flag: '-U', label: '사용자 목록 조회', description: 'SMB를 통해 사용자 계정 목록을 조회합니다.' },
-          { id: 'S', flag: '-S', label: '공유 폴더 목록 조회', description: '공개된 SMB 공유 폴더 목록을 조회합니다.' },
-          { id: 'G', flag: '-G', label: '그룹 목록 조회', description: '등록된 그룹 목록을 조회합니다.' },
-          { id: 'P', flag: '-P', label: '비밀번호 정책 조회', description: '계정 잠금·비밀번호 정책 설정을 조회합니다.' },
-          { id: 'o', flag: '-o', label: 'OS 정보 조회', description: '대상의 운영체제 정보를 조회합니다.' },
-        ],
-      },
-      {
-        id: 'wpscan', name: 'WPScan', base: 'wpscan',
-        options: [
-          { id: 'url', flag: '--url', label: '대상 사이트 지정', description: '점검할 워드프레스 사이트의 URL을 지정합니다.', needsValue: true, placeholder: 'URL' },
-          { id: 'enumerate', flag: '--enumerate', label: '열거 항목 지정', description: 'p(플러그인)·t(테마)·u(사용자) 등 조사할 대상을 지정합니다.', needsValue: true, placeholder: 'p,t,u' },
-          { id: 'api-token', flag: '--api-token', label: '취약점 DB API 토큰 지정', description: 'WPScan Vulnerability Database 조회에 사용할 토큰을 지정합니다.', needsValue: true, placeholder: 'API 토큰' },
-          { id: 'usernames', flag: '--usernames', label: '대입 시도할 사용자명 목록', description: '무차별 대입에 시도할 사용자명 목록 파일을 지정합니다.', needsValue: true, placeholder: '파일 경로' },
-          { id: 'passwords', flag: '--passwords', label: '비밀번호 무차별 대입', description: '지정한 비밀번호 목록으로 로그인을 시도합니다.', needsValue: true, placeholder: '파일 경로' },
-          { id: 'random-user-agent', flag: '--random-user-agent', label: 'User-Agent 무작위화', description: '매 요청마다 다른 브라우저인 것처럼 위장합니다.' },
-        ],
-      },
-      {
-        id: 'crackmapexec', name: 'CrackMapExec / NetExec', base: 'crackmapexec smb', targetPlaceholder: '대상 IP',
-        options: [
-          { id: 'u', flag: '-u', label: '사용자명 지정', description: '인증에 사용할 사용자명을 지정합니다.', needsValue: true, placeholder: '사용자명' },
-          { id: 'p', flag: '-p', label: '비밀번호 지정', description: '인증에 사용할 비밀번호를 지정합니다.', needsValue: true, placeholder: '비밀번호' },
-          { id: 'H', flag: '-H', label: 'NTLM 해시로 인증', description: '비밀번호 대신 해시 값으로 인증을 시도합니다(Pass-the-Hash).', needsValue: true, placeholder: 'NTLM 해시' },
-          { id: 'shares', flag: '--shares', label: '공유 폴더 목록 조회', description: '접근 가능한 SMB 공유 폴더 목록을 조회합니다.' },
-          { id: 'sam', flag: '--sam', label: 'SAM 데이터베이스 덤프 시도', description: '로컬 계정 해시를 추출합니다(관리자 권한 필요).' },
-          { id: 'x', flag: '-x', label: '원격 명령 실행 시도', description: '인증에 성공하면 지정한 명령을 원격에서 실행합니다.', needsValue: true, placeholder: '실행할 명령' },
-        ],
-      },
-      { id: 'burp-comparer', name: 'Burp Comparer', base: '', options: [], note: 'Burp에서 내보낸 두 응답/요청을 비교합니다.' },
-      { id: 'burp-history-viewer', name: 'Burp History 뷰어', base: '', options: [], note: 'Burp 프록시 히스토리 export 파일을 열어 탐색합니다.' },
     ],
   },
   {
