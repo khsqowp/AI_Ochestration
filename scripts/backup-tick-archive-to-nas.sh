@@ -20,9 +20,10 @@ MOUNT_POINT="/Volumes/${SMB_SHARE}"
 DEST_ROOT="${MOUNT_POINT}/Trade"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_TICK_DIR="$PROJECT_ROOT/trading-tick-archive"
+SRC_CRYPTO_PAPER_DIR="$PROJECT_ROOT/trading-crypto-paper-state"
 SRC_DB_DIR="$PROJECT_ROOT/backups"
 LOG_FILE="${BACKUP_LOG_FILE:-$HOME/Library/Logs/tick-archive-backup.log}"
-RETENTION_DAYS="${TICK_ARCHIVE_RETENTION_DAYS:-7}"
+BACKUP_MODE="${1:-all}"
 # 컨테이너:NAS폴더명 — 로테이션 봇 3개의 상태(JSON, trade_log/entry_log 포함)를 백업한다.
 # docker volume 자체는 Docker Desktop VM 안이라 macOS에서 경로로 못 읽어서 docker cp 로 꺼낸다.
 ROTATION_CONTAINERS=(
@@ -55,35 +56,57 @@ backup_tick_archive() {
     return 0
   fi
   mkdir -p "$dest"
-  log "[tick] 백업 시작: $SRC_TICK_DIR -> $dest"
-  if ! rsync -a --stats "$SRC_TICK_DIR"/ "$dest"/ >>"$LOG_FILE" 2>&1; then
-    log "[tick] 백업 실패(rsync 오류) — 로컬 정리는 건너뜀"
-    return 1
-  fi
-  log "[tick] 백업 완료"
-  # 백업이 이번 사이클에 실제로 성공했을 때만 정리한다 — NAS 마운트가 며칠 끊겨있었다면
-  # 그동안 밀린 데이터는 다음 성공한 백업이 rsync로 전부 따라잡을때까지 로컬에 계속 남는다
-  # (retention 지나도 백업 미확인 상태면 안 지운다).
-  #
-  # find -mtime 는 "파일의 마지막 쓰기 시각" 기준인데, 하루치 파일은 자정(UTC) 근처까지 계속
-  # append되다가 마지막 쓰기가 다음날(KST 09:00 무렵)에 찍힌다 — 그래서 "7일 지난 파일"이 실제
-  # 달력 기준 7일보다 하루 가까이 늦게 지워지고, 여기에 find -mtime +N 특유의 내림 처리까지
-  # 겹쳐 이틀 가까이 밀린다(2026-09-26 실측 확인: 41GB, 9일치가 그대로 쌓여있었음 — retention이
-  # "느슨하게 도는" 게 아니라 사실상 거의 안 지워지고 있었음). 폴더명(YYYY/MM/DD) 자체를 날짜로
-  # 파싱해서 "오늘 기준 N일 전보다 이전 날짜"인 폴더만 통째로 지우는 방식으로 바꿔 이 오차를 없앤다.
-  local cutoff_epoch deleted=0
-  cutoff_epoch=$(date -v-"${RETENTION_DAYS}"d +%s)
+  log "[tick] 압축 백업 시작: $SRC_TICK_DIR -> $dest"
+  # 현재 UTC 날짜 폴더는 계속 append 중일 수 있으므로 로컬에 남긴다. 닫힌 날짜만 파일별
+  # gzip으로 NAS에 원자적으로 저장하고, 압축 해제 SHA-256이 원본과 일치할 때 로컬을 지운다.
+  local today_utc deleted=0 verify_failed=0
+  today_utc=$(date -u +%Y-%m-%d)
   while IFS= read -r day_dir; do
-    local dir_epoch yyyy mm dd
+    local day_date yyyy mm dd relative dest_day source_file dest_file source_hash dest_hash day_ok
     dd="$(basename "$day_dir")"; mm="$(basename "$(dirname "$day_dir")")"; yyyy="$(basename "$(dirname "$(dirname "$day_dir")")")"
-    dir_epoch=$(date -j -f "%Y-%m-%d" "${yyyy}-${mm}-${dd}" +%s 2>/dev/null) || continue
-    if [ "$dir_epoch" -lt "$cutoff_epoch" ]; then
-      rm -rf "$day_dir"
-      deleted=$((deleted + 1))
+    day_date="${yyyy}-${mm}-${dd}"
+    date -j -f "%Y-%m-%d" "$day_date" +%Y-%m-%d >/dev/null 2>&1 || continue
+    if [[ "$day_date" < "$today_utc" ]]; then
+      relative="${day_dir#"$SRC_TICK_DIR"/}"
+      dest_day="$dest/$relative"
+      day_ok=1
+      mkdir -p "$dest_day"
+      if [ ! -d "$dest_day" ]; then
+        day_ok=0
+      else
+        while IFS= read -r -d '' source_file; do
+          relative="${source_file#"$day_dir"/}"
+          dest_file="$dest_day/$relative.gz"
+          mkdir -p "$(dirname "$dest_file")"
+          source_hash=$(shasum -a 256 "$source_file" | awk '{print $1}')
+          if [ ! -f "$dest_file" ] || ! gzip -t "$dest_file" >/dev/null 2>&1; then
+            local tmp_file="${dest_file}.tmp.$$"
+            if ! gzip -c "$source_file" > "$tmp_file" || ! mv -f "$tmp_file" "$dest_file"; then
+              rm -f "$tmp_file"
+              day_ok=0
+              break
+            fi
+          fi
+          dest_hash=$(gzip -dc "$dest_file" | shasum -a 256 | awk '{print $1}') || dest_hash=""
+          if [ -z "$source_hash" ] || [ "$source_hash" != "$dest_hash" ]; then
+            day_ok=0
+            break
+          fi
+        done < <(find "$day_dir" -type f -print0)
+      fi
+      if [ "$day_ok" -eq 1 ]; then
+        rm -rf "$day_dir"
+        deleted=$((deleted + 1))
+        log "[tick] 압축 해제 SHA-256 일치 — 로컬 날짜폴더 삭제: ${yyyy}/${mm}/${dd}"
+      else
+        verify_failed=1
+        log "[tick] NAS 검증 실패 — 로컬 원본 유지: ${yyyy}/${mm}/${dd}"
+      fi
     fi
   done < <(find "$SRC_TICK_DIR" -mindepth 3 -maxdepth 3 -type d)
   find "$SRC_TICK_DIR" -mindepth 1 -type d -empty -delete
-  log "[tick] 로컬 정리: ${RETENTION_DAYS}일 지난 날짜폴더 ${deleted}개 삭제"
+  log "[tick] 로컬 정리: NAS 압축본 SHA-256 검증을 통과한 닫힌 UTC 날짜폴더 ${deleted}개 삭제"
+  [ "$verify_failed" -eq 0 ]
 }
 
 backup_db_dumps() {
@@ -99,6 +122,21 @@ backup_db_dumps() {
     return 1
   fi
   log "[db] 백업 완료"
+}
+
+backup_crypto_paper_state() {
+  local dest="$DEST_ROOT/crypto-paper-state"
+  if [ ! -d "$SRC_CRYPTO_PAPER_DIR" ]; then
+    log "[crypto-paper] 상태 디렉토리 없음: $SRC_CRYPTO_PAPER_DIR — 건너뜀"
+    return 0
+  fi
+  mkdir -p "$dest"
+  log "[crypto-paper] 상태 백업 시작: $SRC_CRYPTO_PAPER_DIR -> $dest"
+  if ! rsync -a --checksum "$SRC_CRYPTO_PAPER_DIR"/ "$dest"/ >>"$LOG_FILE" 2>&1; then
+    log "[crypto-paper] 백업 실패 — 로컬 상태 유지"
+    return 1
+  fi
+  log "[crypto-paper] 상태 백업 완료 — 운영 중인 로컬 상태는 삭제하지 않음"
 }
 
 backup_trading_state() {
@@ -137,7 +175,24 @@ if ! ensure_mounted; then
 fi
 
 status=0
-backup_tick_archive || status=1
-backup_db_dumps || status=1
-backup_trading_state || status=1
+case "$BACKUP_MODE" in
+  all)
+    backup_tick_archive || status=1
+    backup_crypto_paper_state || status=1
+    backup_db_dumps || status=1
+    backup_trading_state || status=1
+    ;;
+  tick-only)
+    backup_tick_archive || status=1
+    backup_crypto_paper_state || status=1
+    ;;
+  state-db-only)
+    backup_db_dumps || status=1
+    backup_trading_state || status=1
+    ;;
+  *)
+    log "알 수 없는 백업 모드: $BACKUP_MODE (all|tick-only|state-db-only)"
+    exit 2
+    ;;
+esac
 exit $status
