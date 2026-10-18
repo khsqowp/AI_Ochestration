@@ -202,12 +202,12 @@ export function OmakasePage() {
                 const file = topic.files.find(f => f.id === fileId)
                 if (!file) return null
                 const isOpen = activeTabId === file.id
-                return <button
+                return <Link
                   key={file.id}
-                  type="button"
+                  to={`/omakase/${topic.id}/${file.id}/`}
                   className={`omakase-file-row ${isOpen ? 'active' : ''}`}
-                  onClick={() => openFile(topic.id, file)}
-                ><FileText size={14}/> <span>{file.title}</span></button>
+                  onClick={e => { e.preventDefault(); openFile(topic.id, file) }}
+                ><FileText size={14}/> <span>{file.title}</span></Link>
               })}
             </div>)}
           </div>
@@ -237,17 +237,17 @@ export function OmakasePage() {
           <h1 className="omakase-grid-heading">오마카세 — 오늘의 커리큘럼</h1>
           <p className="omakase-grid-sub">주제를 하나 고르면 왼쪽에 목차가 열립니다.</p>
           <div className="omakase-grid-cards">
-            {OMAKASE_TOPICS.map(t => <button
+            {OMAKASE_TOPICS.map(t => <Link
               key={t.id}
-              type="button"
+              to={`/omakase/${t.id}/`}
               className="omakase-card"
               style={{ '--omakase-accent': t.accent } as CSSProperties}
-              onClick={() => openTopic(t)}
+              onClick={e => { e.preventDefault(); openTopic(t) }}
             >
               <div className="omakase-card-title">{t.title}</div>
               <div className="omakase-card-subtitle">{t.subtitle}</div>
               <div className="omakase-card-meta">{t.files.length}개 문서 · {t.sections.length}개 섹션</div>
-            </button>)}
+            </Link>)}
           </div>
         </div>}
 

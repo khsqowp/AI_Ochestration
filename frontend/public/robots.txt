@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /order
+Disallow: /lunch
+Disallow: /webhook
+
+Sitemap: https://lab.khsqowp1.my/sitemap.xml

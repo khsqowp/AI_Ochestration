@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/write-build-info.mjs && tsc -b && vite build",
+    "build": "node scripts/write-build-info.mjs && tsc -b && vite build && node scripts/generate-omakase-pages.mjs",
     "test": "vitest run"
   },
   "dependencies": {
@@ -37,6 +37,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.186.0",
     "@types/topojson-client": "^3.1.5",
+    "marked": "^18.1.1",
     "vitest": "^5.0.1"
   }
 }
