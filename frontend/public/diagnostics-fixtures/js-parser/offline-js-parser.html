@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JavaScript 오프라인 분석기</title>
 <style>
-:root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2{font-size:16px;margin:0 0 10px}.muted{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}button,.file{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover,.file:hover{background:#f4f1ff}textarea{display:block;width:100%;min-height:260px;resize:vertical;border:1px solid #d8d4e3;border-radius:9px;padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.result{min-width:0}.result pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;background:#f7f6fa;border:1px solid #e8e6ed;border-radius:8px;padding:12px;min-height:84px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace}.empty{color:#777;font-size:13px}@media(max-width:600px){body{padding:12px}.card{padding:14px}}
+:root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2{font-size:16px;margin:0 0 10px}.muted{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}button,.file{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover,.file:hover{background:#f4f1ff}textarea{display:block;width:100%;min-height:260px;resize:vertical;border:1px solid #d8d4e3;border-radius:9px;padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.result{min-width:0}.result pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;background:#faf9fc;color:#514a61;border:1px solid #e8e6ed;border-radius:8px;padding:12px;min-height:84px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace}.js-syntax-keyword{color:#5b4fc4}.js-syntax-string{color:#1f6d45}.js-syntax-number{color:#9a6418}.js-syntax-comment{color:#8a8591;font-style:italic}.js-syntax-function{color:#2b6cb0}.js-parser-hit{color:#d32f2f;background:rgba(211,47,47,.08);border-radius:3px;padding:0 1px;font-weight:600}.empty{color:#777;font-size:13px}@media(max-width:600px){body{padding:12px}.card{padding:14px}}
 </style>
 </head>
 <body><main class="wrap">
@@ -17,12 +17,143 @@
 <article class="card result"><h2>API 엔드포인트 후보</h2><pre id="endpoints" class="empty">발견된 항목 없음</pre><button data-copy="endpoints">결과 복사</button></article>
 <article class="card result"><h2>키·시크릿·토큰 후보</h2><pre id="secrets" class="empty">발견된 항목 없음</pre><button data-copy="secrets">결과 복사</button></article>
 <article class="card result"><h2>주석</h2><pre id="comments" class="empty">발견된 항목 없음</pre><button data-copy="comments">결과 복사</button></article>
+<article class="card result"><h2>암호/키 키워드 후보</h2><pre id="crypto" class="empty">발견된 항목 없음</pre><button data-copy="crypto">결과 복사</button></article>
+<article class="card result"><h2>전화번호/연락처 후보</h2><pre id="phone" class="empty">발견된 항목 없음</pre><button data-copy="phone">결과 복사</button></article>
+<article class="card result"><h2>버전 문자열 후보</h2><pre id="version" class="empty">발견된 항목 없음</pre><button data-copy="version">결과 복사</button></article>
+<article class="card result"><h2>Base64 추정값 후보</h2><pre id="base64" class="empty">발견된 항목 없음</pre><button data-copy="base64">결과 복사</button></article>
+<article class="card result"><h2>이메일 후보</h2><pre id="email" class="empty">발견된 항목 없음</pre><button data-copy="email">결과 복사</button></article>
 </section><p id="status" class="muted" role="status" aria-live="polite"></p>
 </main><script>
 const $=id=>document.getElementById(id), source=$('source');
 function beautify(code){if(!code.trim())return '';let result='',quote=null,escaped=false;for(let i=0;i<code.length;i++){const c=code[i];if(escaped){result+=c;escaped=false;continue}if(c==='\\'){result+=c;escaped=true;continue}if(quote){if(c===quote)quote=null;result+=c}else if(c==='"'||c==="'"||c==='`'){quote=c;result+=c}else if(c==='{'||c==='}'||c===';'){result+=c+'\n'}else result+=c}let indent=0;return result.split('\n').map(x=>x.trim()).filter(Boolean).map(line=>{if(line.startsWith('}'))indent=Math.max(0,indent-1);const formatted='  '.repeat(indent)+line;if(line.endsWith('{'))indent++;return formatted}).join('\n')}
 function unique(text,re){return [...new Set(text.match(re)||[])].map(x=>x.trim())}
 function show(id,items,empty='발견된 항목 없음'){const el=$(id);el.textContent=items.length?items.join('\n\n'):empty;el.classList.toggle('empty',!items.length)}
-function render(){const text=source.value;show('beautified',text.trim()?[beautify(text)]:[],'입력 대기 중');show('endpoints',unique(text,/(?:"|\')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|\')|https?:\/\/[^\s"'<>]+/g));show('secrets',unique(text,/(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi));show('comments',unique(text,/\/\/[^\n]*|\/\*[\s\S]*?\*\//g))}
+const ENDPOINT_RE = /(?:"|')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|')|https?:\/\/[^\s"'<>]+/g;
+const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi;
+const COMMENT_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
+const CRYPTO_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|\b(?:RSA|AES|DES|HMAC|crypt|decrypt|encrypt|private[_-]?key)\b|\bprivateKey\b/gi;
+const PHONE_RE = /(?<![\d-])\b(?:\d{3}-\d{4}-\d{4}|\d{2}-\d{3,4}-\d{4})\b(?![\d-])/g;
+const VERSION_RE = /(?<![\w.])\d+\.\d+\.\d+(?:-(?:beta|rc)(?:\.\d+)?)?\b(?!\.\d)/gi;
+const BASE64_RE = /[A-Za-z0-9+/]{24,}={0,2}/g;
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[A-Za-z]{2,}/g;
+const HIGHLIGHT_RE = new RegExp([
+  ['endpoint', ENDPOINT_RE], ['secret', SECRET_RE], ['comment', COMMENT_RE],
+  ['crypto', CRYPTO_RE], ['phone', PHONE_RE], ['version', VERSION_RE],
+  ['base64', BASE64_RE], ['email', EMAIL_RE],
+].map(([category, regex]) => `(?<${category}>${regex.source})`).join('|'), 'gi');
+const JS_KEYWORDS=new Set(['async','await','break','case','catch','class','const','continue','debugger','default','delete','do','else','export','extends','false','finally','for','from','function','if','import','in','instanceof','let','new','null','of','return','static','super','switch','this','throw','true','try','typeof','undefined','var','void','while','yield']);
+function tokenizeSyntax(code){
+  const spans=[];
+  const isDigit=c=>c>='0'&&c<='9';
+  const isIdentStart=c=>!!c&&(c>='a'&&c<='z'||c>='A'&&c<='Z'||c==='_'||c==='$');
+  const isIdentPart=c=>isIdentStart(c)||isDigit(c);
+  const add=(kind,start,end)=>{
+    if(kind==='text'&&spans[spans.length-1]?.kind==='text')spans[spans.length-1].end=end;
+    else spans.push({kind,start,end});
+  };
+  for(let i=0;i<code.length;){
+    const start=i,char=code[i];
+    if(char==='/'&&code[i+1]==='/'){
+      i+=2;while(i<code.length&&code[i]!=='\n')i++;
+      add('comment',start,i);
+    }else if(char==='/'&&code[i+1]==='*'){
+      i+=2;while(i<code.length&&!(code[i]==='*'&&code[i+1]==='/'))i++;
+      if(i<code.length)i+=2;
+      add('comment',start,i);
+    }else if(char==="'"||char==='"'||char==='`'){
+      i++;
+      while(i<code.length){
+        if(code[i]==='\\'){i+=Math.min(2,code.length-i);continue}
+        if(code[i++]===char)break;
+      }
+      add('string',start,i);
+    }else if(isDigit(char)&&(i===0||!isIdentPart(code[i-1]))){
+      let probe=i,separators=0;
+      while(isDigit(code[probe])||code[probe]==='.'||code[probe]==='-'){
+        if(code[probe]==='.'||code[probe]==='-')separators++;
+        probe++;
+      }
+      if(separators>=2||(separators===0&&probe-start>=24)){i=probe;add('text',start,i);continue}
+      i++;while(i<code.length&&isDigit(code[i]))i++;
+      if(code[i]==='.'&&isDigit(code[i+1])){i++;while(i<code.length&&isDigit(code[i]))i++}
+      if((code[i]==='e'||code[i]==='E')&&(isDigit(code[i+1])||((code[i+1]==='+'||code[i+1]==='-')&&isDigit(code[i+2])))){
+        i++;if(code[i]==='+'||code[i]==='-')i++;
+        while(i<code.length&&isDigit(code[i]))i++;
+      }
+      if(isIdentStart(code[i])){while(i<code.length&&isIdentPart(code[i]))i++;add('text',start,i)}
+      else add('number',start,i);
+    }else if(isIdentStart(char)){
+      i++;while(i<code.length&&isIdentPart(code[i]))i++;
+      const word=code.slice(start,i);
+      let next=i;while(code[next]===' '||code[next]==='\t')next++;
+      add(JS_KEYWORDS.has(word)?'keyword':code[next]==='('? 'function':'text',start,i);
+    }else{i++;add('text',start,i)}
+  }
+  return spans.map(({kind,start,end})=>({kind,text:code.slice(start,end)}));
+}
+function securityOverlays(tokens){
+  const overlays=tokens.map(()=>[]);
+  for(let first=0;first<tokens.length;){
+    if(tokens[first].kind!=='text'&&tokens[first].kind!=='string'){first++;continue}
+    let last=first;
+    while(last<tokens.length&&(tokens[last].kind==='text'||tokens[last].kind==='string'))last++;
+    const run=tokens.slice(first,last).map(token=>token.text).join('');
+    let tokenIndex=first,tokenStart=0;
+    for(const match of run.matchAll(HIGHLIGHT_RE)){
+      const category=Object.keys(match.groups||{}).find(key=>match.groups[key]!==undefined)||'';
+      const matchEnd=match.index+match[0].length;
+      while(tokenIndex<last&&tokenStart+tokens[tokenIndex].text.length<=match.index){
+        tokenStart+=tokens[tokenIndex++].text.length;
+      }
+      let partIndex=tokenIndex,partStart=tokenStart;
+      while(partIndex<last&&partStart<matchEnd){
+        const partEnd=partStart+tokens[partIndex].text.length;
+        overlays[partIndex].push({start:Math.max(match.index,partStart)-partStart,end:Math.min(matchEnd,partEnd)-partStart,category});
+        partStart=partEnd;
+        partIndex++;
+      }
+    }
+    first=last;
+  }
+  return overlays;
+}
+function appendSecurity(parent,text,hits){
+  let cursor=0;
+  for(const hit of hits){
+    if(hit.start>cursor)parent.appendChild(document.createTextNode(text.slice(cursor,hit.start)));
+    const span=document.createElement('span');
+    span.className='js-parser-hit js-parser-hit--'+hit.category;
+    span.textContent=text.slice(hit.start,hit.end);
+    parent.appendChild(span);
+    cursor=hit.end;
+  }
+  if(cursor<text.length)parent.appendChild(document.createTextNode(text.slice(cursor)));
+}
+function showBeautified(text){
+  const el=$('beautified');
+  el.textContent='';
+  el.classList.toggle('empty',!text);
+  if(!text){el.textContent='입력 대기 중';return}
+  const tokens=tokenizeSyntax(text),overlays=securityOverlays(tokens);
+  tokens.forEach((token,index)=>{
+    const parent=token.kind==='text'?el:document.createElement('span');
+    if(token.kind!=='text')parent.className='js-syntax-'+token.kind;
+    if(token.kind==='text'||token.kind==='string')appendSecurity(parent,token.text,overlays[index]);
+    else parent.appendChild(document.createTextNode(token.text));
+    if(parent!==el)el.appendChild(parent);
+  });
+}
+function render(){
+  const text=source.value;
+  showBeautified(beautify(text));
+  show('endpoints',unique(text,ENDPOINT_RE));
+  show('secrets',unique(text,SECRET_RE));
+  show('comments',unique(text,COMMENT_RE));
+  show('crypto',unique(text,CRYPTO_RE));
+  show('phone',unique(text,PHONE_RE));
+  show('version',unique(text,VERSION_RE));
+  show('base64',unique(text,BASE64_RE));
+  show('email',unique(text,EMAIL_RE));
+}
 source.addEventListener('input',render);$('file').addEventListener('change',async e=>{const f=e.target.files?.[0];if(f){source.value=await f.text();render();$('status').textContent=f.name+' 파일을 브라우저에서 읽었습니다.'}});$('clear').addEventListener('click',()=>{source.value='';$('file').value='';render();$('status').textContent='입력을 비웠습니다.'});document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{const text=$(button.dataset.copy).textContent||'';try{await navigator.clipboard.writeText(text);$('status').textContent='복사했습니다.'}catch{$('status').textContent='클립보드 권한이 없어 복사하지 못했습니다. 결과를 직접 선택해 복사하세요.'}}));render();
 </script></body></html>
