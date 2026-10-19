@@ -2,11 +2,12 @@ import { type ComponentType, type CSSProperties } from 'react'
 import {
   AppWindow, Binary, Bomb, Bug, CloudCog, Compass, Crosshair, Database,
   FileCode2, FlaskConical, FolderSearch, GitBranch, GitCompare, History,
-  KeyRound, Layers, Network, Radar, Route, ServerCog, SquareTerminal,
+  KeyRound, Layers, Network, Radar, ServerCog, SquareTerminal,
   Terminal,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
+import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
 
 /* 진단 탭의 타일은 항목별 모달로 연결되며, 카테고리별 색상은 섹션에서 상속한다. */
 const CATEGORY_META: Record<string, { icon: ComponentType<{ size?: number }>; color: string }> = {
@@ -42,9 +43,9 @@ export function DiagnosticsPage() {
           <Link className="diag-tile" to="/dashboard/diag/scanner-tools">
             <FolderSearch size={20}/><span>정찰/취약점 스캐너</span>
           </Link>
-          <Link className="diag-tile" to="/dashboard/diag/route-tree">
-            <Route size={20}/><span>경로 트리 분석기</span>
-          </Link>
+          {ROUTE_TREE_TOOLS.map(({ id, name, icon: Icon }) => <Link className="diag-tile" key={id} to={`/dashboard/diag/${id}`}>
+            <Icon size={20}/><span>{name}</span>
+          </Link>)}
           <Link className="diag-tile" to="/dashboard/diag/js-parser">
             <FileCode2 size={20}/><span>JS Beautifier & 추출기</span>
           </Link>

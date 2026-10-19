@@ -1017,6 +1017,7 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .diag-scanner-body { padding:14px 16px 16px; border-top:1px solid #eceaf0; }
 .diag-scanner-body .diag-bullet-list { margin-bottom:12px; }
 .diag-route-tree-frame { width:100%; height:min(70vh, 720px); margin-top:12px; border:1px solid #eceaf0; border-radius:10px; background:#fff; }
+.diag-route-tool-title { display:flex; align-items:center; gap:7px; }
 
 /* 경로 트리 분석기 전용: file-explorer(28px) + explorer-preview(18px/22px) + diag-scanner-body(14px/16px)
    패딩이 3겹으로 겹쳐서 iframe 가로폭이 필요 이상으로 좁아짐(안 그래도 내부 콘텐츠 자체가 넓은 도구라
