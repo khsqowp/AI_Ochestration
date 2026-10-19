@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공통 경로 체크리스트 · Intruder 페이로드 생성기</title>
+<style>
+:root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2{font-size:16px;margin:0 0 10px}.muted,.note{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}button{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover{background:#f4f1ff}button:disabled{opacity:.55;cursor:not-allowed}.primary{background:#8068d9;color:#fff;border-color:#8068d9}.primary:hover{background:#7058c8}textarea{font:inherit;border:1px solid #d8d4e3;border-radius:9px;padding:9px 11px;width:100%;display:block;min-height:160px;resize:vertical;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}.cat-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}.cat-head h2{margin:0}.cat-head .controls{margin:0}.path-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 14px}.path-row{display:flex;align-items:center;gap:8px;padding:4px 2px;cursor:pointer;border-radius:6px}.path-row:hover{background:#faf9fc}.path-row input{width:auto;flex:none}.path-text{font:13px ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere;color:#403d55}.top-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}#count{font-weight:600;color:#5b4fc4}#status{min-height:1.4em;color:#696779;font-size:13px}@media(max-width:600px){body{padding:12px}.card{padding:14px}.path-list{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main class="wrap">
+<header><h1>공통 경로 체크리스트 · Intruder 페이로드 생성기</h1><p class="muted">독립 실행형 파일 · 외부 통신·라이브러리 없음 · 모든 선택과 목록 생성은 현재 브라우저에서만 처리됩니다.</p></header>
+<p class="warning">승인받은 대상에서만 사용하세요. 이 목록은 실제 스캔 결과가 아니라 웹 서버·프레임워크에서 흔히 노출되는 일반적인 경로 모음일 뿐이며, 대상 서버에 해당 경로가 실제로 존재하거나 취약하다는 것을 보장하지 않습니다.</p>
+<section class="card">
+<div class="top-bar">
+<div class="controls"><button id="deselect-all" type="button">전체 해제</button><span id="count">0개 선택됨</span></div>
+<div class="controls"><button id="copy-btn" type="button" class="primary">Intruder용으로 복사</button></div>
+</div>
+<p id="status" class="note" role="status"></p>
+</section>
+<div id="categories"></div>
+<section class="card">
+<h2>선택한 경로 미리보기</h2>
+<textarea id="preview" readonly spellcheck="false" placeholder="체크박스를 선택하면 여기에 경로 목록이 표시됩니다."></textarea>
+<p class="note">체크된 순서는 위 카테고리 나열 순서를 그대로 따릅니다. Burp Intruder의 Simple list 페이로드나 ffuf/wfuzz 등의 워드리스트로 그대로 붙여넣어 사용할 수 있습니다.</p>
+</section>
+</main>
+<script>
+'use strict';
+const CATEGORIES = [
+  { title: 'Git 경로', paths: ['.git/', '.git/HEAD', '.git/config', '.git/index', '.git/logs/HEAD', '.git/COMMIT_EDITMSG', '.gitignore', '.gitattributes'] },
+  { title: '앱/일반 경로', paths: ['app/', 'application/', 'api/', 'admin/', 'backend/', 'static/', 'public/', 'uploads/', 'config/', 'include/', 'src/', 'dist/', 'build/', 'test/', 'tests/', 'docs/'] },
+  { title: 'Spring Boot', paths: ['actuator', 'actuator/health', 'actuator/info', 'actuator/env', 'actuator/beans', 'actuator/mappings', 'actuator/configprops', 'actuator/heapdump', 'actuator/threaddump', 'actuator/loggers', 'swagger-ui.html', 'v2/api-docs', 'v3/api-docs'] },
+  { title: 'Nginx', paths: ['nginx_status', 'status', 'nginx.conf', '.nginx/'] },
+  { title: 'Apache', paths: ['server-status', 'server-info', '.htaccess', '.htpasswd', 'icons/', 'manual/', 'cgi-bin/'] },
+  { title: 'Tomcat', paths: ['manager/html', 'manager/status', 'manager/text/list', 'host-manager/html', 'examples/', 'docs/', 'WEB-INF/web.xml', 'META-INF/context.xml'] },
+  { title: 'WordPress', paths: ['wp-admin/', 'wp-login.php', 'wp-content/', 'wp-content/uploads/', 'wp-content/plugins/', 'wp-content/themes/', 'wp-json/', 'wp-json/wp/v2/users', 'xmlrpc.php', 'wp-config.php', 'wp-config.php.bak', 'wp-includes/', 'readme.html', 'license.txt'] },
+  { title: '민감정보/설정 파일', paths: ['.env', '.env.local', '.env.production', '.env.backup', 'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile', '.dockerignore', 'config.php', 'web.config', 'settings.py', 'application.properties', 'application.yml', 'id_rsa', 'id_rsa.pub', '.aws/credentials', '.ssh/', '.npmrc', '.DS_Store', 'backup.zip', 'backup.sql', 'backup.tar.gz', 'dump.sql', 'database.yml', 'secrets.json', 'credentials.json'] },
+  { title: '.well-known / 메타', paths: ['.well-known/security.txt', '.well-known/change-password', '.well-known/openid-configuration', '.well-known/assetlinks.json', '.well-known/apple-app-site-association', 'robots.txt', 'sitemap.xml', 'crossdomain.xml', 'humans.txt'] },
+];
+
+const $ = id => document.getElementById(id);
+function textElement(tag, text, className) { const el = document.createElement(tag); el.textContent = text; if (className) el.className = className; return el; }
+function setStatus(message) { $('status').textContent = message; }
+
+function updatePreview() {
+  const checked = [...document.querySelectorAll('.path-checkbox')].filter(cb => cb.checked).map(cb => cb.dataset.path);
+  $('preview').value = checked.join('\n');
+  $('count').textContent = checked.length + '개 선택됨';
+}
+
+function setCategoryChecked(catIndex, checked) {
+  document.querySelectorAll('.path-list[data-cat="' + catIndex + '"] .path-checkbox').forEach(cb => { cb.checked = checked; });
+  updatePreview();
+}
+
+function buildUI() {
+  const container = $('categories');
+  CATEGORIES.forEach((category, catIndex) => {
+    const section = document.createElement('section');
+    section.className = 'card';
+    const head = document.createElement('div');
+    head.className = 'cat-head';
+    head.appendChild(textElement('h2', category.title));
+    const controls = document.createElement('div');
+    controls.className = 'controls';
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.type = 'button';
+    selectAllBtn.textContent = '전체선택';
+    selectAllBtn.addEventListener('click', () => setCategoryChecked(catIndex, true));
+    const deselectAllBtn = document.createElement('button');
+    deselectAllBtn.type = 'button';
+    deselectAllBtn.textContent = '전체해제';
+    deselectAllBtn.addEventListener('click', () => setCategoryChecked(catIndex, false));
+    controls.append(selectAllBtn, deselectAllBtn);
+    head.appendChild(controls);
+    section.appendChild(head);
+
+    const list = document.createElement('div');
+    list.className = 'path-list';
+    list.dataset.cat = String(catIndex);
+    category.paths.forEach((path, pathIndex) => {
+      const id = 'cb-' + catIndex + '-' + pathIndex;
+      const row = document.createElement('label');
+      row.className = 'path-row';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.id = id;
+      input.className = 'path-checkbox';
+      input.dataset.path = path;
+      input.addEventListener('change', updatePreview);
+      const span = textElement('span', path, 'path-text');
+      row.append(input, span);
+      list.appendChild(row);
+    });
+    section.appendChild(list);
+    container.appendChild(section);
+  });
+}
+
+async function copyText(value) {
+  try {
+    if (!navigator.clipboard) throw new Error('clipboard unavailable');
+    await navigator.clipboard.writeText(value);
+    setStatus('복사했습니다.');
+    return;
+  } catch {
+    // navigator.clipboard가 없거나 권한이 거부된 환경(오래된 브라우저, file:// 등)을 위한 폴백.
+  }
+  try {
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    setStatus(ok ? '복사했습니다. (레거시 방식)' : '클립보드 복사에 실패했습니다. 미리보기 내용을 직접 선택해 복사하세요.');
+  } catch {
+    setStatus('클립보드 복사에 실패했습니다. 미리보기 내용을 직접 선택해 복사하세요.');
+  }
+}
+
+function init() {
+  buildUI();
+  updatePreview();
+  $('deselect-all').addEventListener('click', () => {
+    document.querySelectorAll('.path-checkbox').forEach(cb => { cb.checked = false; });
+    updatePreview();
+    setStatus('모든 선택을 해제했습니다.');
+  });
+  $('copy-btn').addEventListener('click', () => {
+    const value = $('preview').value;
+    if (!value) { setStatus('선택한 경로가 없습니다.'); return; }
+    void copyText(value);
+  });
+}
+init();
+</script>
+</body></html>

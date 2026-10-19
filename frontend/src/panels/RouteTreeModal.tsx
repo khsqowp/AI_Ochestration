@@ -20,6 +20,13 @@ const ROUTE_TREE_TOOLS: RouteTreeTool[] = [
     file: 'js-route-tree.html',
     note: '서버 전송 없음, 브라우저 안에서만 분석',
   },
+  {
+    id: 'common-path-checklist',
+    name: '공통 경로 체크리스트 · Intruder 페이로드',
+    tagline: 'git/app/Spring Boot/Nginx/Apache/Tomcat/WordPress/민감정보/.well-known 등 흔한 경로를 체크해 Intruder 페이로드 목록으로 복사',
+    file: 'common-path-checklist.html',
+    note: '서버 전송 없음, 브라우저 안에서만 생성',
+  },
 ]
 
 export function RouteTreeModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
