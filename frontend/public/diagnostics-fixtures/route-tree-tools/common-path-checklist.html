@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>공통 경로 체크리스트 · Intruder 페이로드 생성기</title>
 <style>
-:root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2{font-size:16px;margin:0 0 10px}.muted,.note{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}button{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover{background:#f4f1ff}button:disabled{opacity:.55;cursor:not-allowed}.primary{background:#8068d9;color:#fff;border-color:#8068d9}.primary:hover{background:#7058c8}textarea{font:inherit;border:1px solid #d8d4e3;border-radius:9px;padding:9px 11px;width:100%;display:block;min-height:160px;resize:vertical;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}.cat-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}.cat-head h2{margin:0}.cat-head .controls{margin:0}.path-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 14px}.path-row{display:flex;align-items:center;gap:8px;padding:4px 2px;cursor:pointer;border-radius:6px}.path-row:hover{background:#faf9fc}.path-row input{width:auto;flex:none}.path-text{font:13px ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere;color:#403d55}.top-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}#count{font-weight:600;color:#5b4fc4}#status{min-height:1.4em;color:#696779;font-size:13px}@media(max-width:600px){body{padding:12px}.card{padding:14px}.path-list{grid-template-columns:1fr}}
+:root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2,.category-title{font-size:16px;font-weight:600;margin:0}.muted,.note{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}button{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover{background:#f4f1ff}.primary{background:#8068d9;color:#fff;border-color:#8068d9}.primary:hover{background:#7058c8}textarea{font:13px/1.5 ui-monospace,SFMono-Regular,monospace;border:1px solid #d8d4e3;border-radius:9px;padding:9px 11px;width:100%;display:block;min-height:160px;resize:vertical}.top-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}.category-label{display:flex;align-items:center;gap:10px;cursor:pointer}.category-label input{width:18px;height:18px;margin:0;accent-color:#8068d9;flex:none}.badge{border-radius:999px;background:#f4f1ff;color:#5b4fc4;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}details{margin:12px 0 0 28px}summary{cursor:pointer;color:#5b4fc4;font-size:13px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,SFMono-Regular,monospace;color:#403d55;background:#faf9fc;border:1px solid #ece9f3;border-radius:8px;padding:12px;margin:10px 0 0}#count{font-weight:600;color:#5b4fc4}#status{min-height:1.4em;color:#696779;font-size:13px}@media(max-width:600px){body{padding:12px}.card{padding:14px}.top-bar{align-items:flex-start}details{margin-left:0}}
 </style>
 </head>
 <body><main class="wrap">
@@ -13,87 +13,85 @@
 <p class="warning">승인받은 대상에서만 사용하세요. 이 목록은 실제 스캔 결과가 아니라 웹 서버·프레임워크에서 흔히 노출되는 일반적인 경로 모음일 뿐이며, 대상 서버에 해당 경로가 실제로 존재하거나 취약하다는 것을 보장하지 않습니다.</p>
 <section class="card">
 <div class="top-bar">
-<div class="controls"><button id="deselect-all" type="button">전체 해제</button><span id="count">0개 선택됨</span></div>
+<div class="controls"><button id="deselect-all" type="button">전체 해제</button><span id="count">0개 카테고리 · 0개 경로 선택됨</span></div>
 <div class="controls"><button id="copy-btn" type="button" class="primary">Intruder용으로 복사</button></div>
 </div>
-<p id="status" class="note" role="status"></p>
+<p id="status" class="note" role="status" aria-live="polite"></p>
 </section>
 <div id="categories"></div>
 <section class="card">
 <h2>선택한 경로 미리보기</h2>
-<textarea id="preview" readonly spellcheck="false" placeholder="체크박스를 선택하면 여기에 경로 목록이 표시됩니다."></textarea>
-<p class="note">체크된 순서는 위 카테고리 나열 순서를 그대로 따릅니다. Burp Intruder의 Simple list 페이로드나 ffuf/wfuzz 등의 워드리스트로 그대로 붙여넣어 사용할 수 있습니다.</p>
+<textarea id="preview" readonly spellcheck="false" aria-label="선택한 경로 미리보기" placeholder="카테고리를 선택하면 여기에 경로 목록이 표시됩니다."></textarea>
+<p class="note">카테고리와 경로의 나열 순서대로 표시됩니다. Burp Intruder의 Simple list 페이로드나 ffuf/wfuzz 등의 워드리스트로 붙여넣을 수 있습니다.</p>
 </section>
 </main>
 <script>
 'use strict';
 const CATEGORIES = [
-  { title: 'Git 경로', paths: ['.git/', '.git/HEAD', '.git/config', '.git/index', '.git/logs/HEAD', '.git/COMMIT_EDITMSG', '.gitignore', '.gitattributes'] },
+  { title: 'Git 경로', paths: ['.git/', '.git/HEAD', '.git/config', '.git/index', '.git/logs/HEAD', '.git/COMMIT_EDITMSG', '.gitignore', '.gitattributes', '.git/packed-refs', '.git/info/refs', '.git/info/exclude', '.git/objects/info/packs', '.git/objects/info/alternates', '.git/objects/info/http-alternates', '.git/config.worktree', '.git/description', '.git/refs/heads/main', '.git/refs/heads/master', '.gitmodules'] },
+  { title: '기타 VCS 경로', paths: ['.hg/hgrc', '.hg/hgrc-not-shared', '.hg/requires', '.hg/dirstate', '.svn/entries', '.svn/wc.db', '.bzr/branch/branch.conf'] },
   { title: '앱/일반 경로', paths: ['app/', 'application/', 'api/', 'admin/', 'backend/', 'static/', 'public/', 'uploads/', 'config/', 'include/', 'src/', 'dist/', 'build/', 'test/', 'tests/', 'docs/'] },
-  { title: 'Spring Boot', paths: ['actuator', 'actuator/health', 'actuator/info', 'actuator/env', 'actuator/beans', 'actuator/mappings', 'actuator/configprops', 'actuator/heapdump', 'actuator/threaddump', 'actuator/loggers', 'swagger-ui.html', 'v2/api-docs', 'v3/api-docs'] },
+  { title: 'CI/CD 설정 파일', paths: ['.circleci/config.yml', '.gitlab-ci.yml', '.travis.yml', 'bitbucket-pipelines.yml', 'azure-pipelines.yml', '.github/CODEOWNERS', '.gitlab/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS', '.github/dependabot.yml', '.github/dependabot.yaml', '.github/SECURITY.md', '.github/ISSUE_TEMPLATE/config.yml', '.github/pull_request_template.md', 'Jenkinsfile'] },
+  { title: '패키지 매니저 / 의존성 파일', paths: ['package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.json', 'composer.lock', 'auth.json', 'Gemfile', 'Gemfile.lock', 'requirements.txt', 'Pipfile', 'Pipfile.lock', 'pyproject.toml', 'poetry.lock', 'go.mod', 'go.sum', 'Cargo.toml', 'Cargo.lock', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'gradle.properties', 'nuget.config'] },
+  { title: '인프라 / IaC 설정 파일', paths: ['compose.yaml', 'compose.yml', '.terraform.lock.hcl', 'terraform.tfstate', 'terraform.tfstate.backup', 'terraform.tfvars', 'main.tf', 'variables.tf', 'ansible.cfg', 'Vagrantfile', 'Makefile', 'Chart.yaml', 'values.yaml', 'kustomization.yaml', 'skaffold.yaml'] },
+  { title: '프레임워크 설정 파일', paths: ['nuxt.config.js', '.nuxt/router.js', 'phpunit.xml', 'phpunit.xml.dist'] },
+  { title: 'Django / Laravel / Rails 프레임워크 파일', paths: ['manage.py', 'db.sqlite3', 'artisan', 'vendor/composer/installed.json', 'storage/logs/laravel.log', 'config/database.php', 'config/database.yml', 'config/credentials.yml.enc', 'config/master.key'] },
+  { title: 'Spring Boot', paths: ['actuator', 'actuator/health', 'actuator/info', 'actuator/env', 'actuator/beans', 'actuator/mappings', 'actuator/configprops', 'actuator/heapdump', 'actuator/threaddump', 'actuator/loggers', 'actuator/auditevents', 'actuator/caches', 'actuator/conditions', 'actuator/flyway', 'actuator/health/liveness', 'actuator/health/readiness', 'actuator/httpexchanges', 'actuator/httptrace', 'actuator/integrationgraph', 'actuator/liquibase', 'actuator/metrics', 'actuator/quartz', 'actuator/scheduledtasks', 'actuator/sessions', 'actuator/startup', 'actuator/logfile', 'actuator/prometheus', 'actuator/sbom'] },
   { title: 'Nginx', paths: ['nginx_status', 'status', 'nginx.conf', '.nginx/'] },
-  { title: 'Apache', paths: ['server-status', 'server-info', '.htaccess', '.htpasswd', 'icons/', 'manual/', 'cgi-bin/'] },
-  { title: 'Tomcat', paths: ['manager/html', 'manager/status', 'manager/text/list', 'host-manager/html', 'examples/', 'docs/', 'WEB-INF/web.xml', 'META-INF/context.xml'] },
-  { title: 'WordPress', paths: ['wp-admin/', 'wp-login.php', 'wp-content/', 'wp-content/uploads/', 'wp-content/plugins/', 'wp-content/themes/', 'wp-json/', 'wp-json/wp/v2/users', 'xmlrpc.php', 'wp-config.php', 'wp-config.php.bak', 'wp-includes/', 'readme.html', 'license.txt'] },
-  { title: '민감정보/설정 파일', paths: ['.env', '.env.local', '.env.production', '.env.backup', 'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile', '.dockerignore', 'config.php', 'web.config', 'settings.py', 'application.properties', 'application.yml', 'id_rsa', 'id_rsa.pub', '.aws/credentials', '.ssh/', '.npmrc', '.DS_Store', 'backup.zip', 'backup.sql', 'backup.tar.gz', 'dump.sql', 'database.yml', 'secrets.json', 'credentials.json'] },
-  { title: '.well-known / 메타', paths: ['.well-known/security.txt', '.well-known/change-password', '.well-known/openid-configuration', '.well-known/assetlinks.json', '.well-known/apple-app-site-association', 'robots.txt', 'sitemap.xml', 'crossdomain.xml', 'humans.txt'] },
+  { title: 'Apache', paths: ['server-status', 'server-info', '.htaccess', '.htpasswd', 'icons/', 'manual/', 'cgi-bin/', '.htdigest', 'httpd.conf', 'apache2.conf', 'conf/httpd.conf', 'server-status?auto'] },
+  { title: 'Tomcat', paths: ['manager/html', 'manager/status', 'manager/text/list', 'host-manager/html', 'examples/', 'docs/', 'WEB-INF/web.xml', 'META-INF/context.xml', 'manager/status/all', 'manager/text/serverinfo', 'manager/text/resources', 'manager/text/sslConnectorCiphers', 'manager/text/sslConnectorCerts', 'manager/text/sslConnectorTrustedCerts', 'manager/text/vminfo', 'manager/jmxproxy', 'host-manager/text/list', 'conf/tomcat-users.xml', 'conf/server.xml', 'conf/context.xml', 'conf/web.xml'] },
+  { title: 'WordPress', paths: ['wp-admin/', 'wp-login.php', 'wp-content/', 'wp-content/uploads/', 'wp-content/plugins/', 'wp-content/themes/', 'wp-json/', 'wp-json/wp/v2/users', 'xmlrpc.php', 'wp-config.php', 'wp-config.php.bak', 'wp-includes/', 'readme.html', 'license.txt', 'wp-admin/admin-ajax.php', 'wp-json/wp/v2/posts', 'wp-json/wp/v2/pages', 'wp-json/wp/v2/comments', 'wp-json/wp/v2/media', 'wp-json/wp/v2/types', 'wp-json/wp/v2/statuses', 'wp-json/wp/v2/settings', 'wp-json/wp/v2/themes', 'wp-json/wp/v2/plugins', 'wp-content/debug.log', 'wp-config-sample.php'] },
+  { title: '다른 CMS (Drupal / Joomla / Magento)', paths: ['user/login', 'user/register', 'jsonapi', 'admin/config/services/jsonapi', 'admin/reports/status', 'core/CHANGELOG.txt', 'core/INSTALL.txt', 'sites/default/settings.php', 'sites/default/default.settings.php', 'sites/default/files/', 'administrator/index.php', 'configuration.php', 'api/index.php/v1', 'app/etc/config.php', 'app/etc/env.php', '.magento.app.yaml', 'pub/health_check.php'] },
+  { title: 'API 문서 / 스펙', paths: ['swagger-ui.html', 'v2/api-docs', 'v3/api-docs', 'swagger/', 'swagger/index.html', 'swagger/v1/swagger.json', 'swagger.json', 'swagger.yaml', 'openapi.json', 'openapi.yaml', 'openapi/v1.json', 'v3/api-docs/swagger-config', 'api-docs', 'api/docs', 'docs/api', 'redoc', 'scalar', 'graphql', 'api/graphql', 'graphiql', 'playground', 'swagger-ui', 'api/v1/openapi.yaml'] },
+  { title: '프레임워크 디버그 / 관리 콘솔', paths: ['telescope', 'horizon', 'pulse', '_profiler/', '_wdt/', 'rails/info/routes', 'rails/info/properties', 'up', 'cable', '_next/static/', '_framework/blazor.web.js', '_framework/blazor.server.js', '_framework/blazor.webassembly.js', '_framework/blazor.boot.json', 'elmah.axd', 'trace.axd'] },
+  { title: '헬스체크 / 상태 엔드포인트', paths: ['health_check.php', 'status.php', 'server/info', 'server/health', 'rest/api/2/serverInfo', 'rest/api/2/configuration', '-/health', '-/readiness', '-/liveness', '-/metrics', 'health_check', 'health_check/database', 'health_check/cache', 'health_check/migrations', '-/healthy', '-/ready', 'metrics', 'api/v1/status/buildinfo', 'api/v1/status/runtimeinfo', 'api/v1/status/config', 'api/v1/status/flags', 'api/v1/alertmanagers', 'livez', 'readyz', 'healthz', 'statusz', 'version', 'api/health', 'api/login/ping', 'whoAmI/', 'instance-identity/', 'users/sign_in'] },
+  { title: '서버 / 미들웨어 관리 콘솔', paths: ['api/json', 'api/overview', 'api/cluster-name', 'api/nodes', 'v1/sys/health', 'v1/sys/seal-status', 'v1/status/leader', 'v1/status/peers', '_cluster/health', '_cat/health', '_cat/indices', 'connectors', 'bin/querybuilder.json', 'libs/cq/search/content/querydebug.html', 'system/console/slinglog', 'content/settings/routes.yaml', 'api/v2/ping/', 'api/v2/config/', 'api/v2/settings/', 'v2/', 'jmx-console/', 'console/login/LoginForm.jsp', 'management'] },
+  { title: '민감정보 / 설정 파일', paths: ['.env', '.env.local', '.env.production', '.env.backup', 'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile', '.dockerignore', 'config.php', 'web.config', 'settings.py', 'application.properties', 'application.yml', 'id_rsa', 'id_rsa.pub', '.aws/credentials', '.ssh/', '.npmrc', '.DS_Store', 'backup.zip', 'backup.sql', 'backup.tar.gz', 'dump.sql', 'database.yml', 'secrets.json', 'credentials.json', 'appsettings.json', 'appsettings.Development.json', 'appsettings.Production.json', 'config.json', 'config.js', 'env.js', 'runtime-config.js', 'bootstrap.yml', 'application-dev.yml', 'application-prod.yml', 'logback.xml', 'log4j2.xml', 'WEB-INF/classes/application.properties', 'WEB-INF/classes/application.yml', 'META-INF/MANIFEST.MF', '.user.ini', 'php.ini', 'phpinfo.php', 'info.php', '.env.example', '.env.testing', '.env.staging', '.env.development', '.env.test', '.env.development.local', '.env.test.local', '.env.production.local', '.aws/config', '.kube/config', '.docker/config.json', '.netrc', '.pypirc', '.vault_pass.txt'] },
+  { title: '사이트 메타 / 검증 파일', paths: ['robots.txt', 'sitemap.xml', 'crossdomain.xml', 'humans.txt', 'apple-app-site-association', 'security.txt', 'BingSiteAuth.xml', 'ads.txt', 'app-ads.txt', 'sitemap_index.xml', 'wp-sitemap.xml', 'manifest.json', 'manifest.webmanifest', 'site.webmanifest', 'app.webmanifest', 'browserconfig.xml', 'ngsw.json', 'ngsw-worker.js', 'service-worker.js', 'asset-manifest.json'] },
+  { title: '.well-known 경로', paths: ['.well-known/security.txt', '.well-known/change-password', '.well-known/openid-configuration', '.well-known/assetlinks.json', '.well-known/apple-app-site-association', '.well-known/api-catalog', '.well-known/oauth-authorization-server', '.well-known/oauth-protected-resource', '.well-known/openid-federation', '.well-known/ssf-configuration', '.well-known/uma2-configuration', '.well-known/gnap-as-rs', '.well-known/host-meta', '.well-known/host-meta.json', '.well-known/jmap', '.well-known/nodeinfo', '.well-known/did.json', '.well-known/did-configuration.json', '.well-known/agent-card.json', '.well-known/sbom', '.well-known/csaf/provider-metadata.json', '.well-known/csaf-aggregator', '.well-known/terraform.json', '.well-known/matrix/client', '.well-known/matrix/server', '.well-known/matrix/support', '.well-known/matrix/policy_server', '.well-known/webauthn', '.well-known/gpc.json', '.well-known/keybase.txt', '.well-known/nostr.json', '.well-known/ssh-known-hosts', '.well-known/sshfp', '.well-known/caldav', '.well-known/carddav', '.well-known/dnt', '.well-known/dnt-policy.txt', '.well-known/looking-glass', '.well-known/webhook-authorized-senders.json', '.well-known/wot', '.well-known/traffic-advice', '.well-known/tdmrep.json', '.well-known/trust.txt', '.well-known/microsoft-identity-association.json', '.well-known/apple-developer-merchantid-domain-association', '.well-known/apple-developer-merchantid-domain-association.txt'] },
 ];
 
 const $ = id => document.getElementById(id);
-function textElement(tag, text, className) { const el = document.createElement(tag); el.textContent = text; if (className) el.className = className; return el; }
+const categoryCheckboxes = [];
+function textElement(tag, value, className) {
+  const element = document.createElement(tag);
+  element.textContent = value;
+  if (className) element.className = className;
+  return element;
+}
 function setStatus(message) { $('status').textContent = message; }
 
 function updatePreview() {
-  const checked = [...document.querySelectorAll('.path-checkbox')].filter(cb => cb.checked).map(cb => cb.dataset.path);
-  $('preview').value = checked.join('\n');
-  $('count').textContent = checked.length + '개 선택됨';
-}
-
-function setCategoryChecked(catIndex, checked) {
-  document.querySelectorAll('.path-list[data-cat="' + catIndex + '"] .path-checkbox').forEach(cb => { cb.checked = checked; });
-  updatePreview();
+  const paths = [];
+  let selectedCategories = 0;
+  CATEGORIES.forEach((category, index) => {
+    if (categoryCheckboxes[index].checked) {
+      selectedCategories += 1;
+      paths.push(...category.paths);
+    }
+  });
+  $('preview').value = paths.join('\n');
+  $('count').textContent = selectedCategories + '개 카테고리 · ' + paths.length + '개 경로 선택됨';
 }
 
 function buildUI() {
   const container = $('categories');
-  CATEGORIES.forEach((category, catIndex) => {
+  CATEGORIES.forEach(category => {
     const section = document.createElement('section');
     section.className = 'card';
-    const head = document.createElement('div');
-    head.className = 'cat-head';
-    head.appendChild(textElement('h2', category.title));
-    const controls = document.createElement('div');
-    controls.className = 'controls';
-    const selectAllBtn = document.createElement('button');
-    selectAllBtn.type = 'button';
-    selectAllBtn.textContent = '전체선택';
-    selectAllBtn.addEventListener('click', () => setCategoryChecked(catIndex, true));
-    const deselectAllBtn = document.createElement('button');
-    deselectAllBtn.type = 'button';
-    deselectAllBtn.textContent = '전체해제';
-    deselectAllBtn.addEventListener('click', () => setCategoryChecked(catIndex, false));
-    controls.append(selectAllBtn, deselectAllBtn);
-    head.appendChild(controls);
-    section.appendChild(head);
+    const label = document.createElement('label');
+    label.className = 'category-label';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.addEventListener('change', updatePreview);
+    categoryCheckboxes.push(checkbox);
+    label.append(checkbox, textElement('span', category.title, 'category-title'), textElement('span', '(' + category.paths.length + '개)', 'badge'));
+    section.appendChild(label);
 
-    const list = document.createElement('div');
-    list.className = 'path-list';
-    list.dataset.cat = String(catIndex);
-    category.paths.forEach((path, pathIndex) => {
-      const id = 'cb-' + catIndex + '-' + pathIndex;
-      const row = document.createElement('label');
-      row.className = 'path-row';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.id = id;
-      input.className = 'path-checkbox';
-      input.dataset.path = path;
-      input.addEventListener('change', updatePreview);
-      const span = textElement('span', path, 'path-text');
-      row.append(input, span);
-      list.appendChild(row);
-    });
-    section.appendChild(list);
+    const details = document.createElement('details');
+    details.appendChild(textElement('summary', '경로 목록 보기'));
+    details.appendChild(textElement('pre', category.paths.join('\n')));
+    section.appendChild(details);
     container.appendChild(section);
   });
 }
@@ -105,21 +103,22 @@ async function copyText(value) {
     setStatus('복사했습니다.');
     return;
   } catch {
-    // navigator.clipboard가 없거나 권한이 거부된 환경(오래된 브라우저, file:// 등)을 위한 폴백.
+    // 권한이 없거나 로컬 파일에서 클립보드 API를 사용할 수 없으면 레거시 방식을 시도한다.
   }
+  const area = document.createElement('textarea');
+  area.value = value;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
   try {
-    const area = document.createElement('textarea');
-    area.value = value;
-    area.setAttribute('readonly', '');
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
     area.select();
-    const ok = document.execCommand('copy');
-    area.remove();
-    setStatus(ok ? '복사했습니다. (레거시 방식)' : '클립보드 복사에 실패했습니다. 미리보기 내용을 직접 선택해 복사하세요.');
+    const copied = document.execCommand('copy');
+    setStatus(copied ? '복사했습니다. (레거시 방식)' : '클립보드 복사에 실패했습니다. 미리보기 내용을 직접 선택해 복사하세요.');
   } catch {
     setStatus('클립보드 복사에 실패했습니다. 미리보기 내용을 직접 선택해 복사하세요.');
+  } finally {
+    area.remove();
   }
 }
 
@@ -127,7 +126,7 @@ function init() {
   buildUI();
   updatePreview();
   $('deselect-all').addEventListener('click', () => {
-    document.querySelectorAll('.path-checkbox').forEach(cb => { cb.checked = false; });
+    categoryCheckboxes.forEach(checkbox => { checkbox.checked = false; });
     updatePreview();
     setStatus('모든 선택을 해제했습니다.');
   });
@@ -139,4 +138,5 @@ function init() {
 }
 init();
 </script>
-</body></html>
+</body>
+</html>
