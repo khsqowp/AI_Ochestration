@@ -51,12 +51,12 @@
   <section class="panel">
     <div class="input-grid">
       <div><label for="files">JS 파일</label><input id="files" type="file" accept=".js,.mjs,.cjs,.jsx,.ts,.tsx,.txt" multiple></div>
-      <div><label for="source">코드 붙여넣기</label><textarea id="source" spellcheck="false" placeholder="fetch('/api/users');&#10;axios.get('https://example.com/v1/items');"></textarea></div>
+      <div><label for="source">코드 붙여넣기</label><textarea id="source" spellcheck="false" placeholder="axios.get('/api/users');&#10;axios.get('https://example.com/v1/items');"></textarea></div>
     </div>
     <div class="actions"><button id="analyze" class="primary">분석하기</button><button id="clear">초기화</button><span id="status" role="status"></span></div>
   </section>
   <section class="panel">
-    <div class="toolbar"><input id="filter" type="search" placeholder="경로, 도메인, 파일명 검색" aria-label="결과 검색"><button id="expand">모두 펼치기</button><button id="collapse">모두 접기</button><button id="copy" disabled>목록 복사</button><button id="download" disabled>CSV 저장</button></div>
+    <div class="toolbar"><input id="filter" type="search" placeholder="경로, 도메인, 파일명 검색" aria-label="결과 검색"><input id="exclude" type="search" placeholder="제외 키워드 (| 로 구분, 예: youtube|google|kakao)" aria-label="제외 키워드"><button id="expand">모두 펼치기</button><button id="collapse">모두 접기</button><button id="copy" disabled>목록 복사</button><button id="download" disabled>CSV 저장</button></div>
     <div id="summary" class="summary">분석 결과가 여기에 표시됩니다.</div>
     <div id="tree" class="tree"></div>
   </section>
@@ -167,7 +167,11 @@
 
   function visible() {
     const query = $('filter').value.trim().toLocaleLowerCase();
-    return query ? records.filter(x => [x.display, x.host, ...x.files].some(v => v.toLocaleLowerCase().includes(query))) : records;
+    const excluded = $('exclude').value.split('|').map(x => x.trim().toLocaleLowerCase()).filter(Boolean);
+    return records.filter(x =>
+      (!query || [x.display, x.host, ...x.files].some(v => v.toLocaleLowerCase().includes(query))) &&
+      !excluded.some(keyword => `${x.display} ${x.host}`.toLocaleLowerCase().includes(keyword))
+    );
   }
   function render() {
     const items = visible();
@@ -193,8 +197,9 @@
       $('status').textContent = `${sources.length}개 입력 분석 완료`;
     } catch (error) { $('status').textContent = `읽기 실패: ${error.message}`; }
   });
-  $('clear').addEventListener('click', () => { $('files').value = ''; $('source').value = ''; $('filter').value = ''; records = []; render(); $('status').textContent = ''; });
+  $('clear').addEventListener('click', () => { $('files').value = ''; $('source').value = ''; $('filter').value = ''; $('exclude').value = ''; records = []; render(); $('status').textContent = ''; });
   $('filter').addEventListener('input', render);
+  $('exclude').addEventListener('input', render);
   $('expand').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = true));
   $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
 

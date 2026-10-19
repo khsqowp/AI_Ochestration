@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HAR 엔드포인트 트리</title>
+<title>HAR 화면·API 관계 트리</title>
 <style>
   :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
   * { box-sizing: border-box; }
@@ -41,6 +41,15 @@
   .badge { display: inline-block; margin-right: 7px; padding: 2px 5px; border-radius: 4px; font-size: 11px; background: #315f4c; color: #b8f3d4; }
   .badge.candidate { background: #68552c; color: #ffe3a0; }
   .hint { display: block; margin-top: 3px; color: #8da1bc; font-size: 11px; }
+  .view-tabs { display:flex; gap:8px; flex-wrap:wrap; margin: 0 0 12px; }
+  .view-tabs button[aria-pressed="true"] { background:#2f76cf; border-color:#5797ef; }
+  .tree-note { margin:8px 0 12px; color:#a8b8ce; font-size:13px; }
+  .api-row, .candidate-row { display:flex; align-items:flex-start; gap:10px; padding:9px 12px; border-top:1px solid #263850; cursor:context-menu; }
+  .api-row:hover, .candidate-row:hover { background:#1d2d44; }
+  .api-main { min-width:0; overflow-wrap:anywhere; }
+  .api-sub { display:block; margin-top:3px; color:#8da1bc; font-size:11px; }
+  .unlinked { border:1px dashed #68552c; border-radius:8px; margin:10px; }
+  .api-row:focus-visible, .candidate-row:focus-visible, summary:focus-visible { outline:2px solid #8dc9ff; outline-offset:2px; }
   .empty { padding: 20px; color: #9fb1c8; }
   .zoom-controls { position: fixed; right: 18px; bottom: 18px; z-index: 10; display: flex; align-items: center;
     gap: 2px; background: #172337; border: 1px solid #31425d; border-radius: 10px; padding: 5px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
@@ -50,15 +59,21 @@
 </head>
 <body>
 <main id="zoomRoot">
-  <h1>HAR 엔드포인트 트리</h1>
+  <h1>HAR 화면·API 관계 트리</h1>
   <p>로그인한 브라우저의 Network에서 Preserve log를 켜고 탐색한 뒤 HAR를 내보내세요. 이 파일은 브라우저 안에서만 분석하며 서버로 전송하지 않습니다.</p>
   <section class="panel">
     <input id="files" type="file" accept=".har,.json,application/json" multiple aria-label="HAR 파일 선택">
     <div class="controls"><button class="primary" id="analyze">분석하기</button><button id="clear">초기화</button><span id="status" role="status"></span></div>
   </section>
   <section class="panel">
+    <div class="view-tabs" role="group" aria-label="트리 보기 방식">
+      <button id="screenView" type="button" aria-pressed="true">화면·API 관계</button>
+      <button id="pathView" type="button" aria-pressed="false">요청 경로 트리</button>
+    </div>
+    <p class="tree-note" id="treeNote">HAR에 기록된 페이지와 Referer 정보를 이용해 화면 이동 관계를 구성합니다. 연결이 불명확한 항목은 추정 또는 미연결로 표시합니다.</p>
     <div class="controls" style="margin-top:0">
       <input id="search" type="search" placeholder="경로, 도메인, 파라미터 검색" aria-label="결과 검색">
+      <input id="exclude" type="search" placeholder="제외 키워드 (| 로 구분, 예: youtube|google|kakao)" aria-label="제외 키워드">
       <select id="scope" aria-label="결과 종류"><option value="all">전체</option><option value="observed">실제 요청</option><option value="candidate">JS 후보</option></select>
       <button id="expand">모두 펼치기</button><button id="collapse">모두 접기</button>
     </div>
@@ -76,6 +91,8 @@
   'use strict';
   const $ = id => document.getElementById(id);
   let results = [];
+  let screenResults = null;
+  let viewMode = 'screens';
   let stats = { requests: 0, scripts: 0, scriptBodies: 0 };
   const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
   const staticExt = /\.(?:js|mjs|cjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|mp4|webm|pdf)(?:$|[?#])/i;
@@ -182,6 +199,117 @@
     }
   }
 
+  function headerValue(headers, name) {
+    const header = (headers || []).find(item => String(item?.name || '').toLowerCase() === name.toLowerCase());
+    return typeof header?.value === 'string' ? header.value : '';
+  }
+
+  function pageKey(raw) {
+    const parsed = parseUrl(raw);
+    return parsed ? `${parsed.origin}${parsed.path}` : '';
+  }
+
+  function pageLabel(page) {
+    const parsed = parseUrl(page.url);
+    const path = parsed?.path || page.url || '(주소 미확인)';
+    const base = path === '/' ? `${parsed?.host || ''} · 사이트 루트 화면` : `${parsed?.host || ''}${path}`;
+    return page.title && page.title !== page.url ? `${page.title} · ${base}` : base;
+  }
+
+  function buildScreenRelations(har) {
+    const entries = har?.log?.entries || [];
+    const pageMeta = new Map((har?.log?.pages || []).map(page => [page.id, page]));
+    const pages = new Map();
+    const ensurePage = (url, title = '', confidence = 'observed', pageRef = '') => {
+      const key = pageKey(url);
+      if (!key) return null;
+      if (!pages.has(key)) pages.set(key, { key, url: key, title, confidence, parentKey: '', apis: [], firstSeen: '', pageRef });
+      const page = pages.get(key);
+      if (title && !page.title) page.title = title;
+      if (confidence === 'observed') page.confidence = 'observed';
+      if (pageRef && !page.pageRef) page.pageRef = pageRef;
+      return page;
+    };
+
+    // First identify actual document navigations and map HAR pageref IDs to their screens.
+    const pageRefToKey = new Map();
+    for (const entry of entries) {
+      const request = entry?.request;
+      if (!request?.url) continue;
+      const mime = String(entry.response?.content?.mimeType || '');
+      const resourceType = String(entry._resourceType || request._resourceType || '').toLowerCase();
+      const isDocument = resourceType === 'document' || /text\/html/i.test(mime);
+      if (!isDocument) continue;
+      const meta = pageMeta.get(entry.pageref);
+      const page = ensurePage(request.url, meta?.title || '', 'observed', entry.pageref || '');
+      if (!page) continue;
+      if (entry.startedDateTime && (!page.firstSeen || entry.startedDateTime < page.firstSeen)) page.firstSeen = entry.startedDateTime;
+      const referer = headerValue(request.headers, 'referer');
+      const parentKey = pageKey(referer);
+      if (parentKey && parentKey !== page.key) page.parentKey = parentKey;
+      if (entry.pageref) pageRefToKey.set(entry.pageref, page.key);
+    }
+
+    // HAR pages may exist without a recognizable document entry. Use page metadata only
+    // when the exporter provides a non-standard URL field; otherwise leave it unlinked.
+    for (const [id, meta] of pageMeta) {
+      if (typeof meta.url !== 'string') continue;
+      const page = ensurePage(meta.url, meta.title || '', 'inferred', id);
+      if (page) pageRefToKey.set(id, page.key);
+    }
+
+    const unlinkedApis = [];
+    for (const entry of entries) {
+      const request = entry?.request;
+      if (!request?.url) continue;
+      const mime = String(entry.response?.content?.mimeType || '');
+      const resourceType = String(entry._resourceType || request._resourceType || '').toLowerCase();
+      if (resourceType === 'document' || /text\/html/i.test(mime)) continue;
+      const parsed = parseUrl(request.url);
+      if (!parsed) continue;
+      const method = String(request.method || '?').toUpperCase();
+      const requestPath = parsed.path.toLowerCase();
+      const isApi = ['xhr', 'fetch'].includes(resourceType)
+        || /\/(?:api|rest|graphql|gql)(?:\/|$)/i.test(requestPath)
+        || /(?:json|graphql)/i.test(mime)
+        || !['GET', 'HEAD', '?'].includes(method);
+      if (!isApi) continue;
+      const apiEvidence = ['xhr', 'fetch'].includes(resourceType) ? `${resourceType.toUpperCase()} 요청`
+        : /\/(?:api|rest|graphql|gql)(?:\/|$)/i.test(requestPath) ? 'API 경로 패턴'
+          : /(?:json|graphql)/i.test(mime) ? 'JSON/GraphQL 응답 유형' : '상태 변경 HTTP 메서드';
+      const referrer = headerValue(request.headers, 'referer');
+      const refKey = pageKey(referrer);
+      const pageKeyForRequest = pageRefToKey.get(entry.pageref) || refKey;
+      const page = pageKeyForRequest ? (pages.get(pageKeyForRequest) || ensurePage(pageKeyForRequest, '', 'inferred')) : null;
+      const api = {
+        url: `${parsed.origin}${parsed.path}`, method, status: Number(entry.response?.status) || 0,
+        mime: String(entry.response?.content?.mimeType || '유형 미확인'),
+        params: [...new Set([...(request.queryString || []).map(x => x.name), ...parsed.query, ...bodyParams(request.postData)])],
+        count: 1, startedDateTime: entry.startedDateTime || '', apiEvidence,
+        confidence: pageRefToKey.has(entry.pageref) ? 'HAR 페이지 연결' : (refKey ? 'Referer 기준 추정' : '화면 연결 미확인'),
+        source: request.url,
+      };
+      if (page) {
+        const existing = page.apis.find(item => item.method === api.method && item.url === api.url);
+        if (existing) existing.count++;
+        else page.apis.push(api);
+      } else {
+        const existing = unlinkedApis.find(item => item.method === api.method && item.url === api.url);
+        if (existing) existing.count++;
+        else unlinkedApis.push(api);
+      }
+    }
+
+    const candidates = results.filter(item => item.kind === 'candidate');
+    const roots = [];
+    const byKey = new Map(pages);
+    for (const page of pages.values()) {
+      if (!page.parentKey || !byKey.has(page.parentKey)) roots.push(page);
+    }
+    roots.sort((a, b) => (a.firstSeen || '').localeCompare(b.firstSeen || '') || a.key.localeCompare(b.key));
+    return { roots, pages: [...pages.values()], unlinkedApis, candidates };
+  }
+
   function finalize(observed, candidates) {
     const actual = [...observed.values()];
     const known = new Map();
@@ -205,11 +333,22 @@
     return [...actual, ...hidden].sort((a, b) => (a.host + a.path + a.method).localeCompare(b.host + b.path + b.method));
   }
 
+  function excludeKeywords() {
+    return $('exclude').value.split('|').map(x => x.trim().toLocaleLowerCase()).filter(Boolean);
+  }
+
+  function isExcluded(text, keywords) {
+    const value = String(text).toLocaleLowerCase();
+    return keywords.some(keyword => value.includes(keyword));
+  }
+
   function visible() {
     const query = $('search').value.trim().toLocaleLowerCase();
     const scope = $('scope').value;
+    const excluded = excludeKeywords();
     return results.filter(item => {
       if (scope !== 'all' && scope !== item.kind) return false;
+      if (isExcluded(`${item.host} ${item.path} ${[...item.params].join(' ')}`, excluded)) return false;
       return !query || [item.host, item.path, item.method, ...item.params].some(x => x.toLocaleLowerCase().includes(query));
     });
   }
@@ -244,6 +383,18 @@
     button.textContent = '복사됨';
     setTimeout(() => button.textContent = old, 1200);
   }
+  async function copyRoute(text, element) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = text; document.body.append(area); area.select();
+      document.execCommand('copy'); area.remove();
+    }
+    const oldTitle = element.title;
+    element.title = `복사됨: ${text}`;
+    setTimeout(() => { element.title = oldTitle; }, 1200);
+  }
   function routeRow(item) {
     const row = document.createElement('div'); row.className = 'route';
     const path = document.createElement('div'); path.className = 'path';
@@ -276,11 +427,90 @@
   }
   function render() {
     const items = visible(); $('tree').replaceChildren();
-    if (items.length) renderBranch($('tree'), build(items));
+    if (viewMode === 'screens') renderScreens(items);
+    else if (items.length) renderBranch($('tree'), build(items));
     else { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '표시할 결과가 없습니다.'; $('tree').append(empty); }
     const actual = results.filter(x => x.kind === 'observed').length;
     const candidate = results.length - actual;
-    $('summary').textContent = `${items.length}개 표시 · 실제 요청 ${actual}개 · JS 후보 ${candidate}개 · JS 응답 본문 ${stats.scriptBodies}/${stats.scripts}개 분석`;
+    $('summary').textContent = viewMode === 'screens'
+      ? `${screenResults?.pages.length || 0}개 화면 · ${screenResults?.pages.reduce((n, p) => n + p.apis.length, 0) || 0}개 연결 API · ${screenResults?.unlinkedApis.length || 0}개 미연결 요청 · JS 후보 ${candidate}개`
+      : `${items.length}개 표시 · 실제 요청 ${actual}개 · JS 후보 ${candidate}개 · JS 응답 본문 ${stats.scriptBodies}/${stats.scripts}개 분석`;
+  }
+
+  function renderScreens(filteredItems) {
+    if (!screenResults) return;
+    const scope = $('scope').value;
+    const showObserved = scope !== 'candidate';
+    const showCandidates = scope !== 'observed';
+    const allowedApis = new Set(filteredItems.filter(item => item.kind === 'observed').map(item => `${item.method}\u0000${item.origin}${item.path}`));
+    const query = $('search').value.trim().toLocaleLowerCase();
+    const matches = value => !query || String(value || '').toLocaleLowerCase().includes(query);
+    const excluded = excludeKeywords();
+    const copyable = (element, text) => {
+      element.tabIndex = 0;
+      element.addEventListener('contextmenu', event => { event.preventDefault(); copyRoute(text, element); });
+      element.addEventListener('keydown', event => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); copyRoute(text, element); } });
+    };
+    const seen = new Set();
+    const renderPage = (container, page, depth = 0) => {
+      if (seen.has(page.key)) return;
+      seen.add(page.key);
+      const details = document.createElement('details'); details.open = depth < 2;
+      const summary = document.createElement('summary');
+      const title = pageLabel(page);
+      summary.textContent = `${title} · ${page.confidence === 'observed' ? '관측' : '추정'} · ${page.apis.length} API`;
+      summary.title = `${page.confidence === 'observed' ? 'HAR에서 관측된 화면' : 'URL/Referer 기반 추정 화면'}\n우클릭: 경로 복사\n${page.url}`;
+      copyable(summary, page.url);
+      details.append(summary);
+      for (const api of page.apis) {
+        if (!showObserved || !allowedApis.has(`${api.method}\u0000${api.url}`) || !matches(`${api.method} ${api.url} ${api.params.join(' ')} ${api.status}`)) continue;
+        const row = document.createElement('div'); row.className = 'api-row';
+        const main = document.createElement('div'); main.className = 'api-main';
+        const method = document.createElement('span'); method.className = `method ${api.method.toLowerCase()}`; method.textContent = api.method;
+        main.append(method, document.createTextNode(` ${api.url}`));
+        const sub = document.createElement('span'); sub.className = 'api-sub';
+        sub.textContent = `${api.apiEvidence} · ${api.confidence} · HTTP ${api.status || '미기록'} · ${api.mime} · ${api.count}회${api.params.length ? ` · 파라미터: ${api.params.join(', ')}` : ''}`;
+        main.append(sub);
+        row.title = `${api.method} ${api.url}\n요청 분류 근거: ${api.apiEvidence}\n화면 연결 근거: ${api.confidence}\n상태: ${api.status || '미기록'} · 응답 유형: ${api.mime}\n파라미터: ${api.params.join(', ') || '없음'}\n우클릭: 경로 복사`;
+        copyable(row, api.url);
+        row.append(main); details.append(row);
+      }
+      for (const child of screenResults.pages.filter(item => item.parentKey === page.key)) renderPage(details, child, depth + 1);
+      container.append(details);
+    };
+    if (showObserved) {
+      for (const root of screenResults.roots) renderPage($('tree'), root);
+      for (const page of screenResults.pages) if (!seen.has(page.key)) renderPage($('tree'), page);
+    }
+    if (showObserved && screenResults.unlinkedApis.length) {
+      const section = document.createElement('details'); section.className = 'unlinked'; section.open = true;
+      const summary = document.createElement('summary'); summary.textContent = `화면 연결 미확인 요청 (${screenResults.unlinkedApis.length})`; section.append(summary);
+      for (const api of screenResults.unlinkedApis) {
+        if (!matches(`${api.method} ${api.url} ${api.params.join(' ')} ${api.status}`) || isExcluded(api.url, excluded)) continue;
+        const row = document.createElement('div'); row.className = 'api-row';
+        row.textContent = `${api.method} ${api.url} · HTTP ${api.status || '미기록'} · 연결 근거 없음`;
+        row.title = 'HAR에 화면 참조 정보가 없어 특정 화면에 연결하지 않았습니다. 우클릭하면 URL을 복사합니다.';
+        copyable(row, api.url); section.append(row);
+      }
+      $('tree').append(section);
+    }
+    if (showCandidates && screenResults.candidates.length) {
+      const section = document.createElement('details'); section.open = false;
+      const summary = document.createElement('summary'); summary.textContent = `JS에서만 발견된 후보 경로 (${screenResults.candidates.length})`; section.append(summary);
+      for (const item of screenResults.candidates) {
+        if (!matches(`${item.method} ${item.origin}${item.path} ${[...item.params].join(' ')}`) || isExcluded(item.origin + item.path, excluded)) continue;
+        const row = document.createElement('div'); row.className = 'candidate-row';
+        row.textContent = `JS 후보 · ${item.method} ${item.origin}${item.path} · 실제 호출 미관측`;
+        row.title = 'JavaScript 본문에서 찾은 문자열입니다. HAR에서 실제 요청으로 관측되지 않았습니다.';
+        copyable(row, `${item.origin}${item.path}`); section.append(row);
+      }
+      $('tree').append(section);
+    }
+    const hasObservedData = showObserved && (screenResults.pages.length > 0 || screenResults.unlinkedApis.length > 0);
+    const hasCandidateData = showCandidates && screenResults.candidates.length > 0;
+    if (!hasObservedData && !hasCandidateData) {
+      const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '표시할 화면 또는 요청이 없습니다.'; $('tree').append(empty);
+    }
   }
 
   $('analyze').addEventListener('click', async () => {
@@ -290,13 +520,42 @@
     const observed = new Map(), candidates = new Map();
     stats = { requests: 0, scripts: 0, scriptBodies: 0 };
     try {
-      for (const file of files) analyzeHar(JSON.parse(await file.text()), observed, candidates);
-      results = finalize(observed, candidates); render();
+      const hars = [];
+      for (const file of files) {
+        const har = JSON.parse(await file.text());
+        analyzeHar(har, observed, candidates);
+        hars.push(har);
+      }
+      results = finalize(observed, candidates);
+      screenResults = { roots: [], pages: [], unlinkedApis: [], candidates: results.filter(item => item.kind === 'candidate') };
+      for (const har of hars) {
+        const part = buildScreenRelations(har);
+        for (const page of part.pages) {
+          let target = screenResults.pages.find(item => item.key === page.key);
+          if (!target) { target = { ...page, apis: [] }; screenResults.pages.push(target); }
+          if (page.title && !target.title) target.title = page.title;
+          if (page.parentKey && !target.parentKey) target.parentKey = page.parentKey;
+          for (const api of page.apis) {
+            const existing = target.apis.find(item => item.method === api.method && item.url === api.url);
+            if (existing) existing.count += api.count; else target.apis.push(api);
+          }
+        }
+        for (const api of part.unlinkedApis) {
+          const existing = screenResults.unlinkedApis.find(item => item.method === api.method && item.url === api.url);
+          if (existing) existing.count += api.count; else screenResults.unlinkedApis.push(api);
+        }
+      }
+      const pageKeys = new Set(screenResults.pages.map(page => page.key));
+      screenResults.roots = screenResults.pages.filter(page => !page.parentKey || !pageKeys.has(page.parentKey));
+      render();
       $('status').textContent = `${files.length}개 HAR, ${stats.requests}개 요청 분석 완료`;
     } catch (error) { $('status').textContent = `분석 실패: ${error.message}`; }
   });
-  $('clear').addEventListener('click', () => { $('files').value = ''; $('search').value = ''; $('scope').value = 'all'; results = []; stats = { requests: 0, scripts: 0, scriptBodies: 0 }; $('tree').replaceChildren(); $('summary').textContent = 'HAR 파일을 선택해 주세요.'; $('status').textContent = ''; });
+  $('clear').addEventListener('click', () => { $('files').value = ''; $('search').value = ''; $('exclude').value = ''; $('scope').value = 'all'; results = []; screenResults = null; stats = { requests: 0, scripts: 0, scriptBodies: 0 }; $('tree').replaceChildren(); $('summary').textContent = 'HAR 파일을 선택해 주세요.'; $('status').textContent = ''; });
+  $('screenView').addEventListener('click', () => { viewMode = 'screens'; $('screenView').setAttribute('aria-pressed', 'true'); $('pathView').setAttribute('aria-pressed', 'false'); $('treeNote').textContent = '페이지 노드는 HAR 문서 요청 또는 Referer로 확인합니다. API 연결은 HAR 페이지 참조·Referer 근거를 표시하며, 연결 근거가 없는 요청은 따로 둡니다. 노드 우클릭 또는 키보드 메뉴 키로 경로를 복사할 수 있습니다.'; render(); });
+  $('pathView').addEventListener('click', () => { viewMode = 'paths'; $('screenView').setAttribute('aria-pressed', 'false'); $('pathView').setAttribute('aria-pressed', 'true'); $('treeNote').textContent = '기존 방식대로 실제 요청과 JS 후보를 도메인·경로 계층으로 표시합니다.'; render(); });
   $('search').addEventListener('input', render); $('scope').addEventListener('change', render);
+  $('exclude').addEventListener('input', render);
   $('expand').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = true));
   $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
 
