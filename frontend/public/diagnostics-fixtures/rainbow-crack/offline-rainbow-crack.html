@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>레인보우 테이블 해시 크랙 · 오프라인 진단기</title>
+<style>
+:root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2{font-size:16px;margin:0 0 10px}.muted,.note{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls,.tabs,.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}button{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover{background:#f4f1ff}button:disabled{opacity:.55;cursor:not-allowed}.primary,.tabs button[aria-selected="true"]{background:#8068d9;color:#fff;border-color:#8068d9}.primary:hover,.tabs button[aria-selected="true"]:hover{background:#7058c8}.stop{color:#a52943;border-color:#ddaab5}input,select,textarea{font:inherit;border:1px solid #d8d4e3;border-radius:9px;padding:9px 11px;min-width:0}input[type="text"],textarea{width:100%}input[type="number"]{width:90px}input[type="checkbox"]{width:auto}textarea{display:block;min-height:155px;resize:vertical;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}.field{display:block;margin:14px 0 5px;font-weight:600}.inline-field{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.result{min-width:0}.result pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#faf9fc;color:#514a61;border:1px solid #e8e6ed;border-radius:8px;padding:12px;min-height:60px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace}.hash-row{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:8px;align-items:center;margin:8px 0}.hash-row input{width:100%;font:12px ui-monospace,SFMono-Regular,monospace;color:#514a61}.matched{background:#eef9f1;border-radius:8px;padding:3px}.badge{display:inline-block;border-radius:6px;background:#f4f1ff;color:#5b4fc4;padding:2px 7px;margin:3px;font-size:12px}.bad{background:#fff0f0;color:#a52943}.progress{margin:15px 0}.progress-track{height:9px;background:#eeeaf6;border-radius:9px;overflow:hidden}.progress-fill{height:100%;width:0;background:#8068d9}.found{border-left:4px solid #278254}.not-found{border-left:4px solid #d19a3a}.hidden,[hidden]{display:none!important}.break{overflow-wrap:anywhere}.empty{color:#777;font-size:13px}@media(max-width:600px){body{padding:12px}.card{padding:14px}.hash-row{grid-template-columns:1fr auto}.hash-row label{grid-column:1/-1}}
+</style>
+</head>
+<body><main class="wrap">
+<header><h1>레인보우 테이블 해시 크랙</h1><p class="muted">독립 실행형 파일 · 외부 통신·라이브러리 없음 · 입력과 계산은 현재 브라우저에서만 처리됩니다.</p></header>
+<p class="warning">승인된 범위의 해시만 분석하세요. 이 도구는 저장된 레인보우 체인이 아니라 내장 사전 및 지정 문자셋의 후보를 즉석에서 해시해 대조합니다. bcrypt·argon2·scrypt 같은 솔트+저속 해시는 이 방식의 대상이 아닙니다.</p>
+<p id="sha-note" class="warning" hidden>이 브라우저에서는 Web Crypto를 사용할 수 없어 SHA1/SHA256/SHA384/SHA512를 비활성화했습니다. MD5/NTLM/CRC32은 계속 사용할 수 있습니다.</p>
+<section class="card"><h2>작업 선택</h2><div class="tabs" role="tablist" aria-label="해시 작업">
+<button type="button" data-mode="dictionary" role="tab" aria-selected="true">해시 → 원본값 (사전)</button>
+<button type="button" data-mode="brute" role="tab" aria-selected="false">해시 → 원본값 (브루트포스)</button>
+<button type="button" data-mode="generate" role="tab" aria-selected="false">원본값 → 해시 (생성·검증)</button>
+<button type="button" data-mode="batch" role="tab" aria-selected="false">여러 해시 일괄 크랙</button>
+</div></section>
+<section id="mode-dictionary" class="card mode"><h2>해시 → 원본값 (사전)</h2>
+<label class="field" for="dictionary-hash">해시값</label><input id="dictionary-hash" class="search-input" type="text" spellcheck="false" placeholder="예: 5f4dcc3b5aa765d61d8327deb882cf99">
+<p id="dictionary-detect" class="note" role="status"></p><label class="field" for="dictionary-algo">알고리즘</label><select id="dictionary-algo" class="algo-select search-input"><option value="">자동판별 사용</option></select>
+<label class="inline-field"><input id="include-pins" class="search-input" type="checkbox"> 숫자 PIN 전수조사 추가 <select id="pin-digits" class="search-input" disabled><option value="4">4자리(1만개)</option><option value="5">5자리(11만개)</option><option value="6" selected>6자리(111만개)</option></select></label>
+<div class="controls"><button id="dictionary-start" class="primary">사전으로 크랙 시도</button><button class="stop" data-stop hidden>중단</button></div>
+<p class="note">이 사전은 실제 유출 데이터가 아니라 공개적으로 널리 알려진 "흔한 취약 비밀번호" 패턴(대소문자·자릿수·연도·리트스피크 변형 포함)으로 만든 것입니다. 기본 후보 <span id="word-count"></span>개. PIN 추가는 별도 전수조사입니다.</p></section>
+<section id="mode-brute" class="card mode" hidden><h2>해시 → 원본값 (브루트포스)</h2>
+<label class="field" for="brute-hash">해시값</label><input id="brute-hash" class="search-input" type="text" spellcheck="false" placeholder="예: 5f4dcc3b5aa765d61d8327deb882cf99"><p id="brute-detect" class="note" role="status"></p>
+<label class="field" for="brute-algo">알고리즘</label><select id="brute-algo" class="algo-select search-input"><option value="">자동판별 사용</option></select>
+<label class="field" for="brute-preset">문자셋</label><select id="brute-preset" class="charset-preset search-input"></select><input id="brute-custom" class="search-input" type="text" placeholder="예: ab12!@ — 사용할 문자를 그대로 나열" hidden>
+<label class="field" for="brute-min">길이 범위 (짧은 길이부터 순서대로 시도)</label><div class="row"><input id="brute-min" class="search-input" type="number" min="1" max="12" value="1"> ~ <input id="brute-max" class="search-input" type="number" min="1" max="12" value="4"><span id="brute-space" class="note"></span></div>
+<div class="controls"><button id="brute-start" class="primary">브루트포스 시작</button><button class="stop" data-stop hidden>중단</button></div>
+<p class="note">진짜 전수조사입니다. 문자셋·길이를 넓히면 후보 수가 기하급수로 커집니다. 한 브라우저 탭에서 순차 계산하므로 탭을 열어 두어야 합니다.</p></section>
+<section id="mode-generate" class="card mode" hidden><h2>원본값 → 해시 (생성·검증)</h2>
+<label class="field" for="plain">원본값(평문)</label><input id="plain" type="text" spellcheck="false" placeholder="예: password123">
+<label class="field" for="compare">비교할 해시값 (선택 — 이 평문이 그 해시가 맞는지 검증)</label><input id="compare" type="text" spellcheck="false" placeholder="여기에 해시를 넣으면 아래에서 일치하는 알고리즘을 표시합니다">
+<p id="compare-result" role="status"></p><div id="hash-rows"></div><p class="note">빈 입력도 유효한 평문으로 계산합니다. NTLM은 UTF-16LE 입력의 MD4이며, CRC32는 암호학적 해시가 아니라 체크섬입니다.</p></section>
+<section id="mode-batch" class="card mode" hidden><h2>여러 해시 일괄 크랙</h2>
+<label class="field" for="batch-hashes">여러 해시 (한 줄에 하나씩)</label><textarea id="batch-hashes" class="search-input" spellcheck="false" placeholder="해시를 한 줄에 하나씩 붙여넣으세요"></textarea>
+<label class="field" for="batch-algo">알고리즘</label><select id="batch-algo" class="algo-select search-input"><option value="">자동판별 (라인별 길이 기반)</option></select>
+<label class="field" for="batch-preset">브루트포스 문자셋</label><select id="batch-preset" class="charset-preset search-input"></select><input id="batch-custom" class="search-input" type="text" placeholder="예: ab12!@ — 사용할 문자를 그대로 나열" hidden>
+<label class="field" for="batch-min">길이 범위</label><div class="row"><input id="batch-min" class="search-input" type="number" min="1" max="12" value="1"> ~ <input id="batch-max" class="search-input" type="number" min="1" max="12" value="4"><span id="batch-space" class="note"></span></div>
+<div class="controls"><button id="batch-dictionary" class="primary">사전으로 전부 시도</button><button id="batch-brute" class="primary">브루트포스로 전부 시도</button><button class="stop" data-stop hidden>중단</button></div>
+<p class="note">해시를 한 개씩 순차 처리하고, 완료된 결과를 즉시 목록에 남깁니다. 중단하면 처리된 결과는 유지됩니다.</p></section>
+<section class="card result" aria-live="polite"><h2>진행 상황</h2><p id="status" class="muted" role="status">입력 대기 중</p><div id="progress" class="progress" hidden><div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div><p id="progress-text" class="muted"></p></div></section>
+<section class="card result"><h2>결과</h2><div id="results" class="results"><p class="empty">아직 결과가 없습니다.</p></div></section>
+<p class="warning">찾지 못했다는 결과는 평문이 없다는 증거가 아닙니다. 지정한 사전 또는 문자셋·길이 범위에 없거나 솔트가 적용됐을 수 있습니다. raw 해시는 값만으로 솔트 적용 여부를 판별할 수 없습니다. bcrypt($2b$), md5crypt($1$), sha256crypt($5$), sha512crypt($6$), PBKDF2 등은 이 도구의 검색 대상이 아닙니다.</p>
+</main><script>
+'use strict';
+// hashCore.ts의 MD5/MD4/CRC32 구현을 타입 표기만 제거하여 그대로 이식합니다.
+/* 해시 계산 공용 코어 — 메인 스레드(rainbow.tsx)와 브루트포스 워커(rainbowWorker.ts) 양쪽이 그대로
+ * 가져다 쓴다. MD4/MD5 는 RFC 1320/1321 을 직접 이식했고(Web Crypto 가 지원 안 함), 각 테스트
+ * 벡터(md4/md5 표준 벡터 + 실제 NTLM("password")=8846f7ea... 상수)로 대조 검증했다. */
+
+function add32(a, b) { return (a + b) & 0xffffffff }
+function rol(x, s) { return (x << s) | (x >>> (32 - s)) }
+
+// MD5 라운드 함수
+function cmn(q, a, b, x, s, t) {
+  a = add32(add32(a, q), add32(x, t))
+  return add32(rol(a, s), b)
+}
+function md5ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t) }
+function md5gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t) }
+function md5hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t) }
+function md5ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t) }
+
+function md5cycle(x, k) {
+  let [a, b, c, d] = x
+  a = md5ff(a, b, c, d, k[0], 7, -680876936); d = md5ff(d, a, b, c, k[1], 12, -389564586); c = md5ff(c, d, a, b, k[2], 17, 606105819); b = md5ff(b, c, d, a, k[3], 22, -1044525330)
+  a = md5ff(a, b, c, d, k[4], 7, -176418897); d = md5ff(d, a, b, c, k[5], 12, 1200080426); c = md5ff(c, d, a, b, k[6], 17, -1473231341); b = md5ff(b, c, d, a, k[7], 22, -45705983)
+  a = md5ff(a, b, c, d, k[8], 7, 1770035416); d = md5ff(d, a, b, c, k[9], 12, -1958414417); c = md5ff(c, d, a, b, k[10], 17, -42063); b = md5ff(b, c, d, a, k[11], 22, -1990404162)
+  a = md5ff(a, b, c, d, k[12], 7, 1804603682); d = md5ff(d, a, b, c, k[13], 12, -40341101); c = md5ff(c, d, a, b, k[14], 17, -1502002290); b = md5ff(b, c, d, a, k[15], 22, 1236535329)
+  a = md5gg(a, b, c, d, k[1], 5, -165796510); d = md5gg(d, a, b, c, k[6], 9, -1069501632); c = md5gg(c, d, a, b, k[11], 14, 643717713); b = md5gg(b, c, d, a, k[0], 20, -373897302)
+  a = md5gg(a, b, c, d, k[5], 5, -701558691); d = md5gg(d, a, b, c, k[10], 9, 38016083); c = md5gg(c, d, a, b, k[15], 14, -660478335); b = md5gg(b, c, d, a, k[4], 20, -405537848)
+  a = md5gg(a, b, c, d, k[9], 5, 568446438); d = md5gg(d, a, b, c, k[14], 9, -1019803690); c = md5gg(c, d, a, b, k[3], 14, -187363961); b = md5gg(b, c, d, a, k[8], 20, 1163531501)
+  a = md5gg(a, b, c, d, k[13], 5, -1444681467); d = md5gg(d, a, b, c, k[2], 9, -51403784); c = md5gg(c, d, a, b, k[7], 14, 1735328473); b = md5gg(b, c, d, a, k[12], 20, -1926607734)
+  a = md5hh(a, b, c, d, k[5], 4, -378558); d = md5hh(d, a, b, c, k[8], 11, -2022574463); c = md5hh(c, d, a, b, k[11], 16, 1839030562); b = md5hh(b, c, d, a, k[14], 23, -35309556)
+  a = md5hh(a, b, c, d, k[1], 4, -1530992060); d = md5hh(d, a, b, c, k[4], 11, 1272893353); c = md5hh(c, d, a, b, k[7], 16, -155497632); b = md5hh(b, c, d, a, k[10], 23, -1094730640)
+  a = md5hh(a, b, c, d, k[13], 4, 681279174); d = md5hh(d, a, b, c, k[0], 11, -358537222); c = md5hh(c, d, a, b, k[3], 16, -722521979); b = md5hh(b, c, d, a, k[6], 23, 76029189)
+  a = md5hh(a, b, c, d, k[9], 4, -640364487); d = md5hh(d, a, b, c, k[12], 11, -421815835); c = md5hh(c, d, a, b, k[15], 16, 530742520); b = md5hh(b, c, d, a, k[2], 23, -995338651)
+  a = md5ii(a, b, c, d, k[0], 6, -198630844); d = md5ii(d, a, b, c, k[7], 10, 1126891415); c = md5ii(c, d, a, b, k[14], 15, -1416354905); b = md5ii(b, c, d, a, k[5], 21, -57434055)
+  a = md5ii(a, b, c, d, k[12], 6, 1700485571); d = md5ii(d, a, b, c, k[3], 10, -1894986606); c = md5ii(c, d, a, b, k[10], 15, -1051523); b = md5ii(b, c, d, a, k[1], 21, -2054922799)
+  a = md5ii(a, b, c, d, k[8], 6, 1873313359); d = md5ii(d, a, b, c, k[15], 10, -30611744); c = md5ii(c, d, a, b, k[6], 15, -1560198380); b = md5ii(b, c, d, a, k[13], 21, 1309151649)
+  a = md5ii(a, b, c, d, k[4], 6, -145523070); d = md5ii(d, a, b, c, k[11], 10, -1120210379); c = md5ii(c, d, a, b, k[2], 15, 718787259); b = md5ii(b, c, d, a, k[9], 21, -343485551)
+  x[0] = add32(a, x[0]); x[1] = add32(b, x[1]); x[2] = add32(c, x[2]); x[3] = add32(d, x[3])
+}
+
+// MD4 라운드 함수 (덧셈 상수 없는 라운드1, 고정 상수 라운드2·3, 다른 메시지 순서·시프트)
+function md4f1(a, b, c, d, x, s) { return rol(add32(add32(a, (b & c) | (~b & d)), x), s) }
+function md4f2(a, b, c, d, x, s) { return rol(add32(add32(add32(a, (b & c) | (b & d) | (c & d)), x), 0x5a827999), s) }
+function md4f3(a, b, c, d, x, s) { return rol(add32(add32(add32(a, b ^ c ^ d), x), 0x6ed9eba1), s) }
+
+function md4cycle(x, k) {
+  let [a, b, c, d] = x
+  a = md4f1(a, b, c, d, k[0], 3); d = md4f1(d, a, b, c, k[1], 7); c = md4f1(c, d, a, b, k[2], 11); b = md4f1(b, c, d, a, k[3], 19)
+  a = md4f1(a, b, c, d, k[4], 3); d = md4f1(d, a, b, c, k[5], 7); c = md4f1(c, d, a, b, k[6], 11); b = md4f1(b, c, d, a, k[7], 19)
+  a = md4f1(a, b, c, d, k[8], 3); d = md4f1(d, a, b, c, k[9], 7); c = md4f1(c, d, a, b, k[10], 11); b = md4f1(b, c, d, a, k[11], 19)
+  a = md4f1(a, b, c, d, k[12], 3); d = md4f1(d, a, b, c, k[13], 7); c = md4f1(c, d, a, b, k[14], 11); b = md4f1(b, c, d, a, k[15], 19)
+  a = md4f2(a, b, c, d, k[0], 3); d = md4f2(d, a, b, c, k[4], 5); c = md4f2(c, d, a, b, k[8], 9); b = md4f2(b, c, d, a, k[12], 13)
+  a = md4f2(a, b, c, d, k[1], 3); d = md4f2(d, a, b, c, k[5], 5); c = md4f2(c, d, a, b, k[9], 9); b = md4f2(b, c, d, a, k[13], 13)
+  a = md4f2(a, b, c, d, k[2], 3); d = md4f2(d, a, b, c, k[6], 5); c = md4f2(c, d, a, b, k[10], 9); b = md4f2(b, c, d, a, k[14], 13)
+  a = md4f2(a, b, c, d, k[3], 3); d = md4f2(d, a, b, c, k[7], 5); c = md4f2(c, d, a, b, k[11], 9); b = md4f2(b, c, d, a, k[15], 13)
+  a = md4f3(a, b, c, d, k[0], 3); d = md4f3(d, a, b, c, k[8], 9); c = md4f3(c, d, a, b, k[4], 11); b = md4f3(b, c, d, a, k[12], 15)
+  a = md4f3(a, b, c, d, k[2], 3); d = md4f3(d, a, b, c, k[10], 9); c = md4f3(c, d, a, b, k[6], 11); b = md4f3(b, c, d, a, k[14], 15)
+  a = md4f3(a, b, c, d, k[1], 3); d = md4f3(d, a, b, c, k[9], 9); c = md4f3(c, d, a, b, k[5], 11); b = md4f3(b, c, d, a, k[13], 15)
+  a = md4f3(a, b, c, d, k[3], 3); d = md4f3(d, a, b, c, k[11], 9); c = md4f3(c, d, a, b, k[7], 11); b = md4f3(b, c, d, a, k[15], 15)
+  x[0] = add32(a, x[0]); x[1] = add32(b, x[1]); x[2] = add32(c, x[2]); x[3] = add32(d, x[3])
+}
+
+// MD4/MD5 공용 메시지 워드 추출 + 패딩(둘 다 64바이트 블록, little-endian 길이 — RFC 1320/1321 동일)
+function toBlk(s) {
+  const blk = []
+  for (let i = 0; i < 64; i += 4) blk[i >> 2] = s.charCodeAt(i) + (s.charCodeAt(i + 1) << 8) + (s.charCodeAt(i + 2) << 16) + (s.charCodeAt(i + 3) << 24)
+  return blk
+}
+function digest128(input, cycle) {
+  const n = input.length
+  const state = [1732584193, -271733879, -1732584194, 271733878]
+  let i
+  for (i = 64; i <= input.length; i += 64) cycle(state, toBlk(input.substring(i - 64, i)))
+  const tailStr = input.substring(i - 64)
+  const tail = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  for (i = 0; i < tailStr.length; i++) tail[i >> 2] |= tailStr.charCodeAt(i) << ((i % 4) << 3)
+  tail[i >> 2] |= 0x80 << ((i % 4) << 3)
+  if (i > 55) { cycle(state, tail); for (i = 0; i < 16; i++) tail[i] = 0 }
+  tail[14] = n * 8
+  cycle(state, tail)
+  return state
+}
+const HEX_CHARS = '0123456789abcdef'
+function rhex(n) { let s = ''; for (let j = 0; j < 4; j++) s += HEX_CHARS[(n >> (j * 8 + 4)) & 0xf] + HEX_CHARS[(n >> (j * 8)) & 0xf]; return s }
+function utf8Bytes(s) { return unescape(encodeURIComponent(s)) } // UTF-8 바이트를 1문자=1바이트 문자열로
+function utf16leBytes(s) { let out = ''; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); out += String.fromCharCode(c & 0xff, (c >> 8) & 0xff) }; return out }
+
+function md5Hex(plain) { return digest128(utf8Bytes(plain), md5cycle).map(rhex).join('') }
+/** NTLM = MD4(UTF-16LE(비밀번호)) — 솔트 없음. Windows/AD 인증에서 흔히 보는 32자리 hex. */
+function ntlmHex(plain) { return digest128(utf16leBytes(plain), md4cycle).map(rhex).join('') }
+
+/* ── CRC32 (표준 IEEE 802.3 다항식 0xEDB88320) — 암호학적 해시는 아니지만 흔히 마주치는 8자리 hex 체크섬 ── */
+const CRC_TABLE = (() => {
+  const table = []
+  for (let n = 0; n < 256; n++) {
+    let c = n
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1)
+    table[n] = c >>> 0
+  }
+  return table
+})()
+function crc32Hex(plain) {
+  const bytes = utf8Bytes(plain)
+  let crc = 0xffffffff
+  for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes.charCodeAt(i)) & 0xff] ^ (crc >>> 8)
+  return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0')
+}
+
+
+const ALGO_LABEL = {md5:'MD5',ntlm:'NTLM',sha1:'SHA1',sha256:'SHA256',sha384:'SHA384',sha512:'SHA512',crc32:'CRC32'};
+const ALL_ALGOS = Object.keys(ALGO_LABEL);
+const SHA_ALGOS = new Set(['sha1','sha256','sha384','sha512']);
+const HASH_LENGTH_TO_ALGOS = {8:['crc32'],32:['md5','ntlm'],40:['sha1'],64:['sha256'],96:['sha384'],128:['sha512']};
+const subtleAvailable = !!(window.crypto && window.crypto.subtle);
+async function hashWith(algo,plain){
+  if(algo==='md5')return md5Hex(plain);
+  if(algo==='ntlm')return ntlmHex(plain);
+  if(algo==='crc32')return crc32Hex(plain);
+  if(!subtleAvailable)throw new Error('이 브라우저에서는 SHA 계산을 사용할 수 없습니다.');
+  const name={sha1:'SHA-1',sha256:'SHA-256',sha384:'SHA-384',sha512:'SHA-512'}[algo];
+  const digest=await window.crypto.subtle.digest(name,new TextEncoder().encode(plain));
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+}
+// rainbow.tsx의 사전 생성 규칙과 문자셋을 그대로 이식합니다.
+const BASE_WORDS = [
+  'password', 'passw0rd', 'p@ssword', 'p@ssw0rd', '123456', '12345678', '123456789', '1234567890', '1234', '12345',
+  '111111', '000000', '654321', '121212', '112233', '1122334455',
+  'qwerty', 'qwerty123', 'qwertyuiop', 'qazwsx', 'asdfgh', 'asdf1234', 'zxcvbn', 'zxcvbnm', '1qaz2wsx', 'zaq1zaq1', '1q2w3e4r', '1q2w3e', 'q1w2e3r4',
+  'admin', 'administrator', 'root', 'toor', 'letmein', 'letmein123', 'welcome', 'welcome1', 'monkey', 'dragon', 'master', 'iloveyou',
+  'football', 'baseball', 'basketball', 'soccer', 'superman', 'batman', 'trustno1', 'sunshine', 'starwars', 'skywalker',
+  'princess', 'login', 'shadow', 'michael', 'jennifer', 'jordan', 'hunter', 'hunter2', 'freedom', 'ranger', 'buster',
+  'whatever', 'summer', 'winter', 'spring', 'autumn', 'flower', 'orange', 'purple', 'ninja', 'pepper', 'cookie', 'chocolate',
+  'abc123', 'abcd1234', 'a1b2c3', 'q1w2e3', 'changeme', 'default', 'guest', 'guest123', 'test', 'test123', 'test1234',
+  'user', 'user123', 'demo', 'demo123', 'temp', 'temp123', 'secret', 'secret123', 'access', 'system', 'server', 'internet',
+  'company', 'office', 'project', 'manager', 'service', 'support', 'backup', 'security', 'password1', 'password123',
+  'love', 'lovely', 'money', 'family', 'friend', 'friends', 'happy', 'happiness', 'lucky', 'angel', 'baby', 'sweetie',
+  'korea', 'seoul', 'busan', 'incheon', 'apple', 'google', 'naver', 'kakao', 'samsung', 'hyundai', 'lg', 'sk',
+  'ilovegod', 'jesus', 'christ', 'buddha', 'peace', 'liberty', 'freedom1', 'america', 'newyork', 'london', 'tokyo',
+  'iloveyou1', 'lovers', 'forever', 'always', 'destiny', 'phoenix', 'dragon1', 'tiger', 'eagle', 'wolf', 'lion',
+  'computer', 'internet1', 'network', 'firewall', 'gateway', 'router', 'database', 'website', 'developer', 'engineer',
+  'smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis', 'kim', 'lee', 'park', 'choi', 'jung',
+]
+const NUMERIC_SUFFIXES = ['', '1', '01', '007', '12', '21', '22', '23', '69', '77', '88', '99', '00', '0000', '123', '1234', '12345', '123456']
+const YEAR_SUFFIXES = Array.from({ length: 2031 - 1980 }, (_, i) => String(1980 + i))
+const SPECIAL_SUFFIXES = ['!', '!!', '@', '#', '$', '*', '1!', '!1', '#1', '@1']
+const SUFFIXES = [...NUMERIC_SUFFIXES, ...YEAR_SUFFIXES, ...SPECIAL_SUFFIXES]
+/** 흔한 리트스피크(leetspeak) 치환 — 모든 조합을 다 만들면 사전이 아니라 무차별대입이 돼버리니
+ * 실사용 빈도가 높은 치환 한 세트만 적용한다. */
+function leetVariant(word) {
+  return word.replace(/a/g, '@').replace(/e/g, '3').replace(/i/g, '1').replace(/o/g, '0').replace(/s/g, '$')
+}
+const WORDLIST = (() => {
+  const out = new Set()
+  for (const w of BASE_WORDS) {
+    const cap = w.charAt(0).toUpperCase() + w.slice(1)
+    const leet = leetVariant(w)
+    for (const base of [w, cap, w.toUpperCase(), leet]) {
+      out.add(base)
+      for (const suf of SUFFIXES) out.add(base + suf)
+    }
+  }
+  return [...out]
+})()
+
+const CHARSET_PRESETS = [
+  { id: 'numeric', label: '숫자(0-9)', chars: '0123456789' },
+  { id: 'lower', label: '영문 소문자', chars: 'abcdefghijklmnopqrstuvwxyz' },
+  { id: 'upper', label: '영문 대문자', chars: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' },
+  { id: 'lowerNum', label: '소문자+숫자', chars: 'abcdefghijklmnopqrstuvwxyz0123456789' },
+  { id: 'alpha', label: '영문 대소문자', chars: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ' },
+  { id: 'alphaNum', label: '영문 대소문자+숫자', chars: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' },
+  { id: 'alphaNumSymbol', label: '영문+숫자+기호', chars: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:,.<>?/' },
+  { id: 'custom', label: '직접 입력', chars: '' },
+]
+
+const CHUNK_SIZE=400;
+const MAX_SAFE_KEYSPACE=Number.MAX_SAFE_INTEGER;
+const PRACTICAL_KEYSPACE=100000000;
+const $=id=>document.getElementById(id);
+const fmt=n=>n.toLocaleString('ko-KR');
+const pause=()=>new Promise(resolve=>setTimeout(resolve,0));
+let runId=0, running=false, activeMode='dictionary', generated={};
+function setStatus(message){$('status').textContent=message}
+function setRunning(value){running=value;document.querySelectorAll('.search-input,[data-mode],#dictionary-start,#brute-start,#batch-dictionary,#batch-brute').forEach(el=>el.disabled=value);if(!value)$('pin-digits').disabled=!$('include-pins').checked;document.querySelectorAll('[data-stop]').forEach(el=>el.hidden=!value)}
+function clearResults(){const box=$('results');box.replaceChildren();$('progress').hidden=true}
+function textElement(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el}
+function addResult(title,detail,value,kind){
+  const card=document.createElement('article');card.className='card result '+(kind||'');
+  card.appendChild(textElement('h2',title));card.appendChild(textElement('p',detail,'break'));
+  if(value!==undefined){const pre=textElement('pre',value);card.appendChild(pre);const copy=textElement('button','결과 복사');copy.type='button';copy.addEventListener('click',()=>copyText(value));card.appendChild(copy)}
+  $('results').appendChild(card);
+}
+async function copyText(value){try{if(!navigator.clipboard)throw new Error('clipboard unavailable');await navigator.clipboard.writeText(value);setStatus('복사했습니다.')}catch{setStatus('클립보드 권한이 없어 복사하지 못했습니다. 결과를 직접 선택해 복사하세요.')}}
+function updateProgress(tried,total,startedAt,prefix=''){
+  const pct=total?Math.min(tried/total*100,100):0,secs=Math.max((performance.now()-startedAt)/1000,.001),rate=tried/secs,eta=rate?(total-tried)/rate:Infinity;
+  $('progress').hidden=false;$('progress-fill').style.width=pct.toFixed(2)+'%';
+  const etaText=Number.isFinite(eta)?eta<60?Math.ceil(eta)+'초':eta<3600?(eta/60).toFixed(1)+'분':eta<86400?(eta/3600).toFixed(1)+'시간':(eta/86400).toFixed(1)+'일':'계산 중';
+  $('progress-text').textContent=prefix+fmt(tried)+' / '+fmt(total)+' ('+pct.toFixed(2)+'%) · 초당 '+fmt(Math.round(rate))+'개 · 남은 시간 약 '+etaText;
+}
+function detect(hash,selected){
+  const value=hash.trim(),expected={crc32:8,md5:32,ntlm:32,sha1:40,sha256:64,sha384:96,sha512:128};
+  if(!value)return {algos:[],error:'해시값을 입력하세요.'};
+  if(!/^[0-9a-fA-F]+$/.test(value))return {algos:[],error:'raw 16진수 해시만 지원합니다. $ 접두사·솔트 포맷은 대상이 아닙니다.'};
+  if(selected){if(value.length!==expected[selected])return {algos:[],error:ALGO_LABEL[selected]+' 해시는 '+expected[selected]+'자리 16진수여야 합니다.'};if(!subtleAvailable&&SHA_ALGOS.has(selected))return {algos:[],error:'이 브라우저에서는 SHA 계산을 사용할 수 없습니다.'};return {algos:[selected]}}
+  const algos=(HASH_LENGTH_TO_ALGOS[value.length]||[]).filter(a=>subtleAvailable||!SHA_ALGOS.has(a));
+  return algos.length?{algos}:{algos:[],error:'길이('+value.length+'자)로 지원 알고리즘을 판별할 수 없습니다.'};
+}
+function showDetection(mode){const hash=$(mode+'-hash').value.trim(),selected=$(mode+'-algo').value,el=$(mode+'-detect');if(!hash){el.textContent='';return}const result=detect(hash,selected);el.textContent=result.error||'후보 알고리즘: '+result.algos.map(a=>ALGO_LABEL[a]).join(' / ')+(result.algos.length>1?' · 자동판별 시 모두 시도합니다.':'')}
+function charsetFor(mode){const preset=$(mode+'-preset').value,raw=preset==='custom'?$(mode+'-custom').value:CHARSET_PRESETS.find(p=>p.id===preset).chars;return [...new Set(raw.split(''))].join('')}
+function keyspaceFor(mode){
+  const charset=charsetFor(mode),min=Number($(mode+'-min').value),max=Number($(mode+'-max').value);
+  if(!charset)return {error:'문자셋에 문자를 한 개 이상 입력하세요.'};
+  if(!Number.isInteger(min)||!Number.isInteger(max)||min<1||max>12||min>max)return {error:'길이는 1~12 사이에서 최소 ≤ 최대가 되게 입력하세요.'};
+  let total=0;const lengths=[];
+  for(let length=min;length<=max;length++){const size=charset.length**length;total+=size;if(!Number.isSafeInteger(size)||!Number.isSafeInteger(total)||size>MAX_SAFE_KEYSPACE)return {error:'후보 수가 정수 인덱스 한계를 넘습니다. 문자셋이나 길이를 줄이세요.'};lengths.push({length,size})}
+  if(total>PRACTICAL_KEYSPACE)return {error:'후보가 '+fmt(total)+'개로 너무 많습니다. 이 단일 탭 도구는 1억 개를 상한으로 두므로 범위를 줄이세요.'};
+  return {charset,lengths,total};
+}
+function showSpace(mode){const result=keyspaceFor(mode);$(mode+'-space').textContent=result.error||'문자셋 '+[...result.charset].length+'종 · 해시당 총 후보 '+fmt(result.total)+'개'}
+function indexToString(index,charset,length){const base=charset.length,chars=new Array(length);let n=index;for(let pos=length-1;pos>=0;pos--){chars[pos]=charset[n%base];n=Math.floor(n/base)}return chars.join('')}
+function* dictionaryCandidates(includePins,pinDigits){for(const word of WORDLIST)yield word;if(includePins){for(let length=4;length<=pinDigits;length++){const max=10**length;for(let i=0;i<max;i++)yield String(i).padStart(length,'0')}}}
+function dictionaryTotal(includePins,pinDigits){let total=WORDLIST.length;if(includePins)for(let length=4;length<=pinDigits;length++)total+=10**length;return total}
+function* bruteCandidates(space){for(const {length,size} of space.lengths)for(let i=0;i<size;i++)yield indexToString(i,space.charset,length)}
+async function search(hash,algos,kind,space,pins,pinDigits,myRun,prefix=''){
+  const total=kind==='dictionary'?dictionaryTotal(pins,pinDigits):space.total;
+  const candidates=kind==='dictionary'?dictionaryCandidates(pins,pinDigits):bruteCandidates(space);
+  const startedAt=performance.now();let tried=0;updateProgress(0,total,startedAt,prefix);
+  for(const candidate of candidates){
+    if(myRun!==runId)return {stopped:true,tried};
+    for(const algo of algos){const digest=await hashWith(algo,candidate);if(myRun!==runId)return {stopped:true,tried};if(digest===hash){tried++;updateProgress(tried,total,startedAt,prefix);return {candidate,algo,tried}}}
+    tried++;
+    if(tried%CHUNK_SIZE===0){updateProgress(tried,total,startedAt,prefix);await pause()}
+  }
+  updateProgress(tried,total,startedAt,prefix);return {tried};
+}
+async function singleStart(kind){
+  if(running)return;const mode=kind==='dictionary'?'dictionary':'brute';const hash=$(mode+'-hash').value.trim().toLowerCase();const target=detect(hash,$(mode+'-algo').value);if(target.error){setStatus(target.error);return}
+  const space=kind==='brute'?keyspaceFor('brute'):null;if(space&&space.error){setStatus(space.error);return}
+  const pins=$('include-pins').checked,pinDigits=Number($('pin-digits').value),myRun=++runId;clearResults();setRunning(true);setStatus('검색 중…');
+  try{const result=await search(hash,target.algos,kind,space,pins,pinDigits,myRun);if(myRun!==runId)return;
+    if(result.candidate!==undefined){addResult('크랙 성공',ALGO_LABEL[result.algo]+' · '+fmt(result.tried)+'번째 후보에서 일치',result.candidate,'found');setStatus('일치하는 원본값을 찾았습니다.')}
+    else{addResult('못 찾음',fmt(result.tried)+'개 후보 안에서 일치하는 값을 찾지 못했습니다. 사전·문자셋·길이 범위 밖이거나 솔트가 적용됐을 수 있습니다.',undefined,'not-found');setStatus('검색이 끝났습니다.')}
+  }catch(error){if(myRun===runId)setStatus('실행 실패: '+String(error.message||error))}finally{if(myRun===runId)setRunning(false)}
+}
+async function batchStart(kind){
+  if(running)return;const hashes=$('batch-hashes').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!hashes.length){setStatus('해시를 한 줄에 하나씩 입력하세요.');return}
+  const space=kind==='brute'?keyspaceFor('batch'):null;if(space&&space.error){setStatus(space.error);return}
+  const selected=$('batch-algo').value,myRun=++runId;clearResults();setRunning(true);
+  try{for(let i=0;i<hashes.length;i++){
+    if(myRun!==runId)return;const hash=hashes[i],target=detect(hash,selected),prefix=(i+1)+' / '+hashes.length+'번째 해시 · ';
+    setStatus(prefix+'처리 중…');
+    if(target.error){addResult((i+1)+'. 못 찾음',hash+' — '+target.error,undefined,'not-found');await pause();continue}
+    const result=await search(hash.toLowerCase(),target.algos,kind,space,false,4,myRun,prefix);if(myRun!==runId)return;
+    if(result.candidate!==undefined)addResult((i+1)+'. 크랙 성공',hash+' — '+ALGO_LABEL[result.algo]+' · '+fmt(result.tried)+'번째 후보',result.candidate,'found');
+    else addResult((i+1)+'. 못 찾음',hash+' — 지정한 검색 범위에서 일치하는 값을 찾지 못했습니다.',undefined,'not-found');
+    await pause();
+  }if(myRun===runId)setStatus('전체 배치 처리가 끝났습니다.')}
+  catch(error){if(myRun===runId)setStatus('실행 실패: '+String(error.message||error))}finally{if(myRun===runId)setRunning(false)}
+}
+function stop(){if(!running)return;runId++;setRunning(false);setStatus('중단했습니다. 완료된 결과는 유지됩니다.')}
+function selectMode(mode){if(running)return;activeMode=mode;document.querySelectorAll('.mode').forEach(el=>el.hidden=el.id!=='mode-'+mode);document.querySelectorAll('[data-mode]').forEach(el=>el.setAttribute('aria-selected',String(el.dataset.mode===mode)));clearResults();$('results').appendChild(textElement('p','아직 결과가 없습니다.','empty'));setStatus('입력 대기 중')}
+function renderHashes(){const box=$('hash-rows');box.replaceChildren();for(const algo of ALL_ALGOS){if(!subtleAvailable&&SHA_ALGOS.has(algo))continue;const row=document.createElement('div');row.className='hash-row';row.dataset.algo=algo;const label=textElement('label',ALGO_LABEL[algo]);const input=document.createElement('input');input.type='text';input.readOnly=true;input.setAttribute('aria-label',ALGO_LABEL[algo]+' 해시');input.addEventListener('focus',()=>input.select());const copy=textElement('button','결과 복사');copy.type='button';copy.addEventListener('click',()=>copyText(input.value));row.append(label,input,copy);box.appendChild(row)}}
+function compareHashes(){const target=$('compare').value.trim().toLowerCase(),matches=Object.entries(generated).filter(([,hash])=>hash===target).map(([algo])=>ALGO_LABEL[algo]);$('compare-result').textContent=target?(matches.length?'일치: '+matches.join(' / '):'일치하는 알고리즘 없음'):'';document.querySelectorAll('.hash-row').forEach(row=>row.classList.toggle('matched',!!target&&generated[row.dataset.algo]===target))}
+let generationId=0;
+async function generate(){const myId=++generationId,plain=$('plain').value;generated={md5:md5Hex(plain),ntlm:ntlmHex(plain),crc32:crc32Hex(plain)};for(const [algo,hash] of Object.entries(generated))document.querySelector('.hash-row[data-algo="'+algo+'"]').querySelector('input').value=hash;
+  for(const algo of ['sha1','sha256','sha384','sha512']){const row=document.querySelector('.hash-row[data-algo="'+algo+'"]');if(row)row.querySelector('input').value='계산 중…'}compareHashes();
+  if(subtleAvailable)try{for(const algo of ['sha1','sha256','sha384','sha512']){const hash=await hashWith(algo,plain);if(myId!==generationId)return;generated[algo]=hash;document.querySelector('.hash-row[data-algo="'+algo+'"]').querySelector('input').value=hash;compareHashes()}}catch(error){if(myId===generationId)setStatus('SHA 계산 실패: '+String(error.message||error))}
+}
+function init(){
+  $('sha-note').hidden=subtleAvailable;$('word-count').textContent=fmt(WORDLIST.length);
+  for(const select of document.querySelectorAll('.algo-select'))for(const algo of ALL_ALGOS){const option=new Option(ALGO_LABEL[algo],algo);option.disabled=!subtleAvailable&&SHA_ALGOS.has(algo);select.add(option)}
+  for(const select of document.querySelectorAll('.charset-preset'))for(const preset of CHARSET_PRESETS)select.add(new Option(preset.label,preset.id));
+  for(const mode of ['brute','batch']){$(mode+'-preset').value='lowerNum';const update=()=>{$(mode+'-custom').hidden=$(mode+'-preset').value!=='custom';showSpace(mode)};for(const id of ['preset','custom','min','max'])$(mode+'-'+id).addEventListener('input',update);update()}
+  for(const mode of ['dictionary','brute']){for(const id of ['hash','algo'])$(mode+'-'+id).addEventListener('input',()=>showDetection(mode))}
+  $('include-pins').addEventListener('change',()=>$('pin-digits').disabled=!$('include-pins').checked);
+  document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>selectMode(button.dataset.mode)));
+  document.querySelectorAll('[data-stop]').forEach(button=>button.addEventListener('click',stop));
+  $('dictionary-start').addEventListener('click',()=>void singleStart('dictionary'));$('brute-start').addEventListener('click',()=>void singleStart('brute'));
+  $('batch-dictionary').addEventListener('click',()=>void batchStart('dictionary'));$('batch-brute').addEventListener('click',()=>void batchStart('brute'));
+  $('plain').addEventListener('input',()=>void generate());$('compare').addEventListener('input',compareHashes);renderHashes();void generate();
+}
+init();
+</script></body></html>
