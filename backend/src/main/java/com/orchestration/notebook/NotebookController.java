@@ -69,7 +69,7 @@ public class NotebookController {
     NotebookEntry entry = entry(id);
     requireOwner(caller, entry);
     String contentType = file.getContentType();
-    if (contentType == null || !contentType.startsWith("image/") || contentType.length() > 100 || file.getSize() > MAX_IMAGE_BYTES || file.isEmpty())
+    if (!List.of("image/png", "image/jpeg", "image/gif", "image/webp").contains(contentType) || file.getSize() > MAX_IMAGE_BYTES || file.isEmpty())
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "10MB 이하 이미지 파일만 업로드할 수 있습니다.");
     NotebookImage image = notebook.saveImage(id, entry.getOwnerId(), file.getOriginalFilename(), contentType, file.getBytes());
     return new ImageResponse(image.getId().toString(), "/api/notebook/images/" + image.getId());

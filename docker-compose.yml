@@ -45,6 +45,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-orchestrator}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
       ORIGINALS_PATH: /workspace/inbox/archive_ochestration
+      NOTEBOOK_IMAGES_PATH: /workspace/inbox/notebook-images
       OBSIDIAN_PATH: /workspace/obsidian
       TRADING_STATE_PATH: /workspace/trading-state/funding_arb_state.json
       KR_TRADING_STATE_PATH: /workspace/trading-state-kr/kr_swing_state.json
@@ -66,6 +67,7 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./inbox/archive_ochestration:/workspace/inbox/archive_ochestration
+      - ./inbox/notebook-images:/workspace/inbox/notebook-images
       - ./obsidian:/workspace/obsidian
       - trading_paper_state:/workspace/trading-state:ro
       - trading_kr_swing_state:/workspace/trading-state-kr:ro

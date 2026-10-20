@@ -51,9 +51,7 @@ public class NotebookService {
   }
   public NotebookImage saveImage(UUID entryId, UUID ownerId, String originalFilename, String contentType, byte[] bytes) {
     UUID id = UUID.randomUUID();
-    String safeName = originalFilename == null ? "image" : originalFilename.replace('\\', '/').replaceAll("^.*/", "").replaceAll("[^\\p{L}\\p{N}._-]", "_");
-    if (safeName.isBlank() || safeName.equals(".") || safeName.equals("..")) safeName = "image";
-    if (safeName.length() > 200) safeName = safeName.substring(safeName.length() - 200);
+    String safeName = sanitizeFilename(originalFilename);
     String filename = id + "_" + safeName;
     Path path = imagesRoot.resolve(filename);
     try {
@@ -72,4 +70,11 @@ public class NotebookService {
     return users.findAll().stream().filter(user -> !callerId.equals(user.getId())).toList();
   }
   private Path imagePath(NotebookImage image) { return imagesRoot.resolve(image.getStoredFilename()); }
+
+  static String sanitizeFilename(String originalFilename) {
+    String safeName = originalFilename == null ? "image" : originalFilename.replace('\\', '/').replaceAll("^.*/", "").replaceAll("[^\\p{L}\\p{N}._-]", "_");
+    if (safeName.isBlank() || safeName.equals(".") || safeName.equals("..")) safeName = "image";
+    if (safeName.length() > 200) safeName = safeName.substring(safeName.length() - 200);
+    return safeName;
+  }
 }

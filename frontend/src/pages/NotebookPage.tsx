@@ -35,6 +35,7 @@ export function NotebookPage() {
   const pendingRef = useRef<Entry | null>(null)
   const timerRef = useRef<number | null>(null)
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve())
+  const savingRef = useRef(0)
   const loadVersionRef = useRef(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const readOnly = isAdmin && otherMode && !!ownerId
@@ -46,6 +47,7 @@ export function NotebookPage() {
     if (!draft) return saveQueueRef.current
     pendingRef.current = null
     setSaveState('saving')
+    savingRef.current += 1
     const targetVersion = loadVersionRef.current
     const job = saveQueueRef.current.catch(() => undefined).then(() => api<Entry>(`/entries/${draft.id}`, json('PATCH', {
       title: draft.title, status: draft.status, content: draft.content,
@@ -54,12 +56,22 @@ export function NotebookPage() {
     void job.then(saved => {
       if (targetVersion === loadVersionRef.current) setEntries(previous => previous.map(item => item.id === saved.id ? saved : item).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
       if (!pendingRef.current && activeRef.current?.id === saved.id && activeRef.current.title === saved.title && activeRef.current.status === saved.status && activeRef.current.content === saved.content) setSaveState('saved')
-    }).catch(() => { if (activeRef.current?.id === draft.id) { pendingRef.current = activeRef.current; setSaveState('error') } })
+    }).catch(() => { if (activeRef.current?.id === draft.id) { pendingRef.current = activeRef.current; setSaveState('error'); setError('기록을 저장하지 못했습니다.') } })
+      .finally(() => { savingRef.current -= 1 })
     return job
   }
   const flushRef = useRef(flush)
   flushRef.current = flush
   useEffect(() => () => { void flushRef.current() }, [])
+  useEffect(() => {
+    const warnUnsaved = (event: BeforeUnloadEvent) => {
+      if (!pendingRef.current && savingRef.current === 0) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnUnsaved)
+    return () => window.removeEventListener('beforeunload', warnUnsaved)
+  }, [])
 
   const edit = (changes: Partial<Entry>) => {
     if (readOnly || !activeRef.current) return
@@ -94,9 +106,9 @@ export function NotebookPage() {
       .finally(() => { if (version === loadVersionRef.current) setLoading(false) })
   }, [isAdmin, otherMode, ownerId, readOnly])
 
-  const openEntry = (entry: Entry) => {
+  const openEntry = async (entry: Entry) => {
     if (activeRef.current?.id === entry.id) return
-    void flush()
+    try { await flush() } catch { setError('기록을 저장하지 못했습니다. 다시 저장한 뒤 이동하세요.'); return }
     const current = entries.find(item => item.id === entry.id) ?? entry
     activeRef.current = current; setActive(current); setSaveState('idle'); setError('')
   }
@@ -105,7 +117,7 @@ export function NotebookPage() {
     const title = window.prompt('새 기록 제목을 입력하세요')?.trim()
     if (!title) return
     if (title.length > 200) { setError('제목은 200자 이하여야 합니다.'); return }
-    void flush()
+    try { await flush() } catch { setError('기록을 저장하지 못했습니다. 다시 저장한 뒤 새 기록을 만드세요.'); return }
     try {
       const created = await api<Entry>('/entries', json('POST', { title, status: 'GOOD' }))
       setEntries(previous => [created, ...previous]); activeRef.current = created; setActive(created); setSaveState('saved'); setError('')
@@ -148,9 +160,9 @@ export function NotebookPage() {
 
   return <div className="page notebook-page">
     <header className="notebook-header"><div><p className="eyebrow">DIAGNOSIS NOTEBOOK</p><h1>진단 기록판</h1><p className="muted">마크다운으로 진단 결과를 기록하고 스크린샷을 붙여넣으세요.</p></div>
-      {isAdmin && <label className="notebook-other"><input type="checkbox" checked={otherMode} onChange={event => { void flush(); setOtherMode(event.target.checked); setOwnerId('') }}/> 다른 사용자 기록 보기</label>}
+      {isAdmin && <label className="notebook-other"><input type="checkbox" checked={otherMode} onChange={event => { const checked = event.target.checked; void flush().then(() => { setOtherMode(checked); setOwnerId('') }).catch(() => setError('기록을 저장하지 못했습니다. 다시 저장한 뒤 이동하세요.')) }}/> 다른 사용자 기록 보기</label>}
     </header>
-    {isAdmin && otherMode && <div className="notebook-owner"><label htmlFor="notebook-owner-select">사용자 선택</label><select id="notebook-owner-select" value={ownerId} onChange={event => { void flush(); setOwnerId(event.target.value) }}><option value="">사용자를 선택하세요</option>{owners.map(owner => <option key={owner.id} value={owner.id}>{owner.displayName} ({owner.email})</option>)}</select></div>}
+    {isAdmin && otherMode && <div className="notebook-owner"><label htmlFor="notebook-owner-select">사용자 선택</label><select id="notebook-owner-select" value={ownerId} onChange={event => { const nextOwnerId = event.target.value; void flush().then(() => setOwnerId(nextOwnerId)).catch(() => setError('기록을 저장하지 못했습니다. 다시 저장한 뒤 이동하세요.')) }}><option value="">사용자를 선택하세요</option>{owners.map(owner => <option key={owner.id} value={owner.id}>{owner.displayName} ({owner.email})</option>)}</select></div>}
     {readOnly && <div className="notebook-readonly">{selectedOwner?.displayName ?? '선택한 사용자'}님의 기록판을 읽기 전용으로 보는 중</div>}
     {error && <p className="form-error" role="alert">{error} {saveState === 'error' && <button onClick={() => void flush()}>다시 저장</button>}</p>}
     <div className="notebook-layout">
