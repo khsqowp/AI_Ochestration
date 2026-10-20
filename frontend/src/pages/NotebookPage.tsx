@@ -44,6 +44,7 @@ export function NotebookPage() {
   const [owners, setOwners] = useState<Owner[]>([])
   const [ownerId, setOwnerId] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
+  const [statusFilter, setStatusFilter] = useState<Status | 'ALL'>('ALL')
   const [active, setActive] = useState<Entry | null>(null)
   const [expanded, setExpanded] = useState<string[]>([])
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -58,6 +59,8 @@ export function NotebookPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const readOnly = isAdmin && otherMode && !!ownerId
   const selectedOwner = owners.find(owner => owner.id === ownerId)
+  const statusCounts = (Object.keys(statusLabels) as Status[]).reduce((counts, status) => ({ ...counts, [status]: entries.filter(entry => entry.status === status).length }), {} as Record<Status, number>)
+  const visibleEntries = statusFilter === 'ALL' ? entries : entries.filter(entry => entry.status === statusFilter)
 
   const flush = () => {
     if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null }
@@ -199,8 +202,8 @@ export function NotebookPage() {
     {error && <p className="form-error" role="alert">{error} {saveState === 'error' && <button onClick={() => void flush()}>다시 저장</button>}</p>}
     <div className="notebook-layout">
       <aside className="notebook-sidebar"><div className="notebook-sidebar-head"><strong>기록 목록 <span>{entries.length}</span></strong>{!readOnly && !otherMode && <button className="notebook-add" onClick={() => void create()}>+ 새 기록</button>}</div>
-        {loading ? <p className="empty-state">불러오는 중…</p> : entries.length === 0 ? <p className="empty-state">기록이 없습니다.</p> : entries.map(entry => <div className={`notebook-list-item ${active?.id === entry.id ? 'active' : ''}`} key={entry.id}>
-          <div className="notebook-list-row"><button className="notebook-open" onClick={() => openEntry(entry)}><strong>{entry.title}</strong><small>{timestamp(entry.updatedAt)}</small></button><button className="notebook-expand" aria-label={`${entry.title} 미리보기 ${expanded.includes(entry.id) ? '접기' : '펼치기'}`} aria-expanded={expanded.includes(entry.id)} onClick={() => setExpanded(previous => previous.includes(entry.id) ? previous.filter(id => id !== entry.id) : [...previous, entry.id])}>{expanded.includes(entry.id) ? '▴' : '▾'}</button>{!readOnly && !otherMode && <button className="notebook-delete" aria-label={`${entry.title} 삭제`} onClick={() => void remove(entry)}>×</button>}</div>
+        {<div className="notebook-status-filters" role="group" aria-label="상태별 기록 필터"><button className={statusFilter === 'ALL' ? 'selected' : ''} aria-pressed={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')}>전체 <b>{entries.length}</b></button>{(Object.keys(statusLabels) as Status[]).map(status => <button key={status} className={`${status.toLowerCase()} ${statusFilter === status ? 'selected' : ''}`} aria-pressed={statusFilter === status} onClick={() => setStatusFilter(status)}>{statusLabels[status]} <b>{statusCounts[status]}</b></button>)}</div>}{loading ? <p className="empty-state">불러오는 중…</p> : visibleEntries.length === 0 ? <p className="empty-state">{entries.length ? '해당 상태의 기록이 없습니다.' : '기록이 없습니다.'}</p> : visibleEntries.map(entry => <div className={`notebook-list-item ${active?.id === entry.id ? 'active' : ''}`} key={entry.id}>
+          <div className="notebook-list-row"><button className="notebook-open" onClick={() => openEntry(entry)}><span className="notebook-open-title"><span className={`notebook-item-status ${entry.status.toLowerCase()}`} aria-label={`상태: ${statusLabels[entry.status]}`} title={statusLabels[entry.status]}>{statusLabels[entry.status]}</span><strong>{entry.title}</strong></span><small>{timestamp(entry.updatedAt)}</small></button><button className="notebook-expand" aria-label={`${entry.title} 미리보기 ${expanded.includes(entry.id) ? '접기' : '펼치기'}`} aria-expanded={expanded.includes(entry.id)} onClick={() => setExpanded(previous => previous.includes(entry.id) ? previous.filter(id => id !== entry.id) : [...previous, entry.id])}>{expanded.includes(entry.id) ? '▴' : '▾'}</button>{!readOnly && !otherMode && <button className="notebook-delete" aria-label={`${entry.title} 삭제`} onClick={() => void remove(entry)}>×</button>}</div>
           {expanded.includes(entry.id) && <p className="notebook-excerpt">{entry.content.trim().slice(0, 110) || '내용이 없습니다.'}</p>}</div>)}
       </aside>
       <main className="notebook-main">{active ? <><div className="notebook-editor-head"><input className="notebook-title" aria-label="기록 제목" value={active.title} maxLength={200} readOnly={readOnly} onChange={event => edit({ title: event.target.value })}/><span className="notebook-save">{readOnly ? '읽기 전용' : saveState === 'saving' ? '저장 중…' : saveState === 'saved' ? '방금 저장됨' : saveState === 'error' ? '저장 안 됨 - 재시도 필요' : saveState === 'pending' ? '저장 대기 중…' : ''}</span></div>
