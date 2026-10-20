@@ -31,7 +31,7 @@ function show(id,items,empty='발견된 항목 없음'){const el=$(id);el.textCo
 const ENDPOINT_RE = /(?:"|')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|')|https?:\/\/[^\s"'<>]+/g;
 const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi;
 const COMMENT_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
-const CRYPTO_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|\b(?:RSA|AES|DES|HMAC|crypt|decrypt|encrypt|private[_-]?key)\b|\bprivateKey\b/gi;
+const CRYPTO_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|\b(?:aes|des(?:-?ede3?)?|rc2|rc4|rc5|blowfish|camellia|aria|seed|idea|cast5|chacha20)-(?:128-|192-|256-)?(?:cbc|ecb|gcm|ctr|cfb\d*|ofb|ccm|xts|poly1305|ede3|ede|wrap)\b|\b(?:RSA|AES|DES|HMAC|crypt|decrypt|encrypt|private[_-]?key)\b|\bprivateKey\b/gi;
 const PHONE_RE = /(?<![\d-])\b(?:\d{3}-\d{4}-\d{4}|\d{2}-\d{3,4}-\d{4})\b(?![\d-])/g;
 const VERSION_RE = /(?<![\w.])\d+\.\d+\.\d+(?:-(?:beta|rc)(?:\.\d+)?)?\b(?!\.\d)/gi;
 const BASE64_RE = /[A-Za-z0-9+/]{24,}={0,2}/g;
