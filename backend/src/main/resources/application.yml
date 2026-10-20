@@ -53,6 +53,8 @@ app:
     originals-path: ${ORIGINALS_PATH:../inbox/archive_ochestration}
     obsidian-path: ${OBSIDIAN_PATH:../obsidian}
     scan-delay-ms: ${FILE_SCAN_DELAY_MS:30000}
+  notebook:
+    images-path: ${NOTEBOOK_IMAGES_PATH:../inbox/notebook-images}
   n8n:
     dispatch-enabled: ${N8N_DISPATCH_ENABLED:false}
     file-intake-webhook-url: ${N8N_FILE_INTAKE_WEBHOOK_URL:http://n8n:5678/webhook/file-intake}

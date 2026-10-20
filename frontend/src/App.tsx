@@ -18,6 +18,7 @@ import { FeedbackPage } from './pages/FeedbackPage'
 
 const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then(m => ({ default: m.DiagnosticsPage })))
 const DiagToolPage = lazy(() => import('./pages/DiagToolPage').then(m => ({ default: m.DiagToolPage })))
+const NotebookPage = lazy(() => import('./pages/NotebookPage').then(m => ({ default: m.NotebookPage })))
 const LocalLlmPage = lazy(() => import('./pages/LocalLlmPage').then(m => ({ default: m.LocalLlmPage })))
 const InvestPage = lazy(() => import('./pages/InvestPage').then(m => ({ default: m.InvestPage })))
 const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
@@ -46,6 +47,7 @@ export function App() {
               <Route path="calendar" element={<CalendarPage/>}/>
               <Route path="diag" element={<DiagnosticsPage/>}/>
               <Route path="diag/:toolId" element={<DiagToolPage/>}/>
+              <Route path="notebook" element={<NotebookPage/>}/>
               <Route path="llm" element={<LocalLlmPage/>}/>
               <Route path="feedback" element={<FeedbackPage/>}/>
               <Route element={<RequireAdmin/>}>
