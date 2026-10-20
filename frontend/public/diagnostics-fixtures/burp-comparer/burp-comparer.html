@@ -198,24 +198,18 @@
     return out;
   }
 
-  function renderSide(target, ops, side) {
-    const content = document.createDocumentFragment();
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderSide(ops, side) {
+    let html = '';
     for (const op of ops) {
-      if (op.type === 'equal') { content.append(document.createTextNode(op.a)); continue; }
-      if ((side === 'a' && op.type === 'delete') || (side === 'b' && op.type === 'insert')) {
-        const mark = document.createElement('mark');
-        mark.className = op.label;
-        mark.textContent = side === 'a' ? op.a : op.b;
-        content.append(mark);
-      }
+      if (op.type === 'equal') { html += esc(op.a); continue; }
+      if (side === 'a' && (op.type === 'delete')) html += `<mark class="${op.label}">${esc(op.a)}</mark>`;
+      if (side === 'b' && (op.type === 'insert')) html += `<mark class="${op.label}">${esc(op.b)}</mark>`;
     }
-    if (!content.hasChildNodes()) {
-      const empty = document.createElement('span');
-      empty.className = 'empty';
-      empty.textContent = '내용 없음';
-      content.append(empty);
-    }
-    target.replaceChildren(content);
+    return html;
   }
 
   const MAX_COMBINED_TOKENS = 12000; // 겹치는 부분이 없는 병적인 입력에서도 1초 이내로 끝내기 위한 상한(실측 기준)
@@ -328,8 +322,8 @@
     requestAnimationFrame(() => setTimeout(() => {
       try {
         const ops = classify(diffTrimmed(tokA, tokB));
-        renderSide($('paneA'), ops, 'a');
-        renderSide($('paneB'), ops, 'b');
+        $('paneA').innerHTML = renderSide(ops, 'a') || '<span class="empty">내용 없음</span>';
+        $('paneB').innerHTML = renderSide(ops, 'b') || '<span class="empty">내용 없음</span>';
         let mod = 0, del = 0, add = 0;
         for (const op of ops) {
           if (op.type === 'delete' && op.label === 'mod') mod++;
