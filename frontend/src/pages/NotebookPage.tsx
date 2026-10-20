@@ -19,6 +19,24 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 const json = (method: string, body: object): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const timestamp = (value: string) => new Date(value).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 const statusLabels: Record<Status, string> = { GOOD: '양호', VULNERABLE: '취약', REMEDIATION_REQUIRED: '재조치요청' }
+const draftKey = (entry: Entry) => `notebook-draft:${entry.ownerId}:${entry.id}`
+const draftContent = (entry: Entry) => JSON.stringify({ title: entry.title, status: entry.status, content: entry.content })
+const hasDraft = (entry: Entry) => { try { return sessionStorage.getItem(draftKey(entry)) !== null } catch { return false } }
+const storeDraft = (entry: Entry) => { try { sessionStorage.setItem(draftKey(entry), draftContent(entry)) } catch { /* Storage may be disabled. */ } }
+const clearSavedDraft = (entry: Entry) => {
+  try { if (sessionStorage.getItem(draftKey(entry)) === draftContent(entry)) sessionStorage.removeItem(draftKey(entry)) } catch { /* Storage may be disabled. */ }
+}
+const restoreDraft = (entry: Entry): Entry => {
+  try {
+    const raw = sessionStorage.getItem(draftKey(entry))
+    if (!raw) return entry
+    const draft: unknown = JSON.parse(raw)
+    if (typeof draft !== 'object' || draft === null) return entry
+    const value = draft as Record<string, unknown>
+    if (typeof value.title !== 'string' || typeof value.content !== 'string' || !Object.keys(statusLabels).includes(String(value.status))) return entry
+    return { ...entry, title: value.title, status: value.status as Status, content: value.content }
+  } catch { return entry }
+}
 
 export function NotebookPage() {
   const { isAdmin } = useAppState()
@@ -54,6 +72,7 @@ export function NotebookPage() {
     })))
     saveQueueRef.current = job
     void job.then(saved => {
+      clearSavedDraft(saved)
       if (targetVersion === loadVersionRef.current) setEntries(previous => previous.map(item => item.id === saved.id ? saved : item).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
       if (!pendingRef.current && activeRef.current?.id === saved.id && activeRef.current.title === saved.title && activeRef.current.status === saved.status && activeRef.current.content === saved.content) setSaveState('saved')
     }).catch(() => { if (activeRef.current?.id === draft.id) { pendingRef.current = activeRef.current; setSaveState('error'); setError('기록을 저장하지 못했습니다.') } })
@@ -78,6 +97,7 @@ export function NotebookPage() {
     const updated = { ...activeRef.current, ...changes }
     activeRef.current = updated
     pendingRef.current = updated
+    storeDraft(updated)
     setActive(updated)
     setEntries(previous => previous.map(item => item.id === updated.id ? updated : item))
     setSaveState('pending')
@@ -99,9 +119,15 @@ export function NotebookPage() {
     const path = readOnly ? `/entries?ownerId=${encodeURIComponent(ownerId)}` : '/entries'
     void api<Entry[]>(path).then(items => {
       if (version !== loadVersionRef.current) return
-      setEntries(items)
-      const first = items[0] ?? null
+      const restored = items.map(restoreDraft)
+      setEntries(restored)
+      const first = restored.find((item, index) => item !== items[index]) ?? restored[0] ?? null
       activeRef.current = first; setActive(first)
+      if (first && hasDraft(first)) {
+        pendingRef.current = first
+        setSaveState('pending')
+        timerRef.current = window.setTimeout(() => { void flushRef.current() }, 1000)
+      }
     }).catch(() => { if (version === loadVersionRef.current) setError('기록 목록을 불러오지 못했습니다.') })
       .finally(() => { if (version === loadVersionRef.current) setLoading(false) })
   }, [isAdmin, otherMode, ownerId, readOnly])
@@ -111,6 +137,11 @@ export function NotebookPage() {
     try { await flush() } catch { setError('기록을 저장하지 못했습니다. 다시 저장한 뒤 이동하세요.'); return }
     const current = entries.find(item => item.id === entry.id) ?? entry
     activeRef.current = current; setActive(current); setSaveState('idle'); setError('')
+    if (hasDraft(current)) {
+      pendingRef.current = current
+      setSaveState('pending')
+      timerRef.current = window.setTimeout(() => { void flushRef.current() }, 1000)
+    }
   }
   const create = async () => {
     if (readOnly || otherMode) return
@@ -132,6 +163,7 @@ export function NotebookPage() {
     try {
       await saveQueueRef.current.catch(() => undefined)
       await api<void>(`/entries/${entry.id}`, { method: 'DELETE' })
+      try { sessionStorage.removeItem(draftKey(entry)) } catch { /* Storage may be disabled. */ }
       const remaining = entries.filter(item => item.id !== entry.id)
       setEntries(remaining)
       if (activeRef.current?.id === entry.id) { const next = remaining[0] ?? null; activeRef.current = next; setActive(next); setSaveState('idle') }
