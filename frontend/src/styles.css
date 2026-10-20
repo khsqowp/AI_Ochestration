@@ -443,9 +443,8 @@
 /* ── 페이지 컨테이너 ──────────────────────────────────────────── */
 .page { width:100%; margin-inline:auto; padding:18px clamp(14px, 2.2vw, 34px) 22px;
         display:flex; flex-direction:column; gap:16px; }
-/* 텍스트 위주 단일 패널은 읽기 좋은 폭으로 제한 */
+/* 텍스트 위주 토론 패널은 읽기 좋은 폭으로 제한 */
 .page.debate-page { max-width:1180px; }
-.page.calendar-page, .page.diag-page, .page.diag-tool-page { max-width:1440px; }
 .cheatsheet-quick-starts { display:flex; flex-direction:column; gap:10px; margin:2px 0 8px; padding:12px; border:1px solid #ded9f1; border-radius:12px; background:#faf9ff; }.cheatsheet-quick-starts > div { display:flex; flex-direction:column; gap:3px; }.cheatsheet-quick-starts > div > b { color:#403778; font-size:13px; }.cheatsheet-quick-starts > div > small { color:#716a85; font-size:11.5px; line-height:1.45; }.cheatsheet-quick-starts article { padding:11px; border:1px solid #e6e2f4; border-radius:9px; background:#fff; }.cheatsheet-quick-starts article header { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }.cheatsheet-quick-starts article strong { font-size:12.5px; color:#403b4a; }.cheatsheet-quick-starts article header p,.cheatsheet-quick-starts article > p { margin:3px 0 0; color:#6f6977; font-size:11.5px; line-height:1.5; }.cheatsheet-quick-starts article button { display:flex; align-items:center; gap:4px; border:0; border-radius:7px; padding:6px 8px; background:#eeecfc; color:#5d50ba; font-size:11px; font-weight:750; cursor:pointer; }.cheatsheet-quick-starts article pre { overflow-x:auto; margin:9px 0 7px; padding:9px; border-radius:7px; background:#27242d; color:#f7f4fb; font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }.cheatsheet-quick-starts .cheatsheet-caution { color:#8c5613; }.cheatsheet-options-title { margin:8px 0 2px; color:#514a61; font-size:13px; }
 
 /* ── 뷰포트 높이에 고정 — 스크롤은 각 구역 내부에서만 ─────────── */
@@ -1019,14 +1018,17 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .diag-route-tree-frame { width:100%; height:min(70vh, 720px); margin-top:12px; border:1px solid #eceaf0; border-radius:10px; background:#fff; }
 .diag-route-tool-title { display:flex; align-items:center; gap:7px; }
 
-/* 경로 트리 분석기 전용: file-explorer(28px) + explorer-preview(18px/22px) + diag-scanner-body(14px/16px)
-   패딩이 3겹으로 겹쳐서 iframe 가로폭이 필요 이상으로 좁아짐(안 그래도 내부 콘텐츠 자체가 넓은 도구라
-   더 두드러짐) -- 이 모달에서만 패딩을 줄이고 iframe 세로도 더 키운다. 다른 진단 모달(.diag-modal 공유)
-   레이아웃엔 영향 없게 .route-tree-modal 스코프로만 건다. */
+/* 경로 트리 및 Burp 도구의 중첩 패딩을 줄여 iframe 공간을 확보한다. */
 .route-tree-modal.file-explorer { padding:18px; }
 .route-tree-modal .explorer-preview { padding:8px 10px; }
 .route-tree-modal .diag-scanner-body { padding:10px 6px 14px; }
 .route-tree-modal .diag-route-tree-frame { height:min(80vh, 920px); }
+@media (min-width:1001px) {
+  .route-tree-modal .diag-route-tree-frame { flex:1 1 auto; height:auto; min-height:400px; }
+  .route-tree-modal .diag-scanner-list { min-height:0; }
+  .route-tree-modal .diag-scanner-card:has(.diag-route-tree-frame) { flex:1 1 auto; min-height:520px; display:flex; flex-direction:column; }
+  .route-tree-modal .diag-scanner-card:has(.diag-route-tree-frame) .diag-scanner-body { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+}
 .diag-escalate { margin-top:16px; border:1px solid #ded9f1; background:#faf9fc; border-radius:12px; padding:16px 18px; }
 .diag-escalate-title { margin:0 0 6px; font-size:13.5px; color:#4e43a5; }
 .diag-escalate-hint { margin:0 0 12px; font-size:11.8px; color:#6f6977; line-height:1.5; }
@@ -1036,10 +1038,9 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
   .diag-reading-verdict { justify-self:start; }
 }
 
-/* 4K 이상 초광폭 화면에서 도구 모달이 과도하게 넓어지지 않게 폭 상한만 둔다.
-   모바일~1700px 구간은 기존 inset:3vh 4vw 비율 스케일링을 그대로 따른다. */
+/* 넓은 화면에서도 도구 모달 폭을 뷰포트에 비례시킨다. */
 @media (min-width:1700px) {
-  .tool-modal, .diag-modal { inset:3vh auto 3vh auto; left:50%; transform:translateX(-50%); width:min(90vw, 1600px); }
+  .tool-modal, .diag-modal { inset:3vh auto 3vh auto; left:50%; transform:translateX(-50%); width:96vw; }
 }
 
 /* ══ 오마카세 (VS Code 스타일 큐레이션 뷰어) ═══════════════════════════════ */
@@ -1164,6 +1165,12 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .js-parser-empty { font-size:11px; color:#a29cae; padding:6px 10px; font-style:italic; }
 .js-parser-beautified strong { display:block; margin-bottom:6px; font-size:12px; color:#3f3b47; }
 .js-parser-highlighted-pre { margin:0; padding:10px; border:1px solid #eceaf0; border-radius:6px; background:#faf9fc; color:#514a61; font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; max-height:420px; overflow:auto; }
+@media (min-width:1001px) {
+  .js-parser-layout { flex:1 1 auto; }
+  .js-parser-input-section, .js-parser-beautified { min-height:0; }
+  .js-parser-beautified { flex:1 1 auto; display:flex; flex-direction:column; }
+  .js-parser-highlighted-pre { flex:1 1 auto; min-height:300px; max-height:none; }
+}
 .js-syntax-keyword { color:#5b4fc4; }
 .js-syntax-string { color:#1f6d45; }
 .js-syntax-number { color:#9a6418; }

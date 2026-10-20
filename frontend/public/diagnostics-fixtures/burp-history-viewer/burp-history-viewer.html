@@ -4,7 +4,7 @@
   :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
   * { box-sizing: border-box; }
   body { margin: 0; }
-  main { max-width: 1520px; margin: auto; padding: 28px 22px 60px; }
+  main { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; padding: 28px 22px 60px; }
   h1 { margin: 0 0 8px; font-size: 28px; }
   p { margin: 0 0 16px; color: #a8b8ce; line-height: 1.6; }
   .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
@@ -37,7 +37,7 @@
   .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .bc-pane { border: 1px solid #30425e; border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
   .bc-pane-head { background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; padding: 9px 12px; }
-  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; min-height: 400px; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
   .bc-pane-body mark.mod { background: rgba(60, 130, 246, .38); color: #eaf1ff; border-radius: 2px; }
   .bc-pane-body mark.del { background: rgba(231, 76, 60, .34); color: #ffecec; border-radius: 2px; }
   .bc-pane-body mark.add { background: rgba(46, 204, 113, .32); color: #eafff0; border-radius: 2px; }
@@ -46,7 +46,7 @@
   @media (max-width: 900px) { .side-grid, .result-grid { grid-template-columns: 1fr; } }
 
 input[type=search] { padding:9px; background:#101c2c; color:inherit; border:1px solid #405574; border-radius:8px; }
-.table-wrap { overflow:auto; } table { width:100%; border-collapse:collapse; font-size:13px; } th,td { padding:9px; border-bottom:1px solid #31425d; text-align:left; } th { white-space:nowrap; } td { overflow-wrap:anywhere; } tr.selected { background:#335275; } tbody tr:hover { background:#273c59; } .row-open { padding:4px 8px; } #drop.drag { outline:2px solid #5797ef; } h2 { font-size:18px; } pre { tab-size:2; } [hidden] { display:none !important; }
+.panel:has(> .table-wrap) { flex:1; display:flex; flex-direction:column; } .table-wrap { flex:1; min-height:260px; overflow:auto; } table { width:100%; border-collapse:collapse; font-size:13px; } th,td { padding:9px; border-bottom:1px solid #31425d; text-align:left; } th { white-space:nowrap; } td { overflow-wrap:anywhere; } tr.selected { background:#335275; } tbody tr:hover { background:#273c59; } .row-open { padding:4px 8px; } #drop.drag { outline:2px solid #5797ef; } h2 { font-size:18px; } pre { tab-size:2; } [hidden] { display:none !important; }
 </style></head><body><main>
 <h1>Burp History 뷰어</h1><p>Burp Suite의 HTTP history XML을 요청 한 줄씩 살펴보고 요청·응답 원문과 경로 목록을 확인한다. 서버로 전송하지 않음, 브라우저 안에서만 파싱 -- 이 HTML 파일 하나로 인터넷 없는 PC에서도 동작한다.</p>
 <section class="panel" id="drop"><button id="load" type="button">파일 불러오기</button><input type="file" id="file" accept=".xml,application/xml,text/xml" hidden><p>Proxy &gt; HTTP history에서 우클릭 &gt; Save items로 저장한 XML을 선택하거나 여기에 끌어 놓으세요.</p><span id="status" role="status" aria-live="polite"></span></section>

@@ -8,7 +8,7 @@
   :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
   * { box-sizing: border-box; }
   body { margin: 0; }
-  main { max-width: 1360px; margin: auto; padding: 28px 22px 60px; }
+  main { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; padding: 28px 22px 60px; }
   h1 { margin: 0 0 8px; font-size: 30px; }
   p { margin: 0 0 18px; color: #a8b8ce; line-height: 1.6; }
   .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
@@ -22,7 +22,8 @@
   .primary { background: #2f76cf; border-color: #5797ef; }
   #status, #summary { color: #aebed2; font-size: 14px; }
   #summary { margin: 15px 0; }
-  .table { overflow: auto; max-height: 70vh; border: 1px solid #30425e; border-radius: 9px; }
+  .table { flex: 1; min-height: 400px; overflow: auto; border: 1px solid #30425e; border-radius: 9px; }
+  .panel:has(> .table) { flex: 1; display: flex; flex-direction: column; }
   .head, .route { display: grid; grid-template-columns: minmax(300px, 1.5fr) minmax(180px, 1fr) 92px 74px; gap: 12px; align-items: center; min-width: 730px; }
   .head { position: sticky; top: 0; z-index: 2; padding: 11px 12px; background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; }
   .head span:last-child { text-align: right; }

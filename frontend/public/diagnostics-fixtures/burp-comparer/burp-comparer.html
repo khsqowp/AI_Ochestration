@@ -8,7 +8,7 @@
   :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
   * { box-sizing: border-box; }
   body { margin: 0; }
-  main { max-width: 1520px; margin: auto; padding: 28px 22px 60px; }
+  main { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; padding: 28px 22px 60px; }
   h1 { margin: 0 0 8px; font-size: 28px; }
   p { margin: 0 0 16px; color: #a8b8ce; line-height: 1.6; }
   .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
@@ -39,9 +39,11 @@
   .legend .add i { background: rgba(46, 204, 113, .45); border: 1px solid #6adf9a; }
   #summary { color: #aebed2; font-size: 13.5px; margin: 6px 0 14px; }
   .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  #resultPanel { flex: 1; display: flex; flex-direction: column; }
+  #resultPanel .result-grid { flex: 1; }
   .bc-pane { border: 1px solid #30425e; border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
   .bc-pane-head { background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; padding: 9px 12px; }
-  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; flex: 1; min-height: 400px; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
   .bc-pane-body mark.mod { background: rgba(60, 130, 246, .38); color: #eaf1ff; border-radius: 2px; }
   .bc-pane-body mark.del { background: rgba(231, 76, 60, .34); color: #ffecec; border-radius: 2px; }
   .bc-pane-body mark.add { background: rgba(46, 204, 113, .32); color: #eafff0; border-radius: 2px; }
@@ -196,18 +198,24 @@
     return out;
   }
 
-  function esc(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  function renderSide(ops, side) {
-    let html = '';
+  function renderSide(target, ops, side) {
+    const content = document.createDocumentFragment();
     for (const op of ops) {
-      if (op.type === 'equal') { html += esc(op.a); continue; }
-      if (side === 'a' && (op.type === 'delete')) html += `<mark class="${op.label}">${esc(op.a)}</mark>`;
-      if (side === 'b' && (op.type === 'insert')) html += `<mark class="${op.label}">${esc(op.b)}</mark>`;
+      if (op.type === 'equal') { content.append(document.createTextNode(op.a)); continue; }
+      if ((side === 'a' && op.type === 'delete') || (side === 'b' && op.type === 'insert')) {
+        const mark = document.createElement('mark');
+        mark.className = op.label;
+        mark.textContent = side === 'a' ? op.a : op.b;
+        content.append(mark);
+      }
     }
-    return html;
+    if (!content.hasChildNodes()) {
+      const empty = document.createElement('span');
+      empty.className = 'empty';
+      empty.textContent = '내용 없음';
+      content.append(empty);
+    }
+    target.replaceChildren(content);
   }
 
   const MAX_COMBINED_TOKENS = 12000; // 겹치는 부분이 없는 병적인 입력에서도 1초 이내로 끝내기 위한 상한(실측 기준)
@@ -320,8 +328,8 @@
     requestAnimationFrame(() => setTimeout(() => {
       try {
         const ops = classify(diffTrimmed(tokA, tokB));
-        $('paneA').innerHTML = renderSide(ops, 'a') || '<span class="empty">내용 없음</span>';
-        $('paneB').innerHTML = renderSide(ops, 'b') || '<span class="empty">내용 없음</span>';
+        renderSide($('paneA'), ops, 'a');
+        renderSide($('paneB'), ops, 'b');
         let mod = 0, del = 0, add = 0;
         for (const op of ops) {
           if (op.type === 'delete' && op.label === 'mod') mod++;
