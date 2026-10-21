@@ -175,6 +175,9 @@ for (const topic of topics) {
   }
 }
 
+const toolSlugs = ['snake', 'minesweeper', 'roulette', 'ladder', 'gomoku', 'reflex-test', 'typing-race', 'order-picker', 'random-draw', 'date-calculator', 'unit-converter', 'image-ocr']
+urls.push('/tools', ...toolSlugs.map(slug => `/tools/${slug}`))
+
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(path => `  <url><loc>${escapeHtml(`${BASE_URL}${path}`)}</loc></url>`).join('\n')}

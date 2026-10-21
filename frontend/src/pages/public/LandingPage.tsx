@@ -34,6 +34,7 @@ export function LandingPage() {
         <Link to="/lunch" className="landing-order-link">LUNCH</Link>
         <Link to="/webhook" className="landing-order-link">WEBHOOK</Link>
         <Link to="/omakase" className="landing-order-link">OMAKASE</Link>
+        <Link to="/tools" className="landing-order-link">GAME</Link>
       </div>
       <div className="landing-foot">
         <div className="landing-clock">

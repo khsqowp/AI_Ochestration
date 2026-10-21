@@ -86,9 +86,19 @@ services:
   #   Ochestration 재빌드/빌드오류가 실거래 봇에 영향 주지 않도록 완전 격리.
   #   api 는 아래 external 볼륨을 :ro 로 읽어 대시보드에 트레이딩 상태를 표시한다.
 
+  games:
+    build: ./game-server
+    environment:
+      HOST: 0.0.0.0
+      CORS_ALLOWED_ORIGINS: https://lab.khsqowp1.my
+    volumes:
+      - ./inbox/game-leaderboards:/app/data
+    networks: [app]
+    restart: unless-stopped
+
   web:
     build: ./frontend
-    depends_on: [api]
+    depends_on: [api, games]
     ports:
       - "5173:80"
     networks: [app]

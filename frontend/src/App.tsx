@@ -10,6 +10,8 @@ import { LoginPage } from './pages/public/LoginPage'
 import { OrderPage } from './pages/public/OrderPage'
 import { WebhookPage } from './pages/public/WebhookPage'
 import { OmakasePage } from './pages/public/OmakasePage'
+import { ToolsDirectoryPage } from './pages/public/ToolsDirectoryPage'
+import { FeaturePage } from './features/public-tools/FeaturePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NotesPage } from './pages/NotesPage'
 import { CalendarPage } from './pages/CalendarPage'
@@ -39,6 +41,8 @@ export function App() {
             <Route path="/webhook" element={<WebhookPage/>}/>
             <Route path="/webhook/:token" element={<WebhookPage/>}/>
             <Route path="/omakase" element={<OmakasePage/>}/>
+            <Route path="/tools" element={<ToolsDirectoryPage/>}/>
+            <Route path="/tools/:slug" element={<FeaturePage/>}/>
           </Route>
           <Route path="/dashboard" element={<RequireAuth/>}>
             <Route element={<AppShell/>}>
