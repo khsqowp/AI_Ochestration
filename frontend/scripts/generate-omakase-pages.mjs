@@ -1,10 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
 
 const BASE_URL = 'https://lab.khsqowp1.my'
 const OUT_DIR = process.env.OMAKASE_OUT_DIR || 'dist'
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const topics = JSON.parse(readFileSync(new URL('../src/omakase-topics.json', import.meta.url), 'utf8'))
 const TOPIC_LABELS = {
   'pentest-server-to-cloud': '서버 모의해킹',
@@ -35,7 +38,35 @@ function descriptionFromMarkdown(markdown) {
   return `${description.slice(0, wordEnd).trimEnd()}…`
 }
 
-function htmlDocument({ title, description, path, header, content }) {
+function chapterMarkdown(markdown) {
+  const customDescription = markdown.match(/^<!--[ \t]*description:[ \t]*([^\r\n]*?)[ \t]*-->(?:\r?\n|$)/)
+  return {
+    description: customDescription?.[1].trim() || descriptionFromMarkdown(markdown),
+    content: customDescription ? markdown.slice(customDescription[0].length) : markdown,
+  }
+}
+
+// 프로덕션 Docker 빌드는 컨텍스트가 frontend/ 뿐이라 .git도 git 바이너리도 없다 —
+// 그때는 아래 커밋된 스냅샷으로 대체한다. 스냅샷 갱신: node scripts/update-omakase-dates.mjs
+let datesSnapshot = {}
+try { datesSnapshot = JSON.parse(readFileSync(new URL('./omakase-dates.json', import.meta.url), 'utf8')) } catch {}
+
+function gitDates(topicId, fileId) {
+  const key = `${topicId}/${fileId}`
+  try {
+    const relativePath = `frontend/public/omakase-content/${topicId}/${fileId}.md`
+    const history = execSync('git log --follow --format=%aI -- "$OMAKASE_GIT_PATH"', {
+      cwd: REPO_ROOT,
+      env: { ...process.env, OMAKASE_GIT_PATH: relativePath },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim().split('\n').filter(Boolean)
+    if (history.length) return { datePublished: history.at(-1), dateModified: history[0] }
+  } catch {}
+  return datesSnapshot[key] ?? {}
+}
+
+function htmlDocument({ title, description, path, header, content, structuredData }) {
   const pageTitle = `${title} | Orchestration Lab`
   const url = `${BASE_URL}${path}`
   return `<!doctype html>
@@ -50,9 +81,11 @@ function htmlDocument({ title, description, path, header, content }) {
   <meta property="og:description" content="${escapeHtml(description)}">
   <meta property="og:type" content="article">
   <meta property="og:url" content="${escapeHtml(url)}">
+  ${structuredData ? `<script type="application/ld+json">${JSON.stringify(structuredData).replace(/</g, '\\u003c')}</script>` : ''}
   <style>
     body { max-width: 760px; margin: 0 auto; padding: 2rem 1.25rem; font: 16px/1.7 system-ui, sans-serif; color: #202632; }
     header { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 2rem; }
+    nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; margin-top: 2rem; }
     a { color: #1754a3; }
     h1, h2, h3 { line-height: 1.3; }
     pre { overflow-x: auto; padding: 1rem; background: #f2f4f7; border-radius: 6px; }
@@ -101,17 +134,38 @@ for (const topic of topics) {
   await writeFile(join(topicDir, 'index.html'), topicHtml)
   urls.push(topicPath)
 
-  for (const file of topic.files) {
+  for (const [index, file] of topic.files.entries()) {
     const markdown = readFileSync(new URL(`../public/omakase-content/${topic.id}/${file.id}.md`, import.meta.url), 'utf8')
+    const { description, content } = chapterMarkdown(markdown)
+    const dates = gitDates(topic.id, file.id)
     const filePath = `${topicPath}${file.id}/`
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'TechArticle',
+      headline: file.title,
+      description,
+      author: { '@type': 'Organization', name: 'Orchestration Lab' },
+      ...dates,
+    }
+    const renderedContent = marked.parse(content)
+    const dateLine = dates.dateModified ? `<p class="last-modified">최종 수정: ${escapeHtml(dates.dateModified.slice(0, 10))}</p>` : ''
+    const datedContent = dateLine
+      ? /<h1\b[^>]*>.*?<\/h1>/s.test(renderedContent)
+        ? renderedContent.replace(/(<h1\b[^>]*>.*?<\/h1>)/s, `$1${dateLine}`)
+        : `${dateLine}${renderedContent}`
+      : renderedContent
+    const previous = topic.files[index - 1]
+    const next = topic.files[index + 1]
+    const navigation = `<nav aria-label="챕터 이동">${previous ? `<a href="${topicPath}${previous.id}/">← 이전 글: ${escapeHtml(previous.title)}</a>` : ''}${next ? `<a href="${topicPath}${next.id}/">다음 글: ${escapeHtml(next.title)} →</a>` : ''}</nav>`
     const fileHtml = htmlDocument({
       title: `${file.title} — ${shortTitle}`,
-      description: descriptionFromMarkdown(markdown),
+      description,
       path: filePath,
       header: `<a href="/">Orchestration Lab</a><a href="${topicPath}">← ${escapeHtml(topic.title)} 목차</a>`,
+      structuredData,
       // 원본 마크다운이 전부 자체 "# <제목>" 헤딩으로 시작해서, 여기서 또 <h1>을 끼워 넣으면
       // 페이지에 똑같은 제목이 H1 두 개로 중복 출력된다(SEO 헤딩 구조 오류 + 눈에도 중복 보임).
-      content: marked.parse(markdown),
+      content: `${datedContent}${navigation}`,
     })
     const fileDir = join(topicDir, file.id)
     await mkdir(fileDir, { recursive: true })
