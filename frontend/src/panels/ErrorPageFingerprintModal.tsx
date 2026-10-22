@@ -6,7 +6,7 @@ import { DISCLAIMER, Note, Readout, TextInput } from '../payloads/shared'
 
 type MethodProbe = { id: string; method: string; checkpoint: string }
 type PathProbe = { id: string; title: string; checkpoint: string; suffix: string }
-type HeaderProbe = { id: string; title: string; checkpoint: string; method?: string; usesRedirectTarget?: boolean; extraHeaderLines: (redirectTarget: string) => string[] }
+type HeaderProbe = { id: string; title: string; checkpoint: string; method?: string; usesRedirectTarget?: boolean; redirectNote?: string; extraHeaderLines: (redirectTarget: string) => string[] }
 
 const METHODS: MethodProbe[] = [
   { id: 'options', method: 'OPTIONS', checkpoint: '가장 직접적인 1차 지표. 응답 `Allow:` 헤더에 서버가 실제로 매핑한 메서드가 그대로 나열됨 — PUT/DELETE 등 숨은 위험 메서드 존재 여부를 추측 없이 바로 확인.' },
@@ -34,6 +34,10 @@ const PATHS: PathProbe[] = [
   { id: 'semicolon', title: '세미콜론 경로 매개변수', suffix: '/.;/admin', checkpoint: '세미콜론 이후를 경로 매개변수로 해석해 접근 제어 필터를 우회하는 구형 Tomcat/일부 WAF 사례. 최신 Tomcat 9.0.x 기본 설정은 세미콜론을 정규화하므로 실효성 낮음(레거시 전용).' },
   { id: 'php-array-type-juggle', title: 'PHP 배열 타입 혼동 (?id[]=1&id[]=2)', suffix: '?id[]=1&id[]=2', checkpoint: 'PHP에서 `$_GET[\'id\']`를 문자열로 가정한 코드에 배열이 들어가면 `Warning: Array to string conversion in /var/www/html/실제파일.php on line 12` 형태로 서버 절대경로가 그대로 노출. display_errors On인 개발/스테이징에서 특히 잘 터짐.' },
   { id: 'max-input-vars', title: '중복 쿼리 매개변수 1,500개', suffix: '?' + Array.from({ length: 1500 }, (_, i) => `a${i}=1`).join('&'), checkpoint: 'PHP 기본 `max_input_vars=1000` 초과 — 초과분은 조용히 버려지거나 일부 구성에서 `Warning: Unknown: Input variables exceeded 1000 ... in Unknown on line 0`처럼 php.ini 설정값 자체가 노출됨.' },
+  { id: 'node-malformed-uri', title: 'Node/Express 잘못된 퍼센트 인코딩 (%)', suffix: '%', checkpoint: 'Express 라우터가 경로 디코딩에 decodeURIComponent를 쓰는데, 짝이 안 맞는 `%` 하나만 있으면 `URIError: Failed to decode param`이 발생해 에러 핸들러로 전달됨. NODE_ENV를 명시적으로 production으로 설정하지 않으면 `app.get(\'env\')`가 기본값 development로 동작해 기본 에러 핸들러가 HTML 스택트레이스를 그대로 반환 — `/node_modules/express/lib/router/...` 절대 경로 노출. NODE_ENV=production 명시 시엔 스택 숨겨짐.' },
+  { id: 'rails-routing-error', title: 'Rails 라우팅 에러 유도 (존재하지 않는 세그먼트)', suffix: '/__nonexistent_route_zz__', checkpoint: 'RAILS_ENV를 명시적으로 지정하지 않으면 Rails 기본값은 development — 매칭되는 라우트가 없으면 `ActionController::RoutingError (No route matches [GET] "...")` 전체 백트레이스가 HTML로 그대로 노출되며 Rails/Ruby 버전, gem 설치 경로까지 드러남. RAILS_ENV=production(표준 배포 관행)이면 대신 일반 404 페이지로 대체되어 노출 안 됨.' },
+  { id: 'werkzeug-debugger-probe', title: 'Werkzeug 디버거 콘솔 활성 여부 핑거프린트', suffix: '?__debugger__=yes&cmd=resource&f=style.css', checkpoint: 'Flask/Werkzeug가 debug=True(use_debugger 활성)로 뜬 상태면 DebuggedApplication 미들웨어가 이 특정 쿼리스트링을 가로채 디버거 정적 리소스를 조건 없이 그대로 반환 — 응답 Content-Type이 text/css이고 본문에 디버거 전용 CSS가 보이면 디버그 모드 활성 확정. 이 상태면 추가로 cmd=resource&f=debugger.js, 혹은 PIN 추정을 통해 콘솔 직접 접근(임의 코드 실행)까지 이어질 수 있는 매우 높은 심각도 — 본 도구는 탐지용 페이로드만 제공.' },
+  { id: 'iis-handler-mapping-404', title: 'IIS 핸들러 매핑 실패 유도 (.aspx 미존재 파일)', suffix: '/__nonexistent__.aspx', checkpoint: 'IIS httpErrors 기본 errorMode는 DetailedLocalOnly — 원칙적으로 원격 요청에는 상세 에러 대신 친화적 페이지만 노출되어야 함. 하지만 운영 중 디버깅 목적으로 errorMode="Detailed"로 바꾼 뒤 되돌리지 않은 서버가 드물지 않음. 그 경우 `HTTP Error 404.0 - Not Found` 화면에 물리 경로(C:\\inetpub\\wwwroot\\...), 요청 URL, 처리 모듈/핸들러명까지 그대로 노출됨 — errorMode가 기본값 그대로라면 이 항목은 신호 없음에 유의.' },
 ]
 
 const HEADERS: HeaderProbe[] = [
@@ -50,7 +54,10 @@ const HEADERS: HeaderProbe[] = [
   { id: 'long-language', title: '초장문 Accept-Language', extraHeaderLines: () => ['Accept-Language: ' + 'x,'.repeat(500)], checkpoint: 'nginx는 large_client_header_buffers 기본값 초과 시 정확히 `400 Bad Request` 바디에 `Request Header Or Cookie Too Large`라는 고정 문구와 nginx 버전이 함께 노출.' },
   { id: 'many-headers', title: '더미 헤더 110개 (Apache LimitRequestFields 기본값 초과)', extraHeaderLines: () => Array.from({ length: 110 }, (_, i) => `X-Pad-${i}: x`), checkpoint: 'Apache 기본 `LimitRequestFields=100`을 넘기도록 110개로 설정 — 초과 시 400 Bad Request. 본문이 Apache 기본 에러 화면이면 ServerSignature 노출 조건도 함께 확인.' },
   { id: 'missing-host', title: 'Host 헤더 누락', extraHeaderLines: () => [], checkpoint: 'HTTP/1.1은 Host 헤더를 필수로 요구(RFC 7230) — 생략하면 엄격한 파서는 400 Bad Request. 이 기본 400 화면의 바디·Server 헤더만으로도 WAS 식별 가능.' },
-  { id: 'duplicate-host', title: '중복 Host 헤더', usesRedirectTarget: true, extraHeaderLines: target => [`Host: ${target}`], checkpoint: 'RFC 7230이 금지하는 조합 — 엄격한 파서는 400, 느슨한 파서(일부 캐시·로드밸런서)는 둘 중 하나만 채택. 캐시가 뒤쪽 Host를 채택하고 오리진이 앞쪽을 채택하면 캐시 포이즈닝(request smuggling 변형)으로 이어질 수 있음.' },
+  { id: 'duplicate-host', title: '중복 Host 헤더', usesRedirectTarget: true, redirectNote: '캐시/CDN이 뒤쪽 Host를, 오리진이 앞쪽 Host를 채택하는 등 계층 간 불일치가 있으면 캐시 포이즈닝·요청 스머글링 변형으로 이어질 수 있습니다. 응답의 캐시 키·절대 URL이 어느 Host 값을 기준으로 생성됐는지 확인하세요.', extraHeaderLines: target => [`Host: ${target}`], checkpoint: 'RFC 7230이 금지하는 조합 — 엄격한 파서는 400, 느슨한 파서(일부 캐시·로드밸런서)는 둘 중 하나만 채택. 캐시가 뒤쪽 Host를 채택하고 오리진이 앞쪽을 채택하면 캐시 포이즈닝(request smuggling 변형)으로 이어질 수 있음.' },
+  { id: 'forwarded-for-ip-bypass', title: 'X-Forwarded-For IP 스푸핑 (접근 제어 우회)', usesRedirectTarget: true, redirectNote: '응답이 200으로 바뀌거나 평소 막혀 있던 내부망 전용 콘텐츠가 노출되면, 입력한 IP가 그대로 신뢰됐다는 뜻으로 접근 제어 우회가 확정됩니다. (Location/링크 반영과는 무관한 신호입니다.)', extraHeaderLines: target => [`X-Forwarded-For: ${target}`], checkpoint: '신뢰 가능한 프록시 체인 검증 없이 X-Forwarded-For의 첫 값을 그대로 클라이언트 IP로 신뢰하는 앱이 있음 — 127.0.0.1이나 10.0.0.1 같은 내부 IP를 스푸핑 대상 입력란에 넣고 보내면, IP 기반 allowlist로 막혀 있던 관리자 전용/내부망 전용 엔드포인트가 열리는지 확인. 동일 계열로 X-Real-IP, X-Client-IP, True-Client-IP 헤더명도 앱에 따라 대신 신뢰될 수 있어 함께 시도할 가치가 있음.' },
+  { id: 'transfer-encoding-cl-conflict', title: 'Transfer-Encoding: chunked + Content-Length 동시 전송 (요청 스머글링 지표)', method: 'POST', extraHeaderLines: () => ['Transfer-Encoding: chunked', 'Content-Length: 4'], checkpoint: 'RFC 7230 §3.3.3은 두 헤더가 동시에 있으면 Transfer-Encoding을 우선하고 메시지를 거부하거나 Content-Length를 무시하도록 요구 — 프록시와 백엔드가 서로 다르게 해석하면 TE.CL/CL.TE 요청 스머글링으로 이어짐. curl/libcurl은 이 조합을 자동으로 정규화해버리므로 반드시 Burp Repeater raw 탭이나 nc/openssl s_client로 직접 전송해야 의미가 있음 — 전송 즉시 400으로 거부되면 스머글링에 대해 보수적인 서버, 200으로 통과되면 추가 조사 대상.' },
+  { id: 'accept-unsupported-media', title: '지원하지 않는 Accept 헤더 (콘텐츠 협상 406 유도)', extraHeaderLines: () => ['Accept: application/this-type-does-not-exist'], checkpoint: '엔드포인트가 특정 produces 타입만 지원하도록 선언된 경우(예: Spring MVC @RequestMapping(produces=...)), 클라이언트가 그 타입을 전혀 받아들이지 않겠다고 선언하면 기본적으로 406 Not Acceptable 에러 페이지가 떨어짐 — 커스텀 에러 핸들러가 없으면 Spring Boot는 Whitelabel Error Page(JSON/HTML)로 프레임워크·버전 정보가 노출될 수 있음. 프레임워크별 폴백 동작(406을 내는지, 임의 포맷으터로 폴백하는지)이 달라 비교 포인트로도 활용.' },
 ]
 
 export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
@@ -85,7 +92,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
         <div className="error-fp-inputs">
           <div className="error-fp-input"><TextInput label="대상 Host" value={host} onChange={setHost} placeholder="example.com"/></div>
           <div className="error-fp-input"><TextInput label="대상 경로" value={path} onChange={setPath} placeholder="/api/v1/resource"/></div>
-          <div className="error-fp-input"><TextInput label="리다이렉트/스푸핑 대상" value={spoofTarget} onChange={setSpoofTarget} placeholder="attacker.com 또는 webhook.site 주소, naver.com 같은 샘플도 가능"/></div>
+          <div className="error-fp-input"><TextInput label="리다이렉트/스푸핑 대상" value={spoofTarget} onChange={setSpoofTarget} placeholder="attacker.com, webhook.site 주소, 또는 127.0.0.1 같은 내부 IP(XFF 우회 테스트용)"/></div>
         </div>
         <div className="error-fp-layout">
           <div className="error-fp-list-pane">
@@ -132,7 +139,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
                 <pre>{selectedHeader.method ?? 'GET'} {targetPath} HTTP/1.1{'\n'}{selectedHeader.id === 'missing-host' ? <span className="error-fp-highlight">(Host 헤더 의도적으로 생략){'\n'}</span> : selectedHeader.id === 'duplicate-host' ? <><span className="error-fp-highlight">Host: {targetHost}{'\n'}</span><span className="error-fp-highlight">Host: {redirectTarget}{'\n'}</span></> : <>Host: {targetHost}{'\n'}{extraHeaderLines.map((line, index) => <span className="error-fp-highlight" key={index}>{line}{'\n'}</span>)}</>}{'\n'}</pre>
               </div>
               <p className="error-fp-hint">점검 포인트: {selectedHeader.checkpoint}</p>
-              {selectedHeader.usesRedirectTarget && <Note>응답 Location 헤더나 본문 링크에 {redirectTarget}이 그대로 반영되면 취약 가능성이 있습니다.</Note>}
+              {selectedHeader.usesRedirectTarget && <Note>{selectedHeader.redirectNote ?? `응답 Location 헤더나 본문 링크에 ${redirectTarget}이 그대로 반영되면 취약 가능성이 있습니다.`}</Note>}
             </>}
           </div>
         </div>
