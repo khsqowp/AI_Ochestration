@@ -5,50 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Burp Comparer</title>
 <style>
-  :root { color-scheme: dark; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e7edf7; background: #0c1420; }
+  :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #252537; background: #f4f4f7; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); }
   * { box-sizing: border-box; }
   body { margin: 0; }
   main { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; padding: 28px 22px 60px; }
-  h1 { margin: 0 0 8px; font-size: 28px; }
-  p { margin: 0 0 16px; color: #a8b8ce; line-height: 1.6; }
-  .panel { background: #172337; border: 1px solid #31425d; border-radius: 13px; padding: 18px; margin-top: 15px; }
+  h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -.02em; line-height: 1.2; }
+  p { margin: 0 0 16px; color: #6f6977; line-height: 1.6; }
+  .panel { background: #fff; border: 1px solid #eceaf0; border-radius: 16px; padding: 18px; margin-top: 15px; box-shadow: 0 2px 6px rgba(0,0,0,.03), 0 14px 36px rgba(0,0,0,.04); }
   textarea, button, select, input { font: inherit; }
-  textarea { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 12px; background: #101c2c; border: 1px solid #405574; border-radius: 9px; color: #e7edf7; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
+  textarea { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 12px; background: #fff; border: 1px solid #dcd8e5; border-radius: 12px; color: #252537; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
+  textarea::placeholder { color: #6f6977; }
   .side-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .side-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 700; gap: 8px; }
   .side-label .name-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .side-label span.name { color: #c9d7e9; }
-  .fmt-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid #405574; color: #9fb1c8; background: #101c2c; white-space: nowrap; }
-  .fmt-badge.json { color: #cdeccb; border-color: #4f9a5c; background: rgba(46, 204, 113, .12); }
-  .fmt-badge.xml { color: #ffd9a8; border-color: #c08a3e; background: rgba(230, 160, 60, .12); }
-  button, select { padding: 9px 12px; border-radius: 8px; border: 1px solid #557099; background: #273c59; color: inherit; cursor: pointer; }
-  button:hover { background: #335275; }
-  button:disabled { opacity: .5; cursor: default; }
+  .side-label span.name { color: #252537; }
+  .fmt-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid #dcd8e5; color: #6f6977; background: #fafafc; white-space: nowrap; }
+  .fmt-badge.json { color: #276646; border-color: #7cb994; background: #e6f4ec; }
+  .fmt-badge.xml { color: #8b5a16; border-color: #c89d5b; background: #fff1dc; }
+  button, select { padding: 9px 12px; border-radius: 10px; border: 1px solid #dcd8e5; background: #fff; color: #252537; cursor: pointer; transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out), transform 140ms var(--ease-out); }
+  button:active:not(:disabled) { transform: scale(.97); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
   button.small { padding: 5px 9px; font-size: 12px; }
-  .primary { background: #2f76cf; border-color: #5797ef; }
+  .primary { background: #7667dc; border-color: #7667dc; color: #fff; }
   .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
-  .controls label.sync { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #c9d7e9; margin-left: auto; }
-  #status { color: #aebed2; font-size: 14px; display: inline-flex; align-items: center; gap: 7px; }
-  #status.busy::before { content: ''; width: 13px; height: 13px; border-radius: 50%; border: 2px solid #3a4d6c; border-top-color: #5797ef; animation: bc-spin .7s linear infinite; }
+  .controls label.sync { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #6f6977; margin-left: auto; }
+  #status { color: #6f6977; font-size: 14px; display: inline-flex; align-items: center; gap: 7px; }
+  #status.busy::before { content: ''; width: 13px; height: 13px; border-radius: 50%; border: 2px solid #d1cce0; border-top-color: #7667dc; animation: bc-spin .7s linear infinite; }
   @keyframes bc-spin { to { transform: rotate(360deg); } }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; font-size: 13px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
-  .legend .mod i { background: rgba(60, 130, 246, .55); border: 1px solid #6ea2ff; }
-  .legend .del i { background: rgba(231, 76, 60, .5); border: 1px solid #ff8a7a; }
-  .legend .add i { background: rgba(46, 204, 113, .45); border: 1px solid #6adf9a; }
-  #summary { color: #aebed2; font-size: 13.5px; margin: 6px 0 14px; }
+  .legend .mod i { background: #a9caf6; border: 1px solid #3978bb; }
+  .legend .del i { background: #f1aeb0; border: 1px solid #bc4c54; }
+  .legend .add i { background: #a6dbb9; border: 1px solid #3f8b60; }
+  #summary { color: #6f6977; font-size: 13.5px; margin: 6px 0 14px; }
   .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   #resultPanel { flex: 1; display: flex; flex-direction: column; }
   #resultPanel .result-grid { flex: 1; }
-  .bc-pane { border: 1px solid #30425e; border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
-  .bc-pane-head { background: #233550; color: #c9d7e9; font-size: 13px; font-weight: 700; padding: 9px 12px; }
-  .bc-pane-body { margin: 0; padding: 12px; background: #0e1a2a; flex: 1; min-height: 400px; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
-  .bc-pane-body mark.mod { background: rgba(60, 130, 246, .38); color: #eaf1ff; border-radius: 2px; }
-  .bc-pane-body mark.del { background: rgba(231, 76, 60, .34); color: #ffecec; border-radius: 2px; }
-  .bc-pane-body mark.add { background: rgba(46, 204, 113, .32); color: #eafff0; border-radius: 2px; }
-  .empty { padding: 20px; color: #9fb1c8; }
-  .warn { color: #ffcf8a; font-size: 12.5px; margin-top: 6px; }
+  .bc-pane { border: 1px solid #eceaf0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: #fafafc; }
+  .bc-pane-head { background: #fafafc; color: #6f6977; border-bottom: 1px solid #d1cce0; font-size: 13px; font-weight: 700; padding: 9px 12px; }
+  .bc-pane-body { margin: 0; padding: 12px; background: #fafafc; border: 1px solid #eceaf0; border-radius: 12px; color: #252537; flex: 1; min-height: 400px; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .bc-pane-body mark.mod { background: #dceafd; color: #245b8b; border-radius: 2px; }
+  .bc-pane-body mark.del { background: #fbeaec; color: #a43f45; border-radius: 2px; }
+  .bc-pane-body mark.add { background: #e6f4ec; color: #276646; border-radius: 2px; }
+  .empty { padding: 20px; color: #6f6977; }
+  .warn { color: #8b5a16; font-size: 12.5px; margin-top: 6px; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(118,103,220,.38); outline-offset: 2px; }
+  @media (hover: hover) and (pointer: fine) {
+    button:not(:disabled):hover { background: #f4f1ff; border-color: #8b80e4; }
+    button.primary:hover:not(:disabled) { background: #5d50ba; border-color: #5d50ba; }
+  }
   @media (max-width: 900px) { .side-grid, .result-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
