@@ -1,14 +1,14 @@
 /* Reversing Lab visual system scoped to public tools routes. */
 
-.public-tools{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;color:#1d1d1f;background:#f5f5f7;font-synthesis:none;text-rendering:optimizeLegibility;--system-blue:#0071e3;--system-blue-pressed:#0063c7;--system-ink:#1d1d1f;--system-secondary:#6e6e73;--system-tertiary:#86868b;--system-bg:#f5f5f7;--system-surface:#fff;--system-border:#d2d2d7;--system-radius-card:22px;--system-shadow:0 2px 8px rgba(0,0,0,.035),0 18px 48px rgba(0,0,0,.045);--ease-out:cubic-bezier(.23,1,.32,1)}
-.public-tools{background:var(--system-bg);color:var(--system-ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.public-tools{font-family:Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;color:#1d1d1f;background:#f5f5f7;font-synthesis:none;text-rendering:optimizeLegibility;--system-blue:#0071e3;--system-blue-pressed:#0063c7;--system-ink:#1d1d1f;--system-secondary:#6e6e73;--system-tertiary:#8e8e93;--system-bg:#f5f5f7;--system-surface:#fff;--system-border:#d2d2d7;--system-radius-card:24px;--system-shadow:0 2px 6px rgba(0,0,0,.03),0 14px 36px rgba(0,0,0,.04);--ease-out:cubic-bezier(.23,1,.32,1)}
+.public-tools{background:var(--system-bg);color:var(--system-ink);font-family:Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .public-tools{min-height:100vh}
 .public-tools .dashboard{max-width:1160px;padding:18px 28px 48px}
 .public-tools .dash-nav,.public-tools .feature-nav{height:52px}
 .public-tools .brand{color:var(--system-ink);font-weight:650;letter-spacing:-.02em}
 .public-tools .brand svg{color:var(--system-blue)}
 .public-tools .nav-note,.public-tools .dash-footer{color:var(--system-secondary);font-size:12px}
-.public-tools .dash-hero{min-height:300px;margin:30px 0 32px;padding:48px 54px;border:1px solid rgba(0,0,0,.04);border-radius:28px;background:#1d1d1f;color:#f5f5f7;box-shadow:0 22px 55px rgba(0,0,0,.11)}
+.public-tools .dash-hero{min-height:300px;margin:30px 0 32px;padding:48px 54px;border:1px solid rgba(0,0,0,.04);border-radius:24px;background:#1d1d1f;color:#f5f5f7;box-shadow:0 22px 55px rgba(0,0,0,.11)}
 .public-tools .eyebrow{color:#8ec7ff;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;letter-spacing:.15em}
 .public-tools .dash-hero h1{margin:16px 0;font-size:clamp(42px,5.5vw,64px);font-weight:650;letter-spacing:-.065em;line-height:1.05}
 .public-tools .dash-hero h1 em{color:#8ec7ff}
@@ -22,7 +22,7 @@
 .public-tools .tools-group{margin:30px 0 38px}
 .public-tools .tools-group h2{margin:0 0 14px;color:var(--system-ink);font-size:21px;font-weight:650;letter-spacing:-.035em}
 .public-tools .tools-group>div{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
-.public-tools .tools-group a{position:relative;min-height:112px;align-content:space-between;padding:19px 20px;border:1px solid rgba(0,0,0,.045);border-radius:17px;background:#fff;color:var(--system-ink);box-shadow:0 1px 3px rgba(0,0,0,.035);transition:transform 160ms var(--ease-out),box-shadow 160ms var(--ease-out),border-color 160ms var(--ease-out);opacity:0;translate:0 8px;animation:pt-tile-in 220ms var(--ease-out) forwards}
+.public-tools .tools-group a{position:relative;min-height:112px;align-content:space-between;padding:19px 20px;border:1px solid rgba(0,0,0,.045);border-radius:16px;background:#fff;color:var(--system-ink);box-shadow:0 1px 3px rgba(0,0,0,.035);transition:transform 160ms var(--ease-out),box-shadow 160ms var(--ease-out),border-color 160ms var(--ease-out);opacity:0;translate:0 8px;animation:pt-tile-in 220ms var(--ease-out) forwards}
 .public-tools .tools-group a:active{transition-duration:120ms;transform:scale(.97)}
 @media(hover:hover) and (pointer:fine){.public-tools .tools-group a:hover{transform:translateY(-2px);border-color:#c6dfff;box-shadow:0 9px 25px rgba(0,0,0,.07)}}
 @keyframes pt-tile-in{to{opacity:1;translate:0 0}}
@@ -34,11 +34,11 @@
 .public-tools .tools-group a:nth-child(n+6){animation-delay:200ms}
 .public-tools .tools-group a strong{font-size:15px;font-weight:620;letter-spacing:-.02em}
 .public-tools .tools-group a span{color:var(--system-blue);font-size:12px;font-weight:550}
-.public-tools .status-board{margin-top:32px;padding:24px 26px 19px;border:1px solid rgba(0,0,0,.045);border-radius:21px;background:#fff;box-shadow:var(--system-shadow)}
+.public-tools .status-board{margin-top:32px;padding:24px 26px 19px;border:1px solid rgba(0,0,0,.045);border-radius:24px;background:#fff;box-shadow:var(--system-shadow)}
 .public-tools .section-heading h2{color:var(--system-ink);font-size:20px;font-weight:650;letter-spacing:-.03em}
 .public-tools .demo-mark{background:#f5f5f7;color:var(--system-secondary)}
 .public-tools .status-filters{border-color:#e8e8ed}
-.public-tools .status-filters button{border-color:#d2d2d7;border-radius:10px;color:#424245;font:600 12px -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;transition:background-color .16s,border-color .16s,transform .16s}
+.public-tools .status-filters button{border-color:#d2d2d7;border-radius:12px;color:#424245;font:600 12px -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;transition:background-color .16s,border-color .16s,transform .16s}
 .public-tools .status-filters button:hover{background:#f5f5f7}
 .public-tools .status-filters button.active{border-color:#a8cdf5;background:#eff6ff;color:#075fbd}
 .public-tools .status-row{border-color:#ebebef}
@@ -59,16 +59,16 @@
 .public-tools .game-toolbar{min-height:40px;color:var(--system-ink)}
 .public-tools .game-toolbar b{font-size:15px;font-weight:650}
 .public-tools .game-toolbar span{color:var(--system-secondary);font-size:13px}
-.public-tools :is(.game-side input,.game-side textarea,.game-side select,.game-result input,.typing-shell input,.typing-shell select,.pt-card input,.pt-card textarea,.pt-card select){min-height:40px;border:1px solid var(--system-border);border-radius:10px;background:#fff;color:var(--system-ink);font:inherit}
+.public-tools :is(.game-side input,.game-side textarea,.game-side select,.game-result input,.typing-shell input,.typing-shell select,.pt-card input,.pt-card textarea,.pt-card select){min-height:40px;border:1px solid var(--system-border);border-radius:12px;background:#fff;color:var(--system-ink);font:inherit}
 .public-tools :is(.game-side input,.game-side textarea,.game-side select,.game-result input,.pt-card input,.pt-card textarea,.pt-card select){padding:9px 11px}
 .public-tools :is(.game-side textarea,.pt-card textarea){min-height:112px}
-.public-tools :is(.game-toolbar button,.game-actions button,.game-side>button,.ladder-actions button,.mine-controls button,.game-result button,.pt-card button){min-height:38px;padding:8px 13px;border:1px solid rgba(0,0,0,.12);border-radius:10px;background:#fff;color:#303034;font:600 13px -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;transition:background-color 160ms var(--ease-out),border-color 160ms var(--ease-out),transform 120ms var(--ease-out),box-shadow 160ms var(--ease-out)}
+.public-tools :is(.game-toolbar button,.game-actions button,.game-side>button,.ladder-actions button,.mine-controls button,.game-result button,.pt-card button){min-height:38px;padding:8px 13px;border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fff;color:#303034;font:600 13px Pretendard,-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;transition:background-color 160ms var(--ease-out),border-color 160ms var(--ease-out),transform 120ms var(--ease-out),box-shadow 160ms var(--ease-out)}
 @media(hover:hover) and (pointer:fine){.public-tools :is(.game-toolbar button,.game-actions button,.game-side>button,.ladder-actions button,.mine-controls button,.game-result button,.pt-card button):hover:not(:disabled){border-color:#b7b7bc;background:#fafafa;transform:translateY(-1px)}}
 .public-tools :is(.game-toolbar button,.game-actions button,.game-side>button,.ladder-actions button,.mine-controls button,.game-result button,.pt-card button):active:not(:disabled){transform:scale(.97);transition-duration:120ms}
 .public-tools :is(.game-layout .game-primary,.game-layout .pt-primary,.pt-card .pt-primary){border-color:var(--system-blue);background:var(--system-blue);color:#fff;box-shadow:0 2px 5px rgba(0,83,179,.16)}
 @media(hover:hover) and (pointer:fine){.public-tools :is(.game-layout .game-primary,.game-layout .pt-primary,.pt-card .pt-primary):hover:not(:disabled){border-color:var(--system-blue-pressed);background:var(--system-blue-pressed)}}
 .public-tools :is(.game-layout button,.pt-card button,.status-filters button,.typing-shell button,.typing-shell select,.typing-shell input):focus-visible{outline:3px solid rgba(0,113,227,.38);outline-offset:2px}
-.public-tools :is(.game-result,.pt-result){border:1px solid #d8eaff;border-radius:14px;background:#f2f8ff;color:#1d4f85}
+.public-tools :is(.game-result,.pt-result){border:1px solid #d8eaff;border-radius:16px;background:#f2f8ff;color:#1d4f85}
 .public-tools .leaderboard li{border-color:#ebebef}
 .public-tools .leaderboard li b{color:var(--system-ink)}
 .public-tools .touch-pad button{border:1px solid #d2d2d7;border-radius:12px;background:#fff;color:#1d1d1f}
@@ -78,7 +78,7 @@
 .public-tools .mine-wrap .mine-help,.public-tools .mine-help{color:var(--system-secondary)}
 .public-tools .gomoku-board{overflow:hidden;border:1px solid #d7b878;border-radius:8px;background:#e9d19d;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .public-tools .gomoku-board button:focus-visible{outline:2px solid var(--system-blue);outline-offset:-2px}
-.public-tools .ladder-board svg{border:1px solid #e8e8ed;border-radius:14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.public-tools .ladder-board svg{border:1px solid #e8e8ed;border-radius:16px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .public-tools--typing{max-width:none}
 .public-tools--typing .pt-heading{margin-top:42px;padding-top:16px}
 .public-tools--typing .pt-heading h1{font-weight:660}
@@ -95,7 +95,7 @@
 .public-tools .game-side h2,.public-tools .game-side small{grid-column:1/-1}}
 @media(max-width:600px){
 .public-tools .dashboard{padding:14px 16px 36px}
-.public-tools .dash-hero{min-height:240px;margin:20px 0 26px;padding:30px 24px;border-radius:22px}
+.public-tools .dash-hero{min-height:240px;margin:20px 0 26px;padding:30px 24px;border-radius:24px}
 .public-tools .dash-hero h1{font-size:clamp(37px,10vw,48px)}
 .public-tools .dash-hero p{max-width:34ch;font-size:14px}
 .public-tools{padding:16px 16px 40px}
@@ -111,7 +111,7 @@
 .public-tools--typing .pt-heading{margin-top:34px;padding-top:8px}}
 @media(prefers-reduced-motion:reduce){
 .public-tools *,.public-tools *::before,.public-tools *::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-delay:0ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
-.public-tools{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.55}
+.public-tools{font-family:Pretendard,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.55}
 .public-tools .gomoku-board{display:grid;width:min(100%,660px);aspect-ratio:1;grid-template-columns:repeat(15,minmax(0,1fr));gap:0;padding:7px;border:1px solid #d7b878;border-radius:8px;background:#e9d19d;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .public-tools .gomoku-board button{display:grid;place-items:center;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:linear-gradient(#927847,#927847) center/1px 100% no-repeat,linear-gradient(#927847,#927847) center/100% 1px no-repeat;color:#1d1d1f;font-size:clamp(9px,1.8vw,21px);line-height:1}
 .public-tools .gomoku-board button:disabled{opacity:1;cursor:default}
