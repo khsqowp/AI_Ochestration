@@ -121,6 +121,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         note: 'CL.TE/TE.CL/TE.TE 조합의 raw HTTP 요청 전문과 netcat 전송 안내를 생성합니다.',
       },
       {
+        id: 'error-inducer', name: '오류 유발 요청 빌더', base: '', options: [],
+        note: '호스트·대상 경로를 입력하면 자주 빠뜨리는 HTTP 메서드·에러 유발 경로·헤더별 curl 명령을 추천합니다. 커스텀 에러 페이지 누락, 호스트 헤더 신뢰, 경로/헤더 파싱 결함을 점검할 때 사용합니다.',
+      },
+      {
         id: 'cors-misconfig', name: 'CORS 미스컨피그 테스트', base: '', options: [],
         note: 'Origin 반사·null Origin·서브도메인 우회·credentials 노출 여부를 확인하는 curl 명령을 생성합니다.',
       },

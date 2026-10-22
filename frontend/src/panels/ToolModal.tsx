@@ -18,6 +18,7 @@ import { CdnProxyBypassBuilder } from '../payloads/cdnProxyBypass'
 import { CloudMisconfigBuilder } from '../payloads/cloudMisconfig'
 import { ModernStackReconBuilder } from '../payloads/modernStackRecon'
 import { HttpSmugglingBuilder } from '../payloads/httpSmuggling'
+import { ErrorInducerBuilder } from '../payloads/errorInducer'
 import { CorsMisconfigBuilder } from '../payloads/corsMisconfig'
 import { FileUploadPayloadBuilder } from '../payloads/fileUploadPayloads'
 import { JwtForgeBuilder } from '../payloads/jwtForge'
@@ -44,6 +45,7 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'cloud-misconfig': CloudMisconfigBuilder,
   'modern-stack-recon': ModernStackReconBuilder,
   'http-smuggling': HttpSmugglingBuilder,
+  'error-inducer': ErrorInducerBuilder,
   'cors-misconfig': CorsMisconfigBuilder,
   'file-upload-payloads': FileUploadPayloadBuilder,
   'jwt-forge': JwtForgeBuilder,
