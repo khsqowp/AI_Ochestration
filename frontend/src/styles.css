@@ -1178,6 +1178,41 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .js-syntax-function { color:#2b6cb0; }
 .js-parser-hit { color:#d32f2f; background:rgba(211,47,47,.08); border-radius:3px; padding:0 1px; font-weight:600; }
 
+/* ── Error Page Fingerprint ───────────────────────────────────── */
+.error-fp-inputs { display:grid; grid-template-columns:1fr 1fr 1.5fr; gap:12px; margin:12px 0 20px; }
+.error-fp-input { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.error-fp-layout { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:20px; }
+.error-fp-list-pane, .error-fp-preview-pane { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.error-fp-group { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.error-fp-group .payload-group-title, .error-fp-preview-pane .payload-group-title { margin:0 0 4px; }
+.error-fp-item { min-width:0; padding:10px; border:1px solid #eceaf0; border-radius:8px; background:#faf9fc; cursor:pointer; }
+.error-fp-item:hover { border-color:#c9c1e8; }
+.error-fp-item--selected { border-color:#7667dc; background:#f3efff; }
+.error-fp-item .payload-readout { min-width:0; }
+.error-fp-item .cheatsheet-command { max-height:120px; overflow:auto; }
+.error-fp-hint { margin:6px 0 0; font-size:11px; line-height:1.5; color:#6f6977; overflow-wrap:anywhere; }
+.error-fp-preview-empty { padding:24px 16px; border:1px dashed #d9d3e4; border-radius:8px; background:#faf9fc; color:#8a8591; font-size:12px; }
+.error-fp-term, .error-fp-repeater { min-width:0; overflow:hidden; border:1px solid #ded9e8; border-radius:8px; }
+.error-fp-term { background:#211e2a; color:#f3efff; }
+.error-fp-term-header { display:flex; align-items:center; gap:5px; padding:8px 12px; border-bottom:1px solid #3a3546; color:#aea5bf; font-size:11px; }
+.error-fp-term-header span:last-child { margin-left:8px; }
+.error-fp-term-dot { width:8px; height:8px; border-radius:50%; background:#ff5f57; }
+.error-fp-term-dot:nth-child(2) { background:#febc2e; }
+.error-fp-term-dot:nth-child(3) { background:#28c840; }
+.error-fp-term pre, .error-fp-repeater pre { margin:0; padding:14px; overflow:auto; max-height:320px; font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+.error-fp-urlbar { display:flex; align-items:flex-start; gap:8px; min-width:0; padding:12px 15px; border:1px solid #e1dce8; border-radius:999px; background:#f8f7fa; color:#514a61; font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+.error-fp-urlbar svg { flex:none; margin-top:2px; }
+.error-fp-repeater { background:#fff; }
+.error-fp-repeater-header { padding:8px 12px; border-bottom:1px solid #e9e5ef; background:#f5f2f9; color:#6f6977; font-size:11px; font-weight:700; }
+.error-fp-highlight { padding:0 2px; border-radius:3px; background:rgba(255,190,75,.2); color:#b65e12; font-weight:700; }
+.error-fp-term .error-fp-highlight { color:#ffd280; }
+@media (max-width:1000px) {
+  .error-fp-layout { grid-template-columns:1fr; }
+}
+@media (max-width:700px) {
+  .error-fp-inputs { grid-template-columns:1fr; }
+}
+
 /* ── Payload Builders (Advanced, LFI, Cloud, etc) ────────────────── */
 .payload-builder-tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid #eceaf0; }
 .payload-builder-tabs button { padding:6px 12px; border:0; background:none; color:#8a8591; font-size:12px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; }

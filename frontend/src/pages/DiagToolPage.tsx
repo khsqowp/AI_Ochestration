@@ -7,6 +7,7 @@ import { ScannerToolsModal } from '../panels/ScannerToolsModal'
 import { BurpComparerModal } from '../panels/BurpComparerModal'
 import { BurpHistoryViewerModal } from '../panels/BurpHistoryViewerModal'
 import { JsParserModal } from '../panels/JsParserModal'
+import { ErrorPageFingerprintModal } from '../panels/ErrorPageFingerprintModal'
 import { RouteTreeToolPage } from './RouteTreeToolPage'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
 
@@ -16,6 +17,7 @@ const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'burp-comparer': BurpComparerModal,
   'burp-history-viewer': BurpHistoryViewerModal,
   'js-parser': JsParserModal,
+  'error-page-fingerprint': ErrorPageFingerprintModal,
 }
 
 export function DiagToolPage() {

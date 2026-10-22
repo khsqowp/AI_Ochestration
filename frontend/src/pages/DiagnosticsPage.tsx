@@ -2,7 +2,7 @@ import { type ComponentType, type CSSProperties } from 'react'
 import {
   AppWindow, Binary, Bomb, Bug, CloudCog, Compass, Crosshair, Database,
   FileCode2, FlaskConical, FolderSearch, GitBranch, GitCompare, History,
-  KeyRound, Layers, Network, Radar, ServerCog, SquareTerminal,
+  KeyRound, Layers, Network, Radar, ServerCog, ServerCrash, SquareTerminal,
   Terminal,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -54,6 +54,9 @@ export function DiagnosticsPage() {
           </Link>
           <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
             <History size={20}/><span>Burp History 뷰어</span>
+          </Link>
+          <Link className="diag-tile" to="/dashboard/diag/error-page-fingerprint">
+            <ServerCrash size={20}/><span>기본 에러 페이지 탐지</span>
           </Link>
         </div>
       </section>
