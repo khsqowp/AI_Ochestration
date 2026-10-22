@@ -97,13 +97,16 @@ export function SmartDecoderTreeBuilder() {
   }, [result.root])
   return <div className="payload-builder dectree-builder">
     <Note>가능한 디코딩 경로를 깊이 4, 최대 300개 노드까지 펼칩니다. 읽을 수 있는 리프는 초록색으로 강조합니다. 평문 판별과 해시 후보는 휴리스틱이며, 모든 처리는 이 브라우저 안에서만 일어납니다.</Note>
-    <label className="payload-builder-label" htmlFor="dectree-input">입력</label>
+    <div className="dectree-workspace"><div className="dectree-input-pane"><label className="payload-builder-label" htmlFor="dectree-input">입력</label>
     <textarea id="dectree-input" className="payload-builder-textarea" rows={3} value={raw} onChange={e => setRaw(e.target.value)} placeholder="Base64 / URL / Hex / HTML 엔티티 / JWT / 해시 …"/>
     <label className="dectree-filter"><input type="checkbox" checked={hide} onChange={e => setHide(e.target.checked)}/>읽을 수 있는 결과로 끝나지 않는 가지 숨기기</label>
+    </div><div className="dectree-result-pane" aria-label="디코딩 경로 트리">
     {raw && <>
       {result.truncated && <p className="dectree-warning" role="status">⚠ {count}개 노드에서 중단됨 (더 많은 디코딩 경로가 있을 수 있습니다)</p>}
       <TreeNode key={raw} node={result.root} hide={hide} readableLeaves={readableLeaves}/>
       {hide && !result.root.looksReadable && !readableLeaves.has(result.root) && <p>읽을 수 있는 결과가 없습니다.</p>}
     </>}
+    {!raw && <div className="diag-result-empty">값을 입력하면 가능한 변환 경로가 여기에 표시됩니다. 큰 트리는 이 창 안에서 스크롤합니다.</div>}
+    </div></div>
   </div>
 }

@@ -251,7 +251,7 @@ function CrackMode() {
       {status.state === 'running' && <button className="rainbow-btn stop" onClick={stop}><XCircle size={14}/>중단</button>}
     </div>
     {status.state === 'running' && <ProgressBar status={status}/>}
-    {status.state === 'found' && <div className="rainbow-result found">
+    {status.state === 'found' && <div className="rainbow-result rainbow-result-single found">
       <p><CheckCircle2 size={14}/> 크랙 성공 — {fmtInt(status.tried)}번째 후보에서 일치</p>
       <HashRow label={ALGO_LABEL[status.algo]} value={status.plain}/>
     </div>}
@@ -404,7 +404,7 @@ function BruteForceMode() {
       <ProgressBar status={{ state: 'running', tried: status.overallTried, total: status.overallTotal, startedAt: status.startedAt }}/>
       <p className="rainbow-sublabel">현재 길이 {status.length}자리 — {fmtInt(status.triedThisLength)} / {fmtBig(status.totalThisLength)}</p>
     </>}
-    {status.state === 'found' && <div className="rainbow-result found">
+    {status.state === 'found' && <div className="rainbow-result rainbow-result-single found">
       <p><CheckCircle2 size={14}/> 크랙 성공 — {status.length}자리에서 발견</p>
       <HashRow label={ALGO_LABEL[status.algo]} value={status.plain}/>
     </div>}
@@ -585,12 +585,14 @@ export function RainbowTableBuilder() {
 
   return <div className="payload-builder rainbow-table">
     <Note>MD5 / NTLM / SHA1 / SHA256 / SHA384 / SHA512 / CRC32 를 다룹니다. 모든 계산은 이 브라우저 안에서만 일어나고, 어떤 값도 서버로 전송되지 않습니다.</Note>
-    <div className="explorer-category-filter" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
-      {modeButtons.map(m => <button key={m.id} className={mode === m.id ? 'active' : ''} onClick={() => setMode(m.id)}>{m.label}</button>)}
+    <div className="explorer-category-filter rainbow-mode-tabs" role="group" aria-label="크랙 모드">
+      {modeButtons.map(m => <button key={m.id} type="button" aria-pressed={mode === m.id} className={mode === m.id ? 'active' : ''} onClick={() => setMode(m.id)}>{m.label}</button>)}
     </div>
-    {mode === 'crack' && <CrackMode/>}
-    {mode === 'brute' && <BruteForceMode/>}
-    {mode === 'generate' && <GenerateMode/>}
-    {mode === 'batch' && <BatchCrackMode/>}
+    <div className="rainbow-mode-pane">
+      {mode === 'crack' && <CrackMode/>}
+      {mode === 'brute' && <BruteForceMode/>}
+      {mode === 'generate' && <GenerateMode/>}
+      {mode === 'batch' && <BatchCrackMode/>}
+    </div>
   </div>
 }

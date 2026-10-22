@@ -15,7 +15,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; padding: 24px; }
 .wrap { width: 100%; min-height: calc(100dvh - 48px); display: flex; flex-direction: column; }
-.wrap > .card:last-of-type { flex: 1; display: flex; flex-direction: column; }
+.wrap > .card { flex: none; }
 #preview { flex: 1; }
 .card { background: #fff; border: 1px solid #eceaf0; border-radius: 16px; padding: 20px; margin: 14px 0; box-shadow: 0 2px 6px rgba(0,0,0,.03), 0 14px 36px rgba(0,0,0,.04); }
 #categories .card:has(input:checked) { border-color: #8b80e4; background: #f1ecff; }
@@ -52,9 +52,20 @@ button:focus-visible, .category-label input:focus-visible, summary:focus-visible
   .top-bar { align-items: flex-start; }
   details { margin-left: 0; }
 }
+
+html.embedded body { padding: 8px; }
+html.embedded .wrap { height: calc(100dvh - 16px); min-height: 0; }
+html.embedded .wrap > header { display: none; }
+html.embedded .warning { margin: 2px 0 6px; padding: 6px 10px; }
+html.embedded .wrap > .card { padding: 8px 12px; margin: 4px 0 8px; }
+.checklist-workspace { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+#categories { min-height: 0; overflow: auto; }
+.checklist-workspace > .card { min-height: 0; margin: 0; display: flex; flex-direction: column; }
+#preview { min-height: 0; overflow: auto; }
+@media (max-width: 700px) { .checklist-workspace { grid-template-columns: 1fr; grid-template-rows: minmax(150px,1fr) minmax(180px,1fr); } }
 </style>
 </head>
-<body><main class="wrap">
+<body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')"><main class="wrap">
 <header><h1>공통 경로 체크리스트 · Intruder 페이로드 생성기</h1><p class="muted">독립 실행형 파일 · 외부 통신·라이브러리 없음 · 모든 선택과 목록 생성은 현재 브라우저에서만 처리됩니다.</p></header>
 <p class="warning">승인받은 대상에서만 사용하세요. 이 목록은 실제 스캔 결과가 아니라 웹 서버·프레임워크에서 흔히 노출되는 일반적인 경로 모음일 뿐이며, 대상 서버에 해당 경로가 실제로 존재하거나 취약하다는 것을 보장하지 않습니다.</p>
 <section class="card">
@@ -64,12 +75,12 @@ button:focus-visible, .category-label input:focus-visible, summary:focus-visible
 </div>
 <p id="status" class="note" role="status" aria-live="polite"></p>
 </section>
-<div id="categories"></div>
+<div class="checklist-workspace"><div id="categories"></div>
 <section class="card">
 <h2>선택한 경로 미리보기</h2>
 <textarea id="preview" readonly spellcheck="false" aria-label="선택한 경로 미리보기" placeholder="카테고리를 선택하면 여기에 경로 목록이 표시됩니다."></textarea>
 <p class="note">카테고리와 경로의 나열 순서대로 표시됩니다. Burp Intruder의 Simple list 페이로드나 ffuf/wfuzz 등의 워드리스트로 붙여넣을 수 있습니다.</p>
-</section>
+</section></div>
 </main>
 <script>
 'use strict';

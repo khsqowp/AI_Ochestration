@@ -60,9 +60,19 @@
     summary:hover { color: #6556c8; }
     .route:hover, .api-row:hover, .candidate-row:hover { background: #f4f1ff; }
   }
+
+html.embedded main { height: 100dvh; min-height: 0; padding: 8px; overflow: hidden; }
+html.embedded main > h1, html.embedded main > h1 + p { display: none; }
+html.embedded main > .panel { margin-top: 6px; padding: 10px; min-height: 0; }
+html.embedded main > .panel:first-of-type { flex: 0 0 auto; }
+html.embedded input[type=file] { padding: 8px; }
+html.embedded .panel:has(> .table) { flex: 1 1 auto; }
+html.embedded .table { min-height: 0; }
+html.embedded .view-tabs, html.embedded .tree-note, html.embedded #summary { margin: 0 0 5px; }
+html.embedded .controls { margin-top: 6px; }
 </style>
 </head>
-<body>
+<body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')">
 <main id="zoomRoot">
   <h1>HAR 화면·API 관계 트리</h1>
   <p>로그인한 브라우저의 Network에서 Preserve log를 켜고 탐색한 뒤 HAR를 내보내세요. 이 파일은 브라우저 안에서만 분석하며 서버로 전송하지 않습니다.</p>

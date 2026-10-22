@@ -75,45 +75,42 @@ export function JwtForgeBuilder() {
   }
 
   return (
-    <div className="payload-builder">
+    <div className="payload-builder jwt-layout">
       <Note>{DISCLAIMER}</Note>
 
-      <label className="payload-builder-label">JWT 입력</label>
+      <div className="jwt-overview"><div><label className="payload-builder-label">JWT 입력</label>
       <textarea className="payload-builder-textarea" rows={3} value={jwt} onChange={e => setJwt(e.target.value)} placeholder="eyJhbGciOiJIUzI1NiJ9...."/>
       {decoded.error && <Note>{decoded.error}</Note>}
-
+      </div>
       <div className="payload-readout-group">
         <strong className="payload-group-title">디코딩 결과</strong>
         <Readout title="Header" value={decoded.header ? JSON.stringify(decoded.header, null, 2) : '(JWT를 입력하세요)'} wrap="pre" />
         <Readout title="Payload" value={decoded.payload ? JSON.stringify(decoded.payload, null, 2) : '(JWT를 입력하세요)'} wrap="pre" />
       </div>
-
-      <div className="payload-readout-group">
-        <strong className="payload-group-title">alg: none 공격</strong>
-        <Readout title="변조된 JWT (서명 제거)" value={algNoneJwt || '(JWT를 입력하세요)'} wrap="anywhere" />
       </div>
 
-      <div className="payload-readout-group">
-        <strong className="payload-group-title">RS256 → HS256 Key Confusion</strong>
+      <details className="jwt-operation"><summary>alg: none 공격</summary><div className="payload-readout-group">
+        <Readout title="변조된 JWT (서명 제거)" value={algNoneJwt || '(JWT를 입력하세요)'} wrap="anywhere" />
+      </div></details>
+
+      <details className="jwt-operation"><summary>RS256 → HS256 Key Confusion</summary><div className="payload-readout-group">
         <TextInput label="공개키 PEM (HMAC 시크릿으로 재사용)" value={publicKey} onChange={setPublicKey} placeholder="-----BEGIN PUBLIC KEY-----"/>
         <button className="diag-guided-primary" onClick={() => void handleRS256toHS256()}>Web Crypto로 HS256 재서명</button>
         <Readout title="HS256 재서명 결과" value={signatureResult} wrap="anywhere" />
         {signError && <Note>{signError}</Note>}
         <Note>브라우저 로컬 연산(crypto.subtle.sign)으로만 서명하며 서버로 아무것도 전송하지 않습니다. CLI로 검증하려면: python3 jwt_tool.py &lt;JWT&gt; -X k -pk public.pem</Note>
-      </div>
+      </div></details>
 
-      <div className="payload-readout-group">
-        <strong className="payload-group-title">kid(Key ID) 헤더 조작</strong>
+      <details className="jwt-operation"><summary>kid(Key ID) 헤더 조작</summary><div className="payload-readout-group">
         <Readout title="SQLi 유도 kid" value={kidSqliJwt} wrap="anywhere" />
         <Readout title="경로 탐색 kid" value={kidPathTraversalJwt} wrap="anywhere" />
         <Note>SIGNATURE 부분은 실제로 서명할 수 없으므로 자리표시자입니다. 서버가 kid 값을 그대로 키 조회·파일 경로에 사용해 attacker-secret 또는 /dev/null(빈 키)로 검증하는지 확인합니다.</Note>
-      </div>
+      </div></details>
 
-      <div className="payload-readout-group">
-        <strong className="payload-group-title">약한 시크릿 사전대입</strong>
+      <details className="jwt-operation"><summary>약한 시크릿 사전대입</summary><div className="payload-readout-group">
         <Readout title="Hashcat 사전 대입" value="hashcat -m 16500 jwt_file.txt wordlist.txt" wrap="anywhere" />
         <Note>jwt_file.txt에는 대상 JWT 원문 한 줄만 넣습니다. -m 16500은 JWT(HS256) 모드입니다.</Note>
-      </div>
+      </div></details>
     </div>
   )
 }

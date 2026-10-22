@@ -13,6 +13,14 @@
     p { color: #6f6977; line-height: 1.6; }
     .panel { background: #fff; border: 1px solid #eceaf0; border-radius: 16px; padding: 20px; margin-top: 18px; box-shadow: 0 2px 6px rgba(0,0,0,.03), 0 14px 36px rgba(0,0,0,.04); }
     .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .input-mode { display: flex; gap: 8px; margin-bottom: 12px; }
+    .input-mode input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .input-mode label { margin: 0; padding: 6px 10px; border: 1px solid #eceaf0; border-radius: 10px; background: #fafafc; color: #5d50ba; cursor: pointer; font-size: 13px; }
+    .input-mode input:checked + label { border-color: #7667dc; background: #fff; color: #252537; }
+    .input-mode input:focus-visible + label { outline: 3px solid #7667dc; outline-offset: 2px; }
+    .input-mode:has(#input-file:checked) + .input-grid > :last-child,
+    .input-mode:has(#input-paste:checked) + .input-grid > :first-child { display: none; }
+    .input-mode + .input-grid { grid-template-columns: minmax(0,1fr); }
     label { display: block; font-weight: 650; margin-bottom: 9px; }
     input, textarea, button { font: inherit; }
     input[type=file] { width: 100%; padding: 14px; background: #faf9ff; border: 1px dashed #a59bca; border-radius: 12px; color: #252537; }
@@ -49,13 +57,28 @@
       summary:hover, .leaf:hover { color: #6556c8; background: #f4f1ff; }
       .leaf a:hover { color: #5d50ba; text-decoration: underline; }
     }
-  </style>
+html.embedded main { height: 100dvh; min-height: 0; padding: 8px; overflow: hidden; }
+html.embedded main > h1, html.embedded main > h1 + p { display: none; }
+html.embedded main > .panel { margin-top: 6px; padding: 10px; min-height: 0; }
+html.embedded main > .panel:first-of-type { flex: 0 0 auto; }
+html.embedded .panel:has(> .tree) { flex: 1 1 auto; }
+html.embedded .tree { min-height: 0; }
+#tree:empty::before { content: 'JS/TS 파일을 선택하거나 코드를 붙여넣고 분석하세요. URL과 API 경로가 여기에서 트리로 표시됩니다.'; color: #6f6977; }
+html.embedded .input-grid { gap: 10px; }
+html.embedded textarea { min-height: 60px; max-height: 130px; }
+html.embedded .actions, html.embedded .summary { margin: 6px 0; }
+html.embedded input[type=file] { padding: 8px; }
+</style>
 </head>
-<body>
+<body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')">
 <main id="zoomRoot">
   <h1>JS URL · API 경로 트리</h1>
   <p>JavaScript 파일을 선택하거나 코드를 붙여넣으세요. 분석은 브라우저 안에서만 이루어지며 입력한 코드를 실행하거나 전송하지 않습니다.</p>
   <section class="panel">
+    <div class="input-mode" role="group" aria-label="입력 방식">
+      <input id="input-file" type="radio" name="input-mode" checked><label for="input-file">파일 선택</label>
+      <input id="input-paste" type="radio" name="input-mode"><label for="input-paste">붙여넣기</label>
+    </div>
     <div class="input-grid">
       <div><label for="files">JS 파일</label><input id="files" type="file" accept=".js,.mjs,.cjs,.jsx,.ts,.tsx,.txt" multiple></div>
       <div><label for="source">코드 붙여넣기</label><textarea id="source" spellcheck="false" placeholder="axios.get('/api/users');&#10;axios.get('https://example.com/v1/items');"></textarea></div>

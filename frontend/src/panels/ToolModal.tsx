@@ -1,6 +1,7 @@
-import { useState, type ComponentType } from 'react'
+import { useRef, useState, type ComponentType, type MouseEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { Clipboard, X } from 'lucide-react'
-import { CHEATSHEET_QUICK_STARTS, type CheatSheetTool } from '../cheatsheet-data'
+import { CHEATSHEET_CATEGORIES, CHEATSHEET_QUICK_STARTS, type CheatSheetTool } from '../cheatsheet-data'
 import { cheatSheetCommand } from '../lib/util'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
@@ -67,6 +68,7 @@ export function ToolModal({ tool, onClose, embedded }: { tool: CheatSheetTool; o
   const [values, setValues] = useState<Record<string, string>>({})
   const [target, setTarget] = useState('')
   const [copied, setCopied] = useState<boolean | 'error'>(false)
+  const builderRef = useRef<HTMLDivElement>(null)
 
   const toggleOption = (id: string) => { setSelectedOptions(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }); setCopied(false) }
   const command = cheatSheetCommand(tool, selectedOptions, values, target)
@@ -77,11 +79,20 @@ export function ToolModal({ tool, onClose, embedded }: { tool: CheatSheetTool; o
   }
 
   const Builder = PAYLOAD_BUILDERS[tool.id]
+  const relatedIds = ['smart-decoder', 'smart-decoder-tree', 'rainbow-crack', 'jwt-forge']
+  const relatedTools = relatedIds.includes(tool.id) ? CHEATSHEET_CATEGORIES.flatMap(category => category.tools).filter(item => relatedIds.includes(item.id) && item.id !== tool.id) : []
+  const confirmNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    const fields = builderRef.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      '.decoder-input-pane textarea, .dectree-input-pane textarea, .jwt-layout textarea, .rainbow-mode-pane textarea, .payload-builder input.payload-builder-input:not([type=number])'
+    )
+    if (fields && Array.from(fields).some(field => field.value.trim()) && !window.confirm('입력한 내용이 사라집니다. 이동할까요?')) event.preventDefault()
+  }
 
   return <PanelShell embedded={embedded} className="file-explorer tool-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">CHEAT SHEET</p><h2>{tool.name}</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
-    <div className="explorer-preview tool-modal-body">
-      {Builder ? <div className="explorer-preview-body cheatsheet-options-body"><Builder/></div> : <>
+    {relatedTools.length > 0 && <div className="diag-tool-links"><Link to="/dashboard/diag" onClick={confirmNavigation}>진단 도구</Link>{relatedTools.map(item => <Link key={item.id} to={`/dashboard/diag/${item.id}`} onClick={confirmNavigation}>{item.name}</Link>)}</div>}
+    <div className="explorer-preview tool-modal-body" ref={builderRef}>
+      {Builder ? <div className={`explorer-preview-body cheatsheet-options-body${relatedTools.length > 0 ? ' diag-payload-body' : ''}`}><Builder/></div> : <>
         <div className="explorer-preview-body cheatsheet-options-body">
           {tool.note && <p className="cheatsheet-note">{tool.note}</p>}
           {(CHEATSHEET_QUICK_STARTS[tool.id] ?? []).length > 0 && <section className="cheatsheet-quick-starts">

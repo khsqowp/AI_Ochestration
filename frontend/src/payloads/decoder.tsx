@@ -290,7 +290,7 @@ export function SmartDecoderBuilder() {
   return <div className="payload-builder smart-decoder">
     <Note>값을 붙여넣으면 인코딩/해시 포맷을 자동 판별합니다. 인코딩된 값은 연쇄로 디코딩하고, 디코딩 결과를 수정하면 같은 포맷으로 즉시 재인코딩됩니다. 모든 처리는 이 브라우저 안에서만 일어납니다.</Note>
 
-    <label className="payload-builder-label">입력</label>
+    <div className="decoder-workspace"><div className="decoder-input-pane"><label className="payload-builder-label">입력</label>
     <textarea className="payload-builder-textarea" rows={3} value={raw}
       onChange={e => { setRaw(e.target.value); setEdited(null) }}
       placeholder="Base64 / URL / Hex / HTML 엔티티 / JWT / 해시 …"/>
@@ -308,6 +308,7 @@ export function SmartDecoderBuilder() {
       {result.steps.length === 0 && result.hash.length === 0 && <span className="dec-verdict-plain">평문 — 알려진 인코딩/해시 아님</span>}
     </div>}
 
+    </div><div className="decoder-result-pane">
     {result.steps.length > 0 && <>
       <label className="payload-builder-label">디코딩 결과 <small>(수정하면 아래가 즉시 재인코딩됨)</small></label>
       <textarea className="payload-builder-textarea" rows={result.steps.some(s => s.label === 'JWT') ? 10 : 4}
@@ -320,6 +321,8 @@ export function SmartDecoderBuilder() {
         <button className="cheatsheet-copy" onClick={() => void copy(reencoded)}><Clipboard size={14}/>{copyFailed ? '복사 실패' : '복사'}</button>
       </div>
     </>}
+    {result.steps.length === 0 && <div className="diag-result-empty">{raw.trim() ? '알려진 디코딩 단계가 없습니다. 입력 형식과 인코딩 방식을 확인하세요.' : 'Base64, URL, Hex, HTML 엔티티 또는 JWT를 입력하면 현재 디코딩 단계가 여기에 표시됩니다.'}</div>}
+    </div></div>
 
     <details className="dec-grid-wrap">
       <summary>전체 디코더 · 인코더 동시 시도</summary>
