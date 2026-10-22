@@ -1183,6 +1183,7 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .error-fp-input { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .error-fp-layout { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:20px; }
 .error-fp-list-pane, .error-fp-preview-pane { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.error-fp-preview-pane { position:sticky; top:0; align-self:flex-start; max-height:calc(100dvh - var(--topbar-h) - 140px); overflow-y:auto; padding-bottom:4px; }
 .error-fp-group { display:flex; flex-direction:column; gap:8px; min-width:0; }
 .error-fp-group .payload-group-title, .error-fp-preview-pane .payload-group-title { margin:0 0 4px; }
 .error-fp-item { min-width:0; padding:10px; border:1px solid #eceaf0; border-radius:8px; background:#faf9fc; cursor:pointer; }
@@ -1208,6 +1209,7 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .error-fp-term .error-fp-highlight { color:#ffd280; }
 @media (max-width:1000px) {
   .error-fp-layout { grid-template-columns:1fr; }
+  .error-fp-preview-pane { position:static; max-height:none; overflow-y:visible; }
 }
 @media (max-width:700px) {
   .error-fp-inputs { grid-template-columns:1fr; }
