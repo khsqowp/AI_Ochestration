@@ -16,6 +16,13 @@
 
 name: ochestration-trading
 
+# 컨테이너 로그 무한 증가 방지 — 다음 recreate 때부터 적용(실행 중 컨테이너에는 영향 없음).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   trading:
     build: ./trading
@@ -24,6 +31,7 @@ services:
         required: false
     networks: [trading]
     profiles: ["trading"]
+    logging: *default-logging
 
   trading-paper-funding-arb:
     build: ./trading
@@ -39,6 +47,7 @@ services:
     networks: [trading]
     profiles: ["paper-trading"]
     restart: unless-stopped
+    logging: *default-logging
 
   trading-kr-swing:
     build: ./trading
@@ -54,6 +63,7 @@ services:
     networks: [trading]
     profiles: ["kr-swing"]
     restart: unless-stopped
+    logging: *default-logging
 
   trading-us-swing:
     build: ./trading
@@ -69,6 +79,7 @@ services:
     networks: [trading]
     profiles: ["us-swing"]
     restart: unless-stopped
+    logging: *default-logging
 
   # 국장/미장 top-N 모멘텀 로테이션 페이퍼봇 (KIS 모의) — EMA 크로스 스윙 대체 테스트.
   # 같은 모의계좌를 쓰므로 kr-swing/us-swing 과 동시 기동 금지.
@@ -96,6 +107,7 @@ services:
     networks: [trading]
     profiles: ["kr-rotation"]
     restart: unless-stopped
+    logging: *default-logging
 
   trading-us-rotation:
     build: ./trading
@@ -120,6 +132,7 @@ services:
     networks: [trading]
     profiles: ["us-rotation"]
     restart: unless-stopped
+    logging: *default-logging
 
   trading-trx-swing:
     build: ./trading
@@ -132,6 +145,7 @@ services:
     networks: [trading]
     profiles: ["trx-swing"]
     restart: unless-stopped
+    logging: *default-logging
 
   # 코인 6종목 롱숏 스윙 페이퍼봇 — 완전 가상자본, 실주문 없음, 공개 시세만 쓰므로 API 키
   # 자체가 필요없다(env_file 없음, 의도적). funding-arb가 신규진입 중단으로 사실상 유휴
@@ -144,6 +158,7 @@ services:
     networks: [trading]
     profiles: ["coin-swing6"]
     restart: unless-stopped
+    logging: *default-logging
 
   trading-momentum-rotation:
     build: ./trading
@@ -186,6 +201,7 @@ services:
     networks: [trading]
     profiles: ["momentum-rotation"]
     restart: unless-stopped
+    logging: *default-logging
 
   # 장 시작 갭업/급등주 전략을 백테스트하려고 개장 직후 등락률순위 스냅샷을 떠서 쌓아두기만
   # 하는 캡처 전용 컨테이너 — 계좌 조회/주문 없음, kr-rotation과 계좌를 같이 써도 무관.
@@ -204,6 +220,7 @@ services:
     networks: [trading]
     profiles: ["kr-opening-scan"]
     restart: unless-stopped
+    logging: *default-logging
 
   trading-tick-stream:
     build: ./trading
@@ -222,6 +239,7 @@ services:
     networks: [trading]
     profiles: ["tick-stream"]
     restart: unless-stopped
+    logging: *default-logging
 
 networks:
   trading:
