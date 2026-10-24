@@ -9,7 +9,7 @@ const ROUTE_TREE_TOOLS: RouteTreeTool[] = [
   {
     id: 'har-endpoint-tree',
     name: 'HAR 엔드포인트 트리',
-    tagline: 'DevTools에서 내보낸 .har 파일 -- 실제 관측된 요청 + JS 후보 경로를 트리로',
+    tagline: '화면 이동 관계와 화면별 API를 분리해 표시하고 연결 근거·미연결 요청까지 확인',
     file: 'har-endpoint-tree.html',
     note: '서버 전송 없음, 브라우저 안에서만 분석',
   },
