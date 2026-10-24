@@ -89,6 +89,8 @@ export type SortDirection = 'asc' | 'desc'
 
 export type CoinSwing6Position = { side: 'long' | 'short'; entryPrice: number; notionalUsdt: number; openedTs: string; unrealizedPnlUsdt: number }
 export type CoinSwing6State = { positions: Record<string, CoinSwing6Position>; tradeLog: TradingLogEntry[]; cumulativeRealizedPnlUsdt: number; equityUsdt: number; unrealizedPnlUsdt: number; inceptionTs: string | null; equityHistory: TradingEquityPoint[]; equityHistoryDaily: ChartPoint[]; positionHistory: Record<string, UsdtPositionPoint[]> }
+export type CoinStrategyReturn = { strategyId: string; name: string; returnPct: number }
+export type CoinStrategyReturnsState = { updatedAt: string | null; symbols: string[]; strategies: CoinStrategyReturn[] }
 
 export type RealTradingTab = 'trading' | 'momentum-rotation-trading'
 export type PaperTradingTab = 'kr-trading' | 'us-trading'
