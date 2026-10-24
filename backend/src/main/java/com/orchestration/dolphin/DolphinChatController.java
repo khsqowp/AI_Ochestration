@@ -1,220 +1,115 @@
 package com.orchestration.dolphin;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orchestration.auth.AuthService;
-import com.orchestration.auth.Role;
-import jakarta.servlet.http.HttpServletRequest;
+import com.orchestration.tasks.LlmProperties;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.nio.charset.StandardCharsets;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.web.server.ResponseStatusException;
-
-import org.springframework.util.StreamUtils;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.Enumeration;
-import java.util.Locale;
-import java.util.Set;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/dolphin")
-@EnableConfigurationProperties(DolphinProperties.class)
 public class DolphinChatController {
-
   private static final Logger log = LoggerFactory.getLogger(DolphinChatController.class);
-  private static final int CHUNK = 8192;
   private static final String COOKIE = "orchestration_session";
-
-  /** dolphin 으로 넘기면 안 되는 헤더: hop-by-hop, 길이/인코딩 협상, 그리고 오케스트레이션 인증정보.
-   * x-orchestration-user/-admin 은 서버가 토큰 검증 후 직접 세팅하는 신뢰 경계 헤더라서, 클라이언트가
-   * 같은 이름으로 보낸 값이 섞여 들어가면 안 된다 — RestClient.header() 는 add 방식(치환 아님)이라
-   * 걸러내지 않으면 우리 값 뒤에 클라이언트 값이 추가로 실려서 dolphin_ai 로 넘어간다. */
-  private static final Set<String> SKIP_REQUEST_HEADERS = Set.of(
-      "host", "content-length", "connection", "keep-alive", "transfer-encoding",
-      "te", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate",
-      "accept-encoding", "cookie", "authorization",
-      "x-orchestration-user", "x-orchestration-admin");
-
-  private final String baseUrl;
-  private final RestClient rest;
-  private final HttpClient http;
   private final AuthService auth;
+  private final DolphinChatService chat;
+  private final ObjectMapper json;
+  private final LlmProperties properties;
 
-  public DolphinChatController(DolphinProperties props, RestClient.Builder builder, AuthService auth) {
-    this.baseUrl = props.chatUrl();
-    this.auth = auth;
-    // uvicorn(dolphin)은 HTTP/2 미지원. JDK HttpClient 기본값(HTTP_2)이면 cleartext h2c 업그레이드를
-    // 시도하다 요청 본문이 유실돼 dolphin 이 422(body missing)를 낸다 — 스트리밍/일반 프록시 모두 HTTP/1.1 고정.
-    this.http = HttpClient.newBuilder()
-        .version(HttpClient.Version.HTTP_1_1)
-        .connectTimeout(Duration.ofSeconds(5))
-        .build();
-    var restFactory = new org.springframework.http.client.JdkClientHttpRequestFactory(this.http);
-    restFactory.setReadTimeout(Duration.ofSeconds(30));
-    this.rest = builder.requestFactory(restFactory).baseUrl(props.chatUrl()).build();
+  public DolphinChatController(AuthService auth, DolphinChatService chat, ObjectMapper json, LlmProperties properties) {
+    this.auth = auth; this.chat = chat; this.json = json; this.properties = properties;
   }
 
-  // ── SSE streaming proxy ──────────────────────────────────────────────────
+  @GetMapping("/models")
+  public Map<String, Object> models(@CookieValue(value = COOKIE, required = false) String token) {
+    profile(token);
+    return Map.of("models", List.of(), "default", properties.bedrockDolphinModel());
+  }
+
+  @GetMapping("/sessions")
+  public Map<String, Object> sessions(@CookieValue(value = COOKIE, required = false) String token) {
+    return Map.of("sessions", chat.list(profile(token).id()));
+  }
+
+  @PostMapping("/sessions")
+  public Map<String, Object> create(@CookieValue(value = COOKIE, required = false) String token,
+      @RequestBody CreateRequest request) {
+    return chat.create(profile(token).id(), request.mode());
+  }
+
+  @GetMapping("/sessions/{id}")
+  public Map<String, Object> session(@CookieValue(value = COOKIE, required = false) String token,
+      @PathVariable UUID id) {
+    return chat.get(profile(token).id(), id);
+  }
+
+  @DeleteMapping("/sessions/{id}")
+  public ResponseEntity<Void> delete(@CookieValue(value = COOKIE, required = false) String token,
+      @PathVariable UUID id) {
+    chat.delete(profile(token).id(), id);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/sessions/{id}/export")
+  public Map<String, String> export(@CookieValue(value = COOKIE, required = false) String token,
+      @PathVariable UUID id) throws IOException {
+    return Map.of("file", chat.export(profile(token).id(), id));
+  }
 
   @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  public ResponseEntity<StreamingResponseBody> chat(
-      @CookieValue(value = COOKIE, required = false) String token,
-      @RequestBody byte[] body,
-      HttpServletRequest incoming) {
-    AuthService.UserProfile profile = profile(token);
-
-    log.info("dolphin /chat proxy: body={} bytes, content-type={}, content-length={}",
-        body == null ? -1 : body.length, incoming.getContentType(), incoming.getContentLengthLong());
-
-    var req = HttpRequest.newBuilder()
-        .uri(URI.create(baseUrl + "/api/chat"))
-        .timeout(Duration.ofMinutes(10))
-        .header("Content-Type", "application/json")
-        .header("X-Orchestration-User", profile.id())
-        .header("X-Orchestration-Admin", Boolean.toString(profile.role() == Role.ADMIN))
-        .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-        .build();
-
+  public ResponseEntity<StreamingResponseBody> chat(@CookieValue(value = COOKIE, required = false) String token,
+      @RequestBody ChatRequest request) {
+    String ownerId = profile(token).id();
+    if (request.session_id() != null) chat.requireOwned(ownerId, request.session_id());
     StreamingResponseBody stream = out -> {
       try {
-        var resp = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
-        if (resp.statusCode() != 200) {
-          byte[] errBody;
-          try (InputStream in = resp.body()) { errBody = in.readAllBytes(); }
-          String detail = new String(errBody, StandardCharsets.UTF_8).replace("\"", "'").replace("\n", " ");
-          log.warn("dolphin /api/chat returned {} : {}", resp.statusCode(), detail);
-          writeError(out, "dolphin " + resp.statusCode() + ": " + detail);
-          return;
-        }
-        try (InputStream in = resp.body()) {
-          byte[] buf = new byte[CHUNK];
-          int n;
-          boolean clientGone = false;
-          while ((n = in.read(buf)) != -1) {
-            if (clientGone) continue; // 클라이언트가 끊겨도 dolphin 응답을 끝까지 읽어야
-            try {                     // dolphin 이 대화기록(assistant 메시지) 저장까지 완주한다.
-              out.write(buf, 0, n);
-              out.flush();
-            } catch (IOException e) {
-              clientGone = true;
-            }
-          }
-        }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      } catch (IOException e) {
-        log.warn("dolphin /api/chat upstream IO error", e);
-        try { writeError(out, "proxy IO: " + e.getMessage()); } catch (IOException ignored) { }
-      } catch (RuntimeException e) {
-        log.warn("dolphin /api/chat proxy failed", e);
-        try { writeError(out, "proxy: " + e.getClass().getSimpleName() + " " + e.getMessage()); } catch (IOException ignored) { }
+        DolphinChatService.ChatAnswer answer = request.session_id() == null
+            ? chat.answer(request.mode(), request.messages())
+            : chat.chat(ownerId, request.session_id(), request.mode(), request.messages());
+        write(out, Map.of("content", answer.content()));
+        if (!answer.sources().isEmpty()) write(out, Map.of("sources", answer.sources()));
+      } catch (Exception exception) {
+        log.warn("dolphin_chat_failed session={}", request.session_id(), exception);
+        try { write(out, Map.of("error", "채팅 응답에 실패했습니다. 잠시 후 다시 시도하세요.")); }
+        catch (IOException disconnected) { log.debug("dolphin_client_disconnected", disconnected); }
+      } finally {
+        try { out.write("data: [DONE]\n\n".getBytes(StandardCharsets.UTF_8)); out.flush(); }
+        catch (IOException disconnected) { log.debug("dolphin_client_disconnected", disconnected); }
       }
     };
-
-    return ResponseEntity.ok()
-        .header("X-Accel-Buffering", "no")
-        .header("Cache-Control", "no-cache")
-        .contentType(MediaType.TEXT_EVENT_STREAM)
-        .body(stream);
+    return ResponseEntity.ok().header("X-Accel-Buffering", "no").header("Cache-Control", "no-cache")
+        .contentType(MediaType.TEXT_EVENT_STREAM).body(stream);
   }
 
-  private static void writeError(java.io.OutputStream out, String message) throws IOException {
-    out.write(("data: {\"error\": \"" + message.replace("\"", "'") + "\"}\n\ndata: [DONE]\n\n")
-        .getBytes(StandardCharsets.UTF_8));
+  private void write(OutputStream out, Object payload) throws IOException {
+    out.write(("data: " + json.writeValueAsString(payload) + "\n\n").getBytes(StandardCharsets.UTF_8));
     out.flush();
-  }
-
-  // ── Generic JSON proxy ───────────────────────────────────────────────────
-
-  @GetMapping("/**")
-  public ResponseEntity<byte[]> proxyGet(
-      @CookieValue(value = COOKIE, required = false) String token,
-      HttpServletRequest req) {
-    return forward(req, HttpMethod.GET, null, token);
-  }
-
-  @PostMapping("/**")
-  public ResponseEntity<byte[]> proxyPost(
-      @CookieValue(value = COOKIE, required = false) String token,
-      HttpServletRequest req,
-      @RequestBody(required = false) byte[] body) {
-    return forward(req, HttpMethod.POST, body, token);
-  }
-
-  @PatchMapping("/**")
-  public ResponseEntity<byte[]> proxyPatch(
-      @CookieValue(value = COOKIE, required = false) String token,
-      HttpServletRequest req,
-      @RequestBody(required = false) byte[] body) {
-    return forward(req, HttpMethod.PATCH, body, token);
-  }
-
-  @DeleteMapping("/**")
-  public ResponseEntity<byte[]> proxyDelete(
-      @CookieValue(value = COOKIE, required = false) String token,
-      HttpServletRequest req) {
-    return forward(req, HttpMethod.DELETE, null, token);
-  }
-
-  private ResponseEntity<byte[]> forward(HttpServletRequest incoming, HttpMethod method, byte[] body, String token) {
-    AuthService.UserProfile profile = profile(token);
-    String path = incoming.getRequestURI().replaceFirst("^/api/dolphin", "/api");
-    String query = incoming.getQueryString();
-    String uri = query == null ? path : path + "?" + query;
-
-    var spec = rest.method(method).uri(uri);
-    spec.header("X-Orchestration-User", profile.id());
-    spec.header("X-Orchestration-Admin", Boolean.toString(profile.role() == Role.ADMIN));
-
-    Enumeration<String> headerNames = incoming.getHeaderNames();
-    if (headerNames != null) {
-      while (headerNames.hasMoreElements()) {
-        String name = headerNames.nextElement();
-        if (!SKIP_REQUEST_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
-          spec.header(name, incoming.getHeader(name));
-        }
-      }
-    }
-
-    if (body != null && body.length > 0) {
-      spec.contentType(MediaType.APPLICATION_JSON).body(body);
-    }
-
-    // exchange() 는 4xx/5xx 에 예외를 던지지 않는다 — dolphin 의 상태코드/본문을 그대로 클라이언트에 전달한다.
-    // 응답 헤더는 Content-Type 만 넘긴다(Content-Length/Transfer-Encoding 등을 그대로 넘기면 깨질 수 있음).
-    return spec.exchange((clientRequest, clientResponse) -> {
-      byte[] payload = clientResponse.getBody() == null
-          ? new byte[0]
-          : StreamUtils.copyToByteArray(clientResponse.getBody());
-      var out = ResponseEntity.status(clientResponse.getStatusCode());
-      MediaType contentType = clientResponse.getHeaders().getContentType();
-      if (contentType != null) {
-        out.contentType(contentType);
-      }
-      return out.body(payload);
-    });
   }
 
   private AuthService.UserProfile profile(String token) {
     return auth.validate(token).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
   }
+
+  public record CreateRequest(String mode) {}
+  public record ChatRequest(List<DolphinChatService.ChatInput> messages, String mode,
+      Double temperature, Integer num_ctx, String model, UUID session_id) {}
 }

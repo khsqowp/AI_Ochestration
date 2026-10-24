@@ -247,23 +247,36 @@ public class LlmGateway {
    * (curl로 직접 확인한 모양). bedrockModel은 on-demand 모델 ID가 아니라 크로스 리전 추론 프로필 ID다.
    */
   public LlmResult decideWithBedrock(String system, String prompt, int maxOutputTokens) throws Exception {
+    return decideWithBedrock(system, prompt, maxOutputTokens, null);
+  }
+
+  public LlmResult decideWithBedrock(String system, String prompt, int maxOutputTokens, String modelOverride) throws Exception {
+    return decideWithBedrock(system, List.of(new Turn("user", prompt)), maxOutputTokens, modelOverride);
+  }
+
+  public record Turn(String role, String content) {}
+
+  public LlmResult decideWithBedrock(String system, List<Turn> turns, int maxOutputTokens, String modelOverride) throws Exception {
     requireKey(properties.bedrockApiKey(), "Bedrock");
+    String model = modelOverride == null || modelOverride.isBlank() ? properties.bedrockModel() : modelOverride;
     int budget = Math.max(256, Math.min(maxOutputTokens, MAX_OUTPUT_TOKENS_CEILING));
     Map<String, Object> body = Map.of(
         "system", List.of(Map.of("text", system)),
-        "messages", List.of(Map.of("role", "user", "content", List.of(Map.of("text", prompt)))),
+        "messages", turns.stream().map(turn -> Map.of("role", turn.role(),
+            "content", List.of(Map.of("text", turn.content())))).toList(),
         "inferenceConfig", Map.of("maxTokens", budget));
-    String url = "https://bedrock-runtime." + properties.bedrockRegion() + ".amazonaws.com/model/" + properties.bedrockModel() + "/converse";
+    String url = "https://bedrock-runtime." + properties.bedrockRegion() + ".amazonaws.com/model/" + model + "/converse";
     HttpRequest request = HttpRequest.newBuilder(URI.create(url))
         .timeout(Duration.ofSeconds(properties.decisionTimeoutSeconds()))
         .header("Authorization", "Bearer " + properties.bedrockApiKey())
         .header("Content-Type", "application/json")
         .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body), StandardCharsets.UTF_8)).build();
-    ProviderResponse response = send("Bedrock", properties.bedrockModel(), request);
+    ProviderResponse response = send("Bedrock", model, request);
     String content = response.body().at("/output/message/content/0/text").asText("").trim();
     if (content.isBlank()) throw new ProviderException("Bedrock returned an empty response");
-    int[] usage = normalizedUsage(response.body().at("/usage/inputTokens").asInt(0), response.body().at("/usage/outputTokens").asInt(0), response.body().at("/usage/totalTokens").asInt(0), system + "\n" + prompt, content);
-    return new LlmResult("Bedrock", properties.bedrockModel(), content, usage[0], usage[1], usage[2], response.elapsedMs());
+    String input = system + "\n" + turns.stream().map(Turn::content).collect(java.util.stream.Collectors.joining("\n"));
+    int[] usage = normalizedUsage(response.body().at("/usage/inputTokens").asInt(0), response.body().at("/usage/outputTokens").asInt(0), response.body().at("/usage/totalTokens").asInt(0), input, content);
+    return new LlmResult("Bedrock", model, content, usage[0], usage[1], usage[2], response.elapsedMs());
   }
 
   /** Used by RAG search to embed both note content (cached) and the live question (uncached, every call). */

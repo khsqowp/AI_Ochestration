@@ -1,7 +1,6 @@
 package com.orchestration;
 
 import com.orchestration.auth.AuthProperties;
-import com.orchestration.dolphin.DolphinProperties;
 import com.orchestration.files.FileProperties;
 import com.orchestration.n8n.N8nProperties;
 import com.orchestration.notebook.NotebookProperties;
@@ -19,7 +18,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 @EnableScheduling
 @EnableAsync
-@EnableConfigurationProperties({AuthProperties.class, DolphinProperties.class, FileProperties.class, NotebookProperties.class, N8nProperties.class, LlmProperties.class})
+@EnableConfigurationProperties({AuthProperties.class, FileProperties.class, NotebookProperties.class, N8nProperties.class, LlmProperties.class})
 public class OrchestrationApplication {
   public static void main(String[] args) {
     // Must run before ANY java.net.http.HttpClient/HttpRequest class is touched by any bean (e.g.

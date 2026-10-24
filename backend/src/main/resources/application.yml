@@ -23,7 +23,7 @@ spring:
     problemdetails:
       enabled: true
     async:
-      # 로컬 LLM SSE 프록시(/api/dolphin/chat)는 모델 콜드로드 시 응답 시작까지 수십 초 걸린다.
+      # /api/dolphin/chat의 Bedrock 응답을 기다리는 동안 비동기 SSE 연결을 유지한다.
       # 기본 async 타임아웃이면 AsyncRequestTimeoutException 으로 스트림이 끊긴다 — nginx(600s)에 맞춰 늘린다.
       request-timeout: 600000
   # FileIntakeController가 50MB까지 허용한다고 검사하지만, 이 설정이 없으면 스프링 기본값(파일당 1MB,
@@ -116,8 +116,6 @@ app:
     black-box-coach-provider: ${BLACK_BOX_COACH_PROVIDER:OPENAI}
     black-box-evaluator-enabled: ${BLACK_BOX_EVALUATOR_ENABLED:true}
     black-box-evaluator-provider: ${BLACK_BOX_EVALUATOR_PROVIDER:OPENAI}
-  dolphin:
-    chat-url: ${DOLPHIN_CHAT_URL:http://host.docker.internal:7777}
   llm:
     gemini-api-key: ${GEMINI_API_KEY:}
     deepseek-api-key: ${DEEPSEEK_API_KEY:}
@@ -157,6 +155,7 @@ app:
     # 확인한 값이다.
     bedrock-api-key: ${AWS_BEARER_TOKEN_BEDROCK:}
     bedrock-model: ${BEDROCK_MODEL:global.anthropic.claude-sonnet-4-5-20250929-v1:0}
+    bedrock-dolphin-model: ${BEDROCK_DOLPHIN_MODEL:global.anthropic.claude-haiku-4-5-20251001-v1:0}
     bedrock-region: ${BEDROCK_REGION:ap-northeast-2}
     bedrock-input-usd-per-million: ${BEDROCK_INPUT_USD_PER_MILLION:3.00}
     bedrock-output-usd-per-million: ${BEDROCK_OUTPUT_USD_PER_MILLION:15.00}

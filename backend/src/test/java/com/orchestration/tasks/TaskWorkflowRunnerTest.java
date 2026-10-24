@@ -40,7 +40,7 @@ class TaskWorkflowRunnerTest {
         "gemini-2.5-flash", "deepseek-v4-pro", "gpt-4o-mini", "text-embedding-3-small",
         900, 180, 420, maxProviderAttempts, 12000, 9000,
         BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-        "bedrock-key", "bedrock-model", "ap-northeast-2", BigDecimal.ZERO, BigDecimal.ZERO);
+        "bedrock-key", "bedrock-model", "bedrock-haiku", "ap-northeast-2", BigDecimal.ZERO, BigDecimal.ZERO);
     return new TaskWorkflowRunner(tasks, llm, archive, properties, files, dispatcher, sourceUsage, pmProviderSettings);
   }
 

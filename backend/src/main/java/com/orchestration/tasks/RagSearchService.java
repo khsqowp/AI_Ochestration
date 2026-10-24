@@ -82,7 +82,7 @@ public class RagSearchService {
     }).toList();
   }
 
-  private List<ScoredNote> rankNotes(String question, String domain, String origin) throws Exception {
+  public List<ScoredNote> rankNotes(String question, String domain, String origin) throws Exception {
     Path root = Path.of(files.obsidianPath()).toAbsolutePath().normalize();
     Path archivedRoot = root.resolve("_archived");
     if (!Files.exists(root)) return List.of();

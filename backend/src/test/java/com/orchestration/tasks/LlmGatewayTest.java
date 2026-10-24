@@ -1,8 +1,10 @@
 package com.orchestration.tasks;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -22,7 +24,7 @@ class LlmGatewayTest {
         "gemini-2.5-flash", "deepseek-v4-pro", "gpt-4o-mini", "text-embedding-3-small",
         900, 180, 420, 2, 12000, 9000,
         BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-        "bedrock-key", "bedrock-model", "ap-northeast-2", BigDecimal.ZERO, BigDecimal.ZERO);
+        "bedrock-key", "bedrock-model", "bedrock-haiku", "ap-northeast-2", BigDecimal.ZERO, BigDecimal.ZERO);
   }
 
   @Test
@@ -41,5 +43,15 @@ class LlmGatewayTest {
 
     assertThat(prompt).contains("간결히");
     assertThat(prompt).doesNotContain("폭넓게");
+  }
+
+  @Test
+  void singlePromptBedrockCallDelegatesAsOneUserTurn() throws Exception {
+    LlmGateway spy = spy(gateway);
+    LlmGateway.LlmResult result = new LlmGateway.LlmResult("Bedrock", "model", "answer", 1, 1, 2, 1);
+    doReturn(result).when(spy).decideWithBedrock(anyString(), anyList(), anyInt(), anyString());
+
+    assertThat(spy.decideWithBedrock("system", "question", 8000, "model")).isSameAs(result);
+    verify(spy).decideWithBedrock("system", List.of(new LlmGateway.Turn("user", "question")), 8000, "model");
   }
 }

@@ -25,6 +25,7 @@ public record LlmProperties(
     java.math.BigDecimal openaiOutputUsdPerMillion,
     String bedrockApiKey,
     String bedrockModel,
+    String bedrockDolphinModel,
     String bedrockRegion,
     java.math.BigDecimal bedrockInputUsdPerMillion,
     java.math.BigDecimal bedrockOutputUsdPerMillion) {}
