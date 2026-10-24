@@ -168,8 +168,8 @@ services:
         required: false
     environment:
       # 실거래 — 2026-10-11 전략 변경(docs/research/final_integration.md §4 후보1 + 총노출 2x):
-      # 14일룩백/리밸3일/상하위 8개, 달러중립. 총노출 = equity * DEPLOY_PCT(0.5) * LEVERAGE(4) = 2.0x,
-      # 초기증거금 사용 = 총노출/LEVERAGE = equity 의 50%. 디레버 사다리 폐기(DELEVER_DD=1.0 = 비활성;
+      # 14일룩백/리밸3일/상하위 8개, 달러중립. 총노출 = equity * DEPLOY_PCT(0.95) * LEVERAGE(4) = 3.8x (2026-10-24 시드 95% 운용; 5%는 수수료/반올림 여유),
+      # 초기증거금 사용 = 총노출/LEVERAGE = equity 의 95%. 디레버 사다리 폐기(DELEVER_DD=1.0 = 비활성;
       # 142 USDT 에서 1x 로 내리면 포지션당 명목 < 5 USDT 라 영구 flat 함정). 소액계좌는 총노출을 줄이지
       # 않고 K 를 줄임(최소 3). 유일한 레짐 오버레이 = BTC 14일 수익률 < -10% 일 때 전량 flat(일 1회, 완결 일봉).
       # 킬: 고점대비 -35% 전량청산+정지, 14일 쿨다운 후 hwm 리셋 자동 재진입(RESET_HALT=true 로 수동 재개도 가능).
@@ -179,7 +179,7 @@ services:
       MOMENTUM_ROTATION_REBALANCE_DAYS: "3"
       MOMENTUM_ROTATION_TOP_K: "8"
       MOMENTUM_ROTATION_LEVERAGE: "4"
-      MOMENTUM_ROTATION_DEPLOY_PCT: "0.5"
+      MOMENTUM_ROTATION_DEPLOY_PCT: "0.95"
       MOMENTUM_ROTATION_DELEVER_DD: "1.0"
       MOMENTUM_ROTATION_KILL_DD: "0.35"
       MOMENTUM_ROTATION_KILL_COOLDOWN_DAYS: "14"
