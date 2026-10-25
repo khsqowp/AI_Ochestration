@@ -1306,4 +1306,6 @@ small { letter-spacing:.005em; line-height:1.55; }
 .archive-back { color:#7167bd; font-size:13px; font-weight:700; }
 .archive-card-meta { display:flex; justify-content:space-between; gap:8px; }.archive-link { display:block; color:#7167bd; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:6px 0; }
 .archive-content { max-height:220px; overflow:auto; }.archive-tags { display:flex; flex-wrap:wrap; gap:5px; margin-top:10px; }.archive-tag { padding:3px 8px; border-radius:999px; background:#f0eefb; color:#5d50ba; font-size:11px; }
+.archive-status-badge { align-self:flex-start; margin-bottom:2px; padding:3px 8px; border-radius:999px; background:#fff4db; color:#936316; font-size:10px; font-weight:700; animation:archive-pulse 1.8s ease-in-out infinite; }
+@keyframes archive-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.72; transform:scale(.97); } }
 .archive-error { padding:14px; border-radius:10px; background:#fff1f1; color:#a94444; font-size:13px; }

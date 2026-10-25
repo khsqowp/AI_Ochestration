@@ -8,10 +8,11 @@ type Job = {
   extracted_caption: string; location_name: string; location_address: string
   analysis_error: string; tags: string[]
 }
-type KnowledgeItem = { id: string; title: string; category: string; summary: string; content: string; language: string; created_at: string; source_count: number }
+type KnowledgeItem = { id: string; title: string; category: string; summary: string; content: string; language: string; created_at: string; source_count: number; thumbnail_job_id: string }
 type Place = {
   id: string; name: string; address: string; category: string; latitude: number | null
   longitude: number | null; naver_map_url: string; created_at: string; source_count: number
+  thumbnail_job_id: string
 }
 type SectionState<T> = { items: T[]; loading: boolean; error: string }
 const tunnelError = 'LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.'
@@ -53,14 +54,16 @@ export function ArchivePage() {
   return <main className="archive-page">
     <header className="archive-page-header"><div><p className="eyebrow">LINKCOLLECT</p><h1>아카이브</h1><p>외부 LinkCollect에 저장된 자료를 읽기 전용으로 조회합니다.</p></div><button type="button" onClick={refresh}>새로고침</button></header>
     {section('최근 접수', jobs, job => <>
-      {job.media_name && <img className="archive-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(job.id)}/thumbnail`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }}/>}
+      {['received', 'processing', 'waiting_ai'].includes(job.status) && <span className="archive-status-badge">작업중</span>}
       <h3 className="archive-card-title-clamp">{job.title || job.url || '제목 없음'}</h3>
     </>, job => job.id)}
     {section('정보성 아카이브', knowledge, item => <>
+      {item.thumbnail_job_id && <img className="archive-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(item.thumbnail_job_id)}/thumbnail`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }}/>}
       <h3 className="archive-card-title-clamp">{item.title}</h3>
       {!!item.category && <div className="archive-tags"><span className="archive-tag">{item.category}</span></div>}
     </>, item => item.id)}
     {section('장소 아카이브', places, place => <>
+      {place.thumbnail_job_id && <img className="archive-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(place.thumbnail_job_id)}/thumbnail`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }}/>}
       <h3 className="archive-card-title-clamp">{place.name}</h3>
       {!!place.category && <div className="archive-tags"><span className="archive-tag">{place.category}</span></div>}
     </>, place => place.id)}
