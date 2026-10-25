@@ -13,7 +13,6 @@ const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean; exte
   { to: '/dashboard/calendar', label: '캘린더' },
   { to: '/dashboard/diag', label: '진단' },
   { to: '/dashboard/notebook', label: '진단 기록판' },
-  { to: '/dashboard/llm', label: '로컬 LLM' },
   { to: 'https://artex.khsqowp1.my', label: 'ARTEX', adminOnly: true, external: true },
   { to: '/dashboard/debate', label: '토론', adminOnly: true },
   { to: '/dashboard/역량강화', label: '역량 강화', adminOnly: true },
