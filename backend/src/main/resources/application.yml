@@ -121,7 +121,7 @@ app:
     deepseek-api-key: ${DEEPSEEK_API_KEY:}
     openai-api-key: ${CHATGPT_API_KEY:}
     gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
-    deepseek-model: ${DEEPSEEK_MODEL:deepseek-v4-pro}
+    deepseek-model: ${DEEPSEEK_MODEL:deepseek-flash}
     openai-model: ${OPENAI_MODEL:gpt-4o-mini}
     # 아카이브 RAG 검색(질문→관련 노트 찾기)에 쓰는 임베딩 모델. 채팅 모델과는 별개다.
     openai-embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}

@@ -367,7 +367,10 @@ public class LlmGateway {
       }
     }
     if (!citations.isEmpty()) content += "\n\n### 수집 출처\n" + citations;
-    int[] usage = normalizedUsage(response.at("/usageMetadata/promptTokenCount").asInt(0), response.at("/usageMetadata/candidatesTokenCount").asInt(0), response.at("/usageMetadata/totalTokenCount").asInt(0), prompt, content);
+    // candidatesTokenCount만 쓰면 thinking 토큰(위 maxOutputTokens 주석 참고 -- 253 토큰 답변에 썼던
+    // ~2000 토큰) 이 출력 비용 계산에서 통째로 빠진다. 둘 다 출력 토큰으로 과금되므로 더해서 셈한다.
+    int outputTokens = response.at("/usageMetadata/candidatesTokenCount").asInt(0) + response.at("/usageMetadata/thoughtsTokenCount").asInt(0);
+    int[] usage = normalizedUsage(response.at("/usageMetadata/promptTokenCount").asInt(0), outputTokens, response.at("/usageMetadata/totalTokenCount").asInt(0), prompt, content);
     return new LlmResult("Gemini", properties.geminiModel(), content, usage[0], usage[1], usage[2], elapsedMs);
   }
 

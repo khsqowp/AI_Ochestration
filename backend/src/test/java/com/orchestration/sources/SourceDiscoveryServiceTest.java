@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.orchestration.tasks.LlmGateway;
+import com.orchestration.tasks.LlmProperties;
+import com.orchestration.tasks.TaskService;
 import org.junit.jupiter.api.Test;
 
 /** Gemini의 thinking 토큰이 maxOutputTokens 예산을 다 먹어버리면 후보 근거 마지막 줄이 문장 중간에서
@@ -12,7 +14,7 @@ class SourceDiscoveryServiceTest {
 
   private final SourceDiscoveryService service = new SourceDiscoveryService(
       mock(ResearchSourceRepository.class), mock(SourceCandidateRepository.class),
-      mock(ResearchSourceService.class), mock(LlmGateway.class));
+      mock(ResearchSourceService.class), mock(LlmGateway.class), mock(LlmProperties.class), mock(TaskService.class));
 
   @Test
   void detectsRealTruncatedExamplesFromProduction() {

@@ -5,6 +5,7 @@ import com.orchestration.files.FileProperties;
 import com.orchestration.tasks.LlmGateway;
 import com.orchestration.tasks.LlmProperties;
 import com.orchestration.tasks.RagSearchService;
+import com.orchestration.tasks.TaskService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -31,12 +32,14 @@ public class DolphinChatService {
   private final FileProperties files;
   private final ObjectMapper json;
   private final DolphinTurnPersistence persistence;
+  private final TaskService tasks;
 
   DolphinChatService(DolphinSessionRepository sessions, DolphinMessageRepository messages,
       RagSearchService rag, LlmGateway llm, LlmProperties properties, FileProperties files, ObjectMapper json,
-      DolphinTurnPersistence persistence) {
+      DolphinTurnPersistence persistence, TaskService tasks) {
     this.sessions = sessions; this.messages = messages; this.rag = rag; this.llm = llm;
     this.properties = properties; this.files = files; this.json = json; this.persistence = persistence;
+    this.tasks = tasks;
   }
 
   @Transactional(readOnly = true)
@@ -78,7 +81,7 @@ public class DolphinChatService {
     List<DolphinMessage> history = messages.findBySessionIdOrderByPositionAsc(id);
     List<LlmGateway.Turn> turns = history.stream()
         .map(message -> new LlmGateway.Turn(message.getRole(), message.getContent())).toList();
-    ChatAnswer result = generate(mode, question, turns);
+    ChatAnswer result = generate(mode, question, turns, id);
     String sourcesJson = result.sources().isEmpty() ? null : json.writeValueAsString(result.sources());
     persistence.persistTurn(ownerId, id, mode, question, result.content(), sourcesJson);
     return result;
@@ -94,7 +97,7 @@ public class DolphinChatService {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid conversation history");
       turns.add(new LlmGateway.Turn(message.role(), message.content()));
     }
-    return generate(mode, question, turns);
+    return generate(mode, question, turns, UUID.randomUUID());
   }
 
   private static String question(List<ChatInput> input) {
@@ -107,7 +110,7 @@ public class DolphinChatService {
     return question;
   }
 
-  private ChatAnswer generate(String mode, String question, List<LlmGateway.Turn> history) throws Exception {
+  private ChatAnswer generate(String mode, String question, List<LlmGateway.Turn> history, UUID trackingId) throws Exception {
     String system = DolphinPrompts.forMode(mode);
     StringBuilder finalUser = new StringBuilder();
     List<Source> sources = List.of();
@@ -122,9 +125,12 @@ public class DolphinChatService {
     if (!finalUser.isEmpty()) finalUser.append("질문: ");
     finalUser.append(question);
     List<LlmGateway.Turn> turns = boundedTurns(history, finalUser.toString());
-    String answer = llm.decideWithBedrock(system, turns, 8000,
-        properties.bedrockDolphinModel()).content();
-    return new ChatAnswer(answer, sources);
+    LlmGateway.LlmResult result = llm.decideWithBedrock(system, turns, 8000, properties.bedrockDolphinModel());
+    // Bedrock 호출은 AWS 크레딧으로 처리돼 실제 청구 비용이 없다 -- TaskWorkflowRunner.costForProvider와
+    // 동일한 정책. 토큰/호출량은 그래도 기록해서 /api/usage/summary에서 모델별 사용량을 확인할 수 있게 한다.
+    tasks.modelEvent(trackingId, "DOLPHIN", "Dolphin 응답 완료: %dms, %d tokens.".formatted(result.elapsedMs(), result.totalTokens()),
+        result, java.math.BigDecimal.ZERO);
+    return new ChatAnswer(result.content(), sources);
   }
 
   private static List<LlmGateway.Turn> boundedTurns(List<LlmGateway.Turn> history, String finalUser) {

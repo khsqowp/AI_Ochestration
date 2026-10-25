@@ -76,8 +76,8 @@ class TrainingAiEvaluator {
   }
 
   BigDecimal estimatedCost(LlmGateway.LlmResult result) {
-    BigDecimal input = "DEEPSEEK".equals(result.provider()) ? properties.deepseekInputUsdPerMillion() : properties.openaiInputUsdPerMillion();
-    BigDecimal output = "DEEPSEEK".equals(result.provider()) ? properties.deepseekOutputUsdPerMillion() : properties.openaiOutputUsdPerMillion();
+    BigDecimal input = "DeepSeek".equals(result.provider()) ? properties.deepseekInputUsdPerMillion() : properties.openaiInputUsdPerMillion();
+    BigDecimal output = "DeepSeek".equals(result.provider()) ? properties.deepseekOutputUsdPerMillion() : properties.openaiOutputUsdPerMillion();
     return BigDecimal.valueOf(result.inputTokens()).multiply(input).add(BigDecimal.valueOf(result.outputTokens()).multiply(output))
         .movePointLeft(6).setScale(8, RoundingMode.HALF_UP);
   }

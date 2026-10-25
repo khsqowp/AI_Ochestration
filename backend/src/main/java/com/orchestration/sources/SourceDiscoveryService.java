@@ -1,6 +1,10 @@
 package com.orchestration.sources;
 
 import com.orchestration.tasks.LlmGateway;
+import com.orchestration.tasks.LlmProperties;
+import com.orchestration.tasks.TaskService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URI;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -41,12 +45,17 @@ public class SourceDiscoveryService {
   private final SourceCandidateRepository candidates;
   private final ResearchSourceService researchSourceService;
   private final LlmGateway llm;
+  private final LlmProperties properties;
+  private final TaskService tasks;
 
-  SourceDiscoveryService(ResearchSourceRepository registeredSources, SourceCandidateRepository candidates, ResearchSourceService researchSourceService, LlmGateway llm) {
+  SourceDiscoveryService(ResearchSourceRepository registeredSources, SourceCandidateRepository candidates, ResearchSourceService researchSourceService, LlmGateway llm,
+      LlmProperties properties, TaskService tasks) {
     this.registeredSources = registeredSources;
     this.candidates = candidates;
     this.researchSourceService = researchSourceService;
     this.llm = llm;
+    this.properties = properties;
+    this.tasks = tasks;
   }
 
   @Scheduled(fixedDelayString = "${app.sources.discovery-delay-ms:604800000}")
@@ -112,6 +121,8 @@ public class SourceDiscoveryService {
           각 후보를 정확히 이 형식의 한 줄로만 답하세요 (다른 설명·번호·마크다운 없이). 근거에는 강점뿐 아니라 한계·주의할 점도 한 가지 이상 포함하세요:
           이름 | https://직접URL | 강점과 한계를 함께 담은 한 줄 근거 (예: "~이 강점이나 ~은 주의가 필요")
           """.formatted(domainLabel(domain), seedList, MAX_CANDIDATES_PER_DOMAIN));
+      tasks.modelEvent(UUID.randomUUID(), "SOURCE_DISCOVERY", "출처 탐색 완료: %dms, %d tokens.".formatted(result.elapsedMs(), result.totalTokens()),
+          result, estimatedCost(result));
       int saved = 0;
       for (String line : result.content().lines().toList()) {
         Matcher matcher = CANDIDATE_LINE.matcher(line);
@@ -142,6 +153,12 @@ public class SourceDiscoveryService {
   }
 
   private String normalize(String url) { return url.toLowerCase(Locale.ROOT).replaceFirst("^https?://(www\\.)?", "").replaceFirst("/+$", ""); }
+
+  private BigDecimal estimatedCost(LlmGateway.LlmResult result) {
+    return BigDecimal.valueOf(result.inputTokens()).multiply(properties.geminiInputUsdPerMillion())
+        .add(BigDecimal.valueOf(result.outputTokens()).multiply(properties.geminiOutputUsdPerMillion()))
+        .movePointLeft(6).setScale(8, RoundingMode.HALF_UP);
+  }
 
   /**
    * Gemini 2.5는 내부 "thinking" 토큰이 maxOutputTokens 예산을 함께 소비하는데, 예산이 빠듯하면 후보

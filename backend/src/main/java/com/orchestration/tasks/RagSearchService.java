@@ -2,6 +2,8 @@ package com.orchestration.tasks;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orchestration.files.FileProperties;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -31,13 +34,18 @@ public class RagSearchService {
   private final NoteEmbeddingService embeddingService;
   private final RagConversationRepository conversations;
   private final ObjectMapper json;
+  private final LlmProperties properties;
+  private final TaskService tasks;
 
-  RagSearchService(FileProperties files, LlmGateway llm, NoteEmbeddingService embeddingService, RagConversationRepository conversations, ObjectMapper json) {
+  RagSearchService(FileProperties files, LlmGateway llm, NoteEmbeddingService embeddingService, RagConversationRepository conversations, ObjectMapper json,
+      LlmProperties properties, TaskService tasks) {
     this.files = files;
     this.llm = llm;
     this.embeddingService = embeddingService;
     this.conversations = conversations;
     this.json = json;
+    this.properties = properties;
+    this.tasks = tasks;
   }
 
   public RagAnswer ask(String question, String domain, String origin) throws Exception {
@@ -54,6 +62,8 @@ public class RagSearchService {
     String system = "당신은 개인 지식 아카이브를 검색해 답하는 리서치 어시스턴트입니다. 아래 제공된 노트 발췌 내용에 근거해서만 답하세요. "
         + "발췌에 없는 내용은 추측하지 말고 모른다고 명확히 밝히세요. 답변 마지막에 실제로 근거로 사용한 노트 경로만 \"참고:\" 목록으로 표시하세요.";
     LlmGateway.LlmResult result = llm.decideWithDeepSeek(system, "질문:\n" + question + "\n\n참고 노트 발췌:\n" + context, 3000);
+    tasks.modelEvent(UUID.randomUUID(), "RAG_ASK", "RAG 질문 응답 완료: %dms, %d tokens.".formatted(result.elapsedMs(), result.totalTokens()),
+        result, estimatedCost(result));
     List<Citation> citations = top.stream().map(note -> new Citation(note.path(), note.score())).toList();
     log.info("rag_ask_completed candidates={} topScore={}", ranked.size(), top.get(0).score());
     RagAnswer answer = new RagAnswer(result.content(), citations);
@@ -67,6 +77,12 @@ public class RagSearchService {
     } catch (Exception exception) {
       log.warn("rag_conversation_record_failed", exception);
     }
+  }
+
+  private BigDecimal estimatedCost(LlmGateway.LlmResult result) {
+    return BigDecimal.valueOf(result.inputTokens()).multiply(properties.deepseekInputUsdPerMillion())
+        .add(BigDecimal.valueOf(result.outputTokens()).multiply(properties.deepseekOutputUsdPerMillion()))
+        .movePointLeft(6).setScale(8, RoundingMode.HALF_UP);
   }
 
   @org.springframework.transaction.annotation.Transactional(readOnly = true)

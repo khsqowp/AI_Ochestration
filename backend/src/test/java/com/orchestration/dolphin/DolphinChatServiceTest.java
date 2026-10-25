@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orchestration.tasks.LlmGateway;
 import com.orchestration.tasks.LlmProperties;
+import com.orchestration.tasks.TaskService;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,7 +32,7 @@ class DolphinChatServiceTest {
     LlmProperties properties = mock(LlmProperties.class);
     when(properties.bedrockDolphinModel()).thenReturn("haiku-model");
     persistence = mock(DolphinTurnPersistence.class);
-    service = new DolphinChatService(sessions, messages, null, llm, properties, null, new ObjectMapper(), persistence);
+    service = new DolphinChatService(sessions, messages, null, llm, properties, null, new ObjectMapper(), persistence, mock(TaskService.class));
   }
 
   @Test
