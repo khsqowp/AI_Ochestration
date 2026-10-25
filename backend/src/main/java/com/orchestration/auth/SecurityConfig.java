@@ -110,6 +110,9 @@ class SecurityConfig {
         // 투자 데이터 — anyRequest catch-all 로도 덮이지만, 롤 경계를 명시적으로 고정해 회귀를 막는다
         .requestMatchers("/api/trading/**").hasRole("ADMIN")
 
+        // 소셜 링크 아카이브 — SSH 터널을 통해 LinkCollect를 읽기만 하는 프록시, 전체 ADMIN-only
+        .requestMatchers("/api/linkcollect/**").hasRole("ADMIN")
+
         // 치트시트 has no backend endpoints — nothing to declare here
 
         // everything else (usage, digest, file upload, RAG ask, user admin) is ADMIN-only

@@ -1286,3 +1286,15 @@ small { letter-spacing:.005em; line-height:1.55; }
   .diag-payload-body { overflow:auto; }
   .decoder-result-pane, .dectree-result-pane { min-height:260px; }
 }
+.archive-page { max-width:1200px; margin:0 auto; padding:28px; color:#302c38; }
+.archive-page-header { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:28px; }
+.archive-page-header h1 { margin:4px 0; }.archive-page-header p:not(.eyebrow) { color:#777482; font-size:13px; }
+.archive-page-header button { padding:9px 14px; border-radius:9px; background:#7667dc; color:#fff; font-weight:700; }
+.archive-section { margin:28px 0; }.archive-heading { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eceaf0; margin-bottom:12px; }
+.archive-heading h2 { font-size:18px; }.archive-heading span,.archive-card-meta,.archive-card small { color:#6f6977; font-size:11px; }
+.archive-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
+.archive-card { min-width:0; padding:16px; border:1px solid #eceaf0; border-radius:14px; background:#fff; overflow-wrap:anywhere; }
+.archive-card h3 { margin:9px 0; font-size:15px; }.archive-card p { margin:8px 0; color:#55515f; font-size:13px; line-height:1.55; white-space:pre-wrap; }
+.archive-card-meta { display:flex; justify-content:space-between; gap:8px; }.archive-link { display:block; color:#7167bd; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:6px 0; }
+.archive-content { max-height:220px; overflow:auto; }.archive-tags { display:flex; flex-wrap:wrap; gap:5px; margin-top:10px; }.archive-tag { padding:3px 8px; border-radius:999px; background:#f0eefb; color:#5d50ba; font-size:11px; }
+.archive-error { padding:14px; border-radius:10px; background:#fff1f1; color:#a94444; font-size:13px; }

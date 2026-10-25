@@ -159,3 +159,6 @@ app:
     bedrock-region: ${BEDROCK_REGION:ap-northeast-2}
     bedrock-input-usd-per-million: ${BEDROCK_INPUT_USD_PER_MILLION:3.00}
     bedrock-output-usd-per-million: ${BEDROCK_OUTPUT_USD_PER_MILLION:15.00}
+  linkcollect:
+    base-url: ${LINKCOLLECT_BASE_URL:http://host.docker.internal:18787}
+    token: ${LINKCOLLECT_TOKEN:}
