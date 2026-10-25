@@ -8,6 +8,24 @@ window.recon = (function () {
   const MAX_HITS = 200;
   const PREVIEW_BYTES = 1024;
   const hooked = [];
+  const results = [];
+
+  function record(source, label, raw) {
+    results.push({ source, label, raw });
+  }
+
+  function hits(pattern = DANGEROUS_RE) {
+    const matcher = typeof pattern === 'string' ? new RegExp(pattern, 'i') : pattern;
+    if (Object.prototype.toString.call(matcher) !== '[object RegExp]') throw new TypeError('pattern은 RegExp 또는 문자열이어야 합니다.');
+    const matched = results.filter(item => {
+      matcher.lastIndex = 0;
+      return matcher.test(typeof item.raw === 'string' ? item.raw : JSON.stringify(item.raw));
+    });
+    console.table(matched);
+    return matched;
+  }
+
+  function clearResults() { results.length = 0; }
 
   function scanSource(label, src) {
     const windows = [];
@@ -56,7 +74,9 @@ window.recon = (function () {
       DANGEROUS_RE.lastIndex = 0;
       if (commentHits < MAX_HITS && DANGEROUS_RE.test(comment)) {
         commentHits++;
-        console.log(`%c[comment] ${label}`, 'color:gray', comment.trim().slice(0, 500));
+        const raw = comment.trim().slice(0, 500);
+        console.log(`%c[comment] ${label}`, 'color:gray', raw);
+        record('scan', `[comment] ${label}`, raw);
       }
       cursor = end;
       i = end;
@@ -65,8 +85,10 @@ window.recon = (function () {
     if (commentHits === MAX_HITS) console.warn(`[comment] ${label} — 출력 상한 200건 도달`);
 
     if (hits) {
+      const snippets = windows.map(([start, end]) => src.slice(start, end));
       console.log(`%c[code] ${label} — ${hits}건${truncated ? ' 이상 (상한 200건)' : ''}`,
-        'color:red;font-weight:bold', windows.map(([start, end]) => src.slice(start, end)));
+        'color:red;font-weight:bold', snippets);
+      for (const raw of snippets) record('scan', `[code] ${label}`, raw);
     }
     return { hits, truncated };
   }
@@ -176,6 +198,7 @@ window.recon = (function () {
       if (holder[name] === wrapper) {
         hooked.push({ holder, name, original, wrapper, hadOwnProperty });
         console.log(`후킹됨: ${label}`);
+        record('hook', '후킹됨', label);
         return true;
       }
     } catch (error) { console.warn(`[hook] 실패: ${label}`, error); }
@@ -187,20 +210,27 @@ window.recon = (function () {
     const direction = decrypt ? '평문' : '암호문';
     install(holder, name, original => function (...args) {
       console.log(`%c[hook] module#${moduleId}.${name} 호출`, 'color:orange');
+      record('hook', `module#${moduleId}.${name} 호출`, name);
       const ret = original.apply(this, args);
       if (ret && typeof ret.update === 'function' && typeof ret.final === 'function') {
         install(ret, 'update', update => function (...updateArgs) {
           const out = update.apply(this, updateArgs);
-          console.log(`[hook] ${name}.update → ${direction}:`, preview(out));
+          const raw = preview(out);
+          console.log(`[hook] ${name}.update → ${direction}:`, raw);
+          record('hook', `${name}.update → ${direction}`, raw);
           return out;
         }, `${name}.update`);
         install(ret, 'final', final => function (...finalArgs) {
           const out = final.apply(this, finalArgs);
-          console.log(`[hook] ${name}.final → ${direction}:`, preview(out));
+          const raw = preview(out);
+          console.log(`[hook] ${name}.final → ${direction}:`, raw);
+          record('hook', `${name}.final → ${direction}`, raw);
           return out;
         }, `${name}.final`);
       } else {
-        console.log(`[hook] ${name} → ${direction}:`, preview(ret));
+        const raw = preview(ret);
+        console.log(`[hook] ${name} → ${direction}:`, raw);
+        record('hook', `${name} → ${direction}`, raw);
       }
       return ret;
     }, `module#${moduleId}.${name}`);
@@ -256,12 +286,15 @@ window.recon = (function () {
     let installed = 0;
     for (const name of ['encrypt', 'decrypt']) {
       if (install(subtle, name, original => function (...args) {
-        console.log(`[webcrypto] ${name} 알고리즘:`, algorithmInfo(args[0]));
+        const algorithm = algorithmInfo(args[0]);
+        console.log(`[webcrypto] ${name} 알고리즘:`, algorithm);
+        record('webcrypto', `${name} 알고리즘`, algorithm);
         const promise = original.apply(this, args);
         return observePromise(promise, value => {
           const length = value && value.byteLength;
-          console.log(`[webcrypto] ${name} → ${name === 'decrypt' ? '평문' : '암호문'}:`,
-            { bytes: length, utf8: preview(value) });
+          const raw = { bytes: length, utf8: preview(value) };
+          console.log(`[webcrypto] ${name} → ${name === 'decrypt' ? '평문' : '암호문'}:`, raw);
+          record('webcrypto', `${name} → ${name === 'decrypt' ? '평문' : '암호문'}`, raw);
         });
       }, `crypto.subtle.${name}`)) installed++;
     }
@@ -277,9 +310,14 @@ window.recon = (function () {
       const promise = original.apply(this, args);
       return observePromise(promise, response => {
         console.log('%c[fetch]', 'color:blue', response.url, response.status);
+        record('network', `fetch HTTP ${response.status}`, response.url);
         try {
           response.clone().text().then(body => {
-            if (body) console.log('%c[fetch] body', 'color:blue', response.url, preview(body));
+            if (body) {
+              const raw = preview(body);
+              console.log('%c[fetch] body', 'color:blue', response.url, raw);
+              record('network', `fetch body ${response.url}`, raw);
+            }
           }, () => {});
         } catch {}
       });
@@ -288,7 +326,12 @@ window.recon = (function () {
         install(XMLHttpRequest.prototype, 'send', original => function (...args) {
           this.addEventListener('loadend', () => {
             console.log('%c[xhr]', 'color:blue', this.responseURL, this.status);
-            if (this.responseText) console.log('%c[xhr] body', 'color:blue', this.responseURL, preview(this.responseText));
+            record('network', `xhr HTTP ${this.status}`, this.responseURL);
+            if (this.responseText) {
+              const raw = preview(this.responseText);
+              console.log('%c[xhr] body', 'color:blue', this.responseURL, raw);
+              record('network', `xhr body ${this.responseURL}`, raw);
+            }
           }, { once: true });
           return original.apply(this, args);
         }, 'XMLHttpRequest.send')) installed++;
@@ -322,6 +365,7 @@ window.recon = (function () {
       }
     } catch {}
     console.log('[decode]', out);
+    record('decode', '결과', out);
     return out;
   }
 
@@ -345,6 +389,6 @@ window.recon = (function () {
   }
 
   return { scanAllScripts, hookWebpackCrypto, hookWebCrypto, hookNetwork,
-    tryDecode, findWebpackExports, hookAll, unhookAll };
+    tryDecode, findWebpackExports, hookAll, unhookAll, hits, clearResults };
 })();
-console.log('recon 로드됨. recon.scanAllScripts() / recon.hookWebpackCrypto() / recon.hookWebCrypto() / recon.hookNetwork() / recon.hookAll() / recon.tryDecode("값") / recon.findWebpackExports(["이름"]) / recon.unhookAll()');
+console.log('recon 로드됨. recon.scanAllScripts() / recon.hookWebpackCrypto() / recon.hookWebCrypto() / recon.hookNetwork() / recon.hookAll() / recon.tryDecode("값") / recon.findWebpackExports(["이름"]) / recon.hits() / recon.clearResults() / recon.unhookAll()');

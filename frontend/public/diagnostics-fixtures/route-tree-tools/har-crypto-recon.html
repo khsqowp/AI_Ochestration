@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAR → 암호 진단 명령어</title>
+<style>
+  :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #252537; background: #f4f4f7; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; padding: 28px 22px 60px; }
+  h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -.02em; line-height: 1.2; }
+  p { margin: 0 0 18px; color: #6f6977; line-height: 1.6; }
+  h2 { margin: 0 0 10px; font-size: 17px; }
+  .panel { background: #fff; border: 1px solid #eceaf0; border-radius: 16px; padding: 18px; margin-top: 15px; box-shadow: 0 2px 6px rgba(0,0,0,.03), 0 14px 36px rgba(0,0,0,.04); }
+  input, button, textarea { font: inherit; }
+  input[type=file] { width: 100%; padding: 16px; border: 1px dashed #a59bca; border-radius: 12px; background: #faf9ff; color: #252537; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  button { padding: 9px 12px; border-radius: 10px; border: 1px solid #dcd8e5; background: #fff; color: #252537; cursor: pointer; transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out), transform 140ms var(--ease-out); }
+  button:active:not(:disabled) { transform: scale(.97); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  button.primary { background: #7667dc; border-color: #7667dc; color: #fff; }
+  #status, #summary { color: #6f6977; font-size: 14px; }
+  #summary { margin: 15px 0 0; }
+  .copy { padding: 5px 9px; font-size: 12px; }
+  .badge { display: inline-block; margin-right: 7px; padding: 2px 5px; border-radius: 999px; font-size: 11px; background: #e6f4ec; color: #276646; }
+  .badge.candidate { background: #fff1dc; color: #8b5a16; }
+  .method { display: inline-block; min-width: 58px; text-align: center; border-radius: 999px; padding: 4px 6px; font-size: 12px; font-weight: 750; background: #f1f0f7; color: #514d61; }
+  .method.get { background: #e8f2fd; color: #245b8b; } .method.post { background: #e6f4ec; color: #276646; } .method.delete { background: #fbeaec; color: #a43f45; }
+  .table { overflow: auto; border: 1px solid #eceaf0; border-radius: 12px; background: #fafafc; }
+  table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+  th, td { padding: 9px 12px; border-bottom: 1px solid #eceaf0; vertical-align: top; }
+  th { color: #6f6977; white-space: nowrap; }
+  td.url { overflow-wrap: anywhere; min-width: 240px; }
+  .empty { padding: 14px; color: #6f6977; }
+  textarea { width: 100%; min-height: 240px; resize: vertical; padding: 12px; border: 1px solid #dcd8e5; border-radius: 10px; background: #fafafc; color: #252537; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .note { margin: 0 0 10px; font-size: 13px; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(118,103,220,.38); outline-offset: 2px; }
+  @media (hover: hover) and (pointer: fine) { button:not(:disabled):hover { background: #f4f1ff; border-color: #8b80e4; } button.primary:hover { background: #5d50ba; border-color: #5d50ba; } }
+  html.embedded main { min-height: 0; padding: 8px; }
+  html.embedded main > h1, html.embedded main > h1 + p { display: none; }
+  html.embedded main > .panel { margin-top: 6px; padding: 10px; }
+  html.embedded input[type=file] { padding: 8px; }
+  html.embedded .controls { margin-top: 6px; }
+</style>
+</head>
+<body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')">
+<main>
+  <h1>HAR → 암호 진단 명령어</h1>
+  <p>허가받은 대상의 HAR만 사용하세요. 응답 본문은 이 브라우저에서만 분석하며 서버로 전송하지 않습니다. 생성된 명령어는 기록된 요청을 재전송하지 않습니다.</p>
+  <section class="panel">
+    <input id="files" type="file" accept=".har,.json,application/json" multiple aria-label="HAR 파일 선택">
+    <div class="controls"><button class="primary" id="analyze">분석하기</button><span id="status" role="status"></span></div>
+    <div id="summary">HAR 파일을 선택해 주세요.</div>
+  </section>
+  <section class="panel">
+    <h2>스크립트 후보</h2>
+    <p class="note">암호 관련 키워드가 포함된 JavaScript 응답의 URL입니다. URL은 명령어 묶음에서 다시 요청하지 않습니다.</p>
+    <div class="table" id="scripts"><div class="empty">분석 결과가 여기에 표시됩니다.</div></div>
+  </section>
+  <section class="panel">
+    <h2>변경 요청 후보 <span class="badge candidate">명령어에서 제외</span></h2>
+    <p class="note">POST·PUT·PATCH·DELETE 요청은 재실행 시 상태를 바꿀 수 있어 명령어 묶음에 포함하지 않습니다.</p>
+    <div class="table" id="writes"><div class="empty">분석 결과가 여기에 표시됩니다.</div></div>
+  </section>
+  <section class="panel">
+    <h2>DevTools 콘솔 명령어 묶음</h2>
+    <p class="note">HAR에 저장된 후보 값의 로컬 해석과 현재 페이지의 향후 동작 관찰에만 사용합니다.</p>
+    <textarea id="bundle" readonly aria-label="복사할 콘솔 명령어 묶음"></textarea>
+    <div class="controls"><button class="copy" id="copy" disabled>명령어 복사</button></div>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  // Keep this literal in sync with scripts/browser-crypto-recon.js when that file changes.
+  const RECON_SOURCE = "// DevTools \ucf58\uc194\uc5d0 \ubd99\uc5ec \ub123\ub294 \uc2b9\uc778\ub41c \ud074\ub77c\uc774\uc5b8\ud2b8 \uce21 \uc554\ud638 \uc9c4\ub2e8 \ub3c4\uad6c.\n// \uc2a4\ud06c\ub9bd\ud2b8 \uc6d0\ubcf8 \uc7ac\uc870\ud68c \uc678\uc5d0\ub294 \uc694\uccad\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\uc73c\uba70, \uad00\ucc30 \uacb0\uacfc\ub294 \ub85c\uceec \ucf58\uc194\uc5d0\ub9cc \ucd9c\ub825\ud55c\ub2e4.\n// \uc0ac\uc6a9: \uc544\ub798 \uacf5\uac1c \ud568\uc218\ubcc4 \uc8fc\uc11d\uc744 \ucc38\uace0\ud558\uace0, \ud544\uc694\ud558\uba74 recon.unhookAll()\ub85c \ud6c4\ud0b9\uc744 \ud574\uc81c\ud55c\ub2e4.\nwindow.recon = (function () {\n  'use strict';\n\n  const DANGEROUS_RE = /(enc|dec|crypt|cipher|aes|rsa|secret|private.?key|public.?key|password|token|jwt)/gi;\n  const MAX_HITS = 200;\n  const PREVIEW_BYTES = 1024;\n  const hooked = [];\n  const results = [];\n\n  function record(source, label, raw) {\n    results.push({ source, label, raw });\n  }\n\n  function hits(pattern = DANGEROUS_RE) {\n    const matcher = typeof pattern === 'string' ? new RegExp(pattern, 'i') : pattern;\n    if (Object.prototype.toString.call(matcher) !== '[object RegExp]') throw new TypeError('pattern\uc740 RegExp \ub610\ub294 \ubb38\uc790\uc5f4\uc774\uc5b4\uc57c \ud569\ub2c8\ub2e4.');\n    const matched = results.filter(item => {\n      matcher.lastIndex = 0;\n      return matcher.test(typeof item.raw === 'string' ? item.raw : JSON.stringify(item.raw));\n    });\n    console.table(matched);\n    return matched;\n  }\n\n  function clearResults() { results.length = 0; }\n\n  function scanSource(label, src) {\n    const windows = [];\n    let cursor = 0;\n    let hits = 0;\n    let commentHits = 0;\n    let truncated = false;\n\n    function scanCode(start, end) {\n      const code = src.slice(start, end);\n      DANGEROUS_RE.lastIndex = 0;\n      let match;\n      while ((match = DANGEROUS_RE.exec(code))) {\n        if (hits === MAX_HITS) {\n          truncated = true;\n          break;\n        }\n        hits++;\n        const index = start + match.index;\n        const left = Math.max(start, index - 80);\n        const right = Math.min(end, start + DANGEROUS_RE.lastIndex + 80);\n        const previous = windows[windows.length - 1];\n        if (previous && left <= previous[1]) previous[1] = Math.max(previous[1], right);\n        else windows.push([left, right]);\n      }\n    }\n\n    let quote = null;\n    for (let i = 0; i < src.length;) {\n      const char = src[i];\n      if (quote) {\n        if (char === '\\\\') i += 2;\n        else if (char === quote) { quote = null; i++; }\n        else i++;\n        continue;\n      }\n      if (char === '\"' || char === \"'\" || char === '`') { quote = char; i++; continue; }\n      if (char !== '/' || (src[i + 1] !== '/' && src[i + 1] !== '*')) { i++; continue; }\n\n      scanCode(cursor, i);\n      if (truncated) break;\n      const lineComment = src[i + 1] === '/';\n      const closing = lineComment ? src.indexOf('\\n', i + 2) : src.indexOf('*/', i + 2);\n      const end = closing < 0 ? src.length : closing + (lineComment ? 0 : 2);\n      const comment = src.slice(i, end);\n      DANGEROUS_RE.lastIndex = 0;\n      if (commentHits < MAX_HITS && DANGEROUS_RE.test(comment)) {\n        commentHits++;\n        const raw = comment.trim().slice(0, 500);\n        console.log(`%c[comment] ${label}`, 'color:gray', raw);\n        record('scan', `[comment] ${label}`, raw);\n      }\n      cursor = end;\n      i = end;\n    }\n    if (!truncated) scanCode(cursor, src.length);\n    if (commentHits === MAX_HITS) console.warn(`[comment] ${label} \u2014 \ucd9c\ub825 \uc0c1\ud55c 200\uac74 \ub3c4\ub2ec`);\n\n    if (hits) {\n      const snippets = windows.map(([start, end]) => src.slice(start, end));\n      console.log(`%c[code] ${label} \u2014 ${hits}\uac74${truncated ? ' \uc774\uc0c1 (\uc0c1\ud55c 200\uac74)' : ''}`,\n        'color:red;font-weight:bold', snippets);\n      for (const raw of snippets) record('scan', `[code] ${label}`, raw);\n    }\n    return { hits, truncated };\n  }\n\n  // \uc0ac\uc6a9: await recon.scanAllScripts() \u2014 \ud604\uc7ac \ubb38\uc11c\uc758 script \uc6d0\ubcf8\uc744 \uac80\uc0ac\ud55c\ub2e4.\n  async function scanAllScripts() {\n    const summary = { scanned: 0, skipped: 0, hits: 0, truncated: 0 };\n    for (const script of Array.from(document.scripts)) {\n      const label = script.src || '(inline)';\n      let src = script.textContent || '';\n      if (script.src) {\n        try {\n          const response = await fetch(script.src, { credentials: 'same-origin', redirect: 'error' });\n          if (!response.ok) throw new Error(`HTTP ${response.status}`);\n          src = await response.text();\n        } catch (error) {\n          summary.skipped++;\n          console.warn(`[scan] \uac74\ub108\ub700: ${script.src} \u2014 \uc7ac\uc870\ud68c \uc2e4\ud328(CORS/\ub124\ud2b8\uc6cc\ud06c/\uc751\ub2f5 \uc0c1\ud0dc): ${String(error)}`);\n          continue;\n        }\n      }\n      if (!src) {\n        summary.skipped++;\n        console.warn(`[scan] \uac74\ub108\ub700: ${label} \u2014 \uc6d0\ubcf8\uc774 \ube44\uc5b4 \uc788\uc74c`);\n        continue;\n      }\n      const result = scanSource(label, src);\n      summary.scanned++;\n      summary.hits += result.hits;\n      if (result.truncated) summary.truncated++;\n    }\n    console.log('[scan] \uc694\uc57d', summary);\n    return summary;\n  }\n\n  function webpackCaches() {\n    const caches = [];\n    let names = [];\n    try { names = Object.getOwnPropertyNames(window); } catch {}\n    for (const name of names) {\n      if (!/__webpack_require__|webpack.*require/i.test(name)) continue;\n      try {\n        const requireFn = window[name];\n        if (requireFn && requireFn.c && typeof requireFn.c === 'object' &&\n            !caches.includes(requireFn.c)) caches.push(requireFn.c);\n      } catch {}\n    }\n    return caches;\n  }\n\n  // \uc0ac\uc6a9: recon.findWebpackExports(['createDecipheriv']) \u2014 \ub178\ucd9c\ub41c \uc6f9\ud329 \uce90\uc2dc\uc758 \ud568\uc218 export\ub97c \ucc3e\ub294\ub2e4.\n  function findWebpackExports(names) {\n    if (!Array.isArray(names)) return [];\n    const found = [];\n    for (const cache of webpackCaches()) {\n      let ids = [];\n      try { ids = Object.keys(cache); } catch { continue; }\n      for (const id of ids) {\n        try {\n          const exp = cache[id] && cache[id].exports;\n          if (!exp) continue;\n          for (const holder of [exp, exp.a, exp.default]) {\n            if (!holder) continue;\n            for (const name of names) {\n              if (typeof name === 'string' && typeof holder[name] === 'function' &&\n                  !found.some(item => item.holder === holder && item.name === name)) {\n                found.push({ moduleId: id, holder, name });\n              }\n            }\n          }\n        } catch {}\n      }\n    }\n    return found;\n  }\n\n  function observePromise(promise, onValue) {\n    if (promise && typeof promise.then === 'function') {\n      try { promise.then(value => { try { onValue(value); } catch {} }, () => {}); } catch {}\n    }\n    return promise;\n  }\n\n  function preview(value) {\n    if (typeof value === 'string') return value.slice(0, PREVIEW_BYTES);\n    if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {\n      try {\n        const bytes = value instanceof ArrayBuffer\n          ? new Uint8Array(value)\n          : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);\n        const text = new TextDecoder('utf-8', { fatal: true })\n          .decode(bytes.subarray(0, Math.min(bytes.length, PREVIEW_BYTES)));\n        return `${text}${bytes.length > PREVIEW_BYTES ? '\u2026' : ''} (${bytes.length}\ubc14\uc774\ud2b8)`;\n      } catch { return `[\ubc14\uc774\ub108\ub9ac ${value.byteLength}\ubc14\uc774\ud2b8]`; }\n    }\n    return value == null ? value : `[${typeof value}]`;\n  }\n\n  function install(holder, name, replacement, label) {\n    if (hooked.some(item => item.holder === holder && item.name === name)) return false;\n    try {\n      const original = holder[name];\n      if (typeof original !== 'function') return false;\n      const hadOwnProperty = Object.prototype.hasOwnProperty.call(holder, name);\n      const wrapper = replacement(original);\n      holder[name] = wrapper;\n      if (holder[name] === wrapper) {\n        hooked.push({ holder, name, original, wrapper, hadOwnProperty });\n        console.log(`\ud6c4\ud0b9\ub428: ${label}`);\n        record('hook', '\ud6c4\ud0b9\ub428', label);\n        return true;\n      }\n    } catch (error) { console.warn(`[hook] \uc2e4\ud328: ${label}`, error); }\n    return false;\n  }\n\n  function hookFn({ holder, name, moduleId }) {\n    const decrypt = /Decipher|Decrypt/.test(name);\n    const direction = decrypt ? '\ud3c9\ubb38' : '\uc554\ud638\ubb38';\n    install(holder, name, original => function (...args) {\n      console.log(`%c[hook] module#${moduleId}.${name} \ud638\ucd9c`, 'color:orange');\n      record('hook', `module#${moduleId}.${name} \ud638\ucd9c`, name);\n      const ret = original.apply(this, args);\n      if (ret && typeof ret.update === 'function' && typeof ret.final === 'function') {\n        install(ret, 'update', update => function (...updateArgs) {\n          const out = update.apply(this, updateArgs);\n          const raw = preview(out);\n          console.log(`[hook] ${name}.update \u2192 ${direction}:`, raw);\n          record('hook', `${name}.update \u2192 ${direction}`, raw);\n          return out;\n        }, `${name}.update`);\n        install(ret, 'final', final => function (...finalArgs) {\n          const out = final.apply(this, finalArgs);\n          const raw = preview(out);\n          console.log(`[hook] ${name}.final \u2192 ${direction}:`, raw);\n          record('hook', `${name}.final \u2192 ${direction}`, raw);\n          return out;\n        }, `${name}.final`);\n      } else {\n        const raw = preview(ret);\n        console.log(`[hook] ${name} \u2192 ${direction}:`, raw);\n        record('hook', `${name} \u2192 ${direction}`, raw);\n      }\n      return ret;\n    }, `module#${moduleId}.${name}`);\n  }\n\n  function breakpointGuidance() {\n    console.warn('[hook] \ub178\ucd9c\ub41c \uc6f9\ud329 \uce90\uc2dc\uc5d0\uc11c \ub300\uc0c1 \ud568\uc218\ub97c \ucc3e\uc9c0 \ubabb\ud568. ' +\n      'webpackChunk*\ub9cc \ubcf4\uc774\uac70\ub098 scope-hoisting/\uc778\ub77c\uc778 \ube4c\ub4dc\uc774\uba74 \ud328\uce58 \uac00\ub2a5\ud55c export\uac00 \uc5c6\uc744 \uc218 \uc788\uc74c. ' +\n      'recon.scanAllScripts()\ub85c \ubc88\ub4e4\uc758 \uace0\uc720 \ud568\uc218/\ubcc0\uc218\uba85\uc744 \ucc3e\uace0 DevTools Sources\uc5d0\uc11c \ud574\ub2f9 \ud638\ucd9c\ubd80\uc5d0 ' +\n      '\uc870\uac74\ubd80 \uc911\ub2e8\uc810\uc744 \uc124\uc815\ud558\uac70\ub098 DOM \ubcc0\uacbd\uc774\uba74 \"Pause on attribute/property change\"\ub97c \uc0ac\uc6a9\ud558\uc138\uc694.');\n  }\n\n  // \uc0ac\uc6a9: recon.hookWebpackCrypto() \u2014 \ub178\ucd9c\ub41c Node \uc2a4\ud0c0\uc77c \uc554\ud638 \ud568\uc218 export\ub97c \uad00\ucc30\ud55c\ub2e4.\n  function hookWebpackCrypto() {\n    const targets = ['createDecipheriv', 'createCipheriv', 'privateDecrypt',\n      'publicEncrypt', 'publicDecrypt', 'privateEncrypt'];\n    const found = findWebpackExports(targets);\n    if (!found.length) breakpointGuidance();\n    else found.forEach(hookFn);\n    return found;\n  }\n\n  function algorithmInfo(algorithm) {\n    if (typeof algorithm === 'string') return { name: algorithm };\n    const info = {};\n    for (const key of ['name', 'iv', 'counter', 'additionalData', 'tagLength',\n      'length', 'salt', 'iterations', 'hash']) {\n      try {\n        const value = algorithm && algorithm[key];\n        if (value === undefined) continue;\n        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {\n          const bytes = value instanceof ArrayBuffer\n            ? new Uint8Array(value)\n            : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);\n          info[key] = { bytes: bytes.length,\n            hex: Array.from(bytes.subarray(0, 32), byte => byte.toString(16).padStart(2, '0')).join('') +\n              (bytes.length > 32 ? '\u2026' : '') };\n        } else if (typeof value === 'string' || typeof value === 'number') info[key] = value;\n        else if (key === 'hash' && value && typeof value.name === 'string') info[key] = value.name;\n      } catch {}\n    }\n    return info;\n  }\n\n  // \uc0ac\uc6a9: recon.hookWebCrypto() \u2014 native crypto.subtle.encrypt/decrypt \uacb0\uacfc\ub97c \uad00\ucc30\ud55c\ub2e4.\n  function hookWebCrypto() {\n    let subtle;\n    try { subtle = window.crypto && window.crypto.subtle; } catch {}\n    if (!subtle) {\n      console.warn('[webcrypto] crypto.subtle\uc5d0 \uc811\uadfc\ud560 \uc218 \uc5c6\uc74c');\n      return 0;\n    }\n    let installed = 0;\n    for (const name of ['encrypt', 'decrypt']) {\n      if (install(subtle, name, original => function (...args) {\n        const algorithm = algorithmInfo(args[0]);\n        console.log(`[webcrypto] ${name} \uc54c\uace0\ub9ac\uc998:`, algorithm);\n        record('webcrypto', `${name} \uc54c\uace0\ub9ac\uc998`, algorithm);\n        const promise = original.apply(this, args);\n        return observePromise(promise, value => {\n          const length = value && value.byteLength;\n          const raw = { bytes: length, utf8: preview(value) };\n          console.log(`[webcrypto] ${name} \u2192 ${name === 'decrypt' ? '\ud3c9\ubb38' : '\uc554\ud638\ubb38'}:`, raw);\n          record('webcrypto', `${name} \u2192 ${name === 'decrypt' ? '\ud3c9\ubb38' : '\uc554\ud638\ubb38'}`, raw);\n        });\n      }, `crypto.subtle.${name}`)) installed++;\n    }\n    return installed;\n  }\n\n  // \uc0ac\uc6a9: recon.hookNetwork() \u2014 \uc571\uc758 fetch/XHR URL\uacfc \uc0c1\ud0dc\ub9cc \uad00\ucc30\ud55c\ub2e4.\n  // body\ub3c4 \ub85c\uadf8\uc5d0 \ub0a8\uae34\ub2e4 -- \uc6d0\ub798 \ubaa9\uc801\uc774 \"\uc774 \uc554\ud638\ubb38\uc774 \uc5b4\ub290 \uc751\ub2f5\uc5d0\uc11c \uc654\ub294\uc9c0\" \ub9e4\uce6d\uc774\ub77c\n  // URL/\uc0c1\ud0dc\ub9cc\uc73c\ub85c\ub294 \ubabb \ub9de\ucd98\ub2e4. clone()\ub41c \ucabd\ub9cc \uc77d\uace0 \uc6d0\ubcf8 \uc751\ub2f5\uc740 \uadf8\ub300\ub85c \ud638\ucd9c\uc790\uc5d0\uac8c \ub3cc\ub824\uc900\ub2e4.\n  function hookNetwork() {\n    let installed = 0;\n    if (typeof window.fetch === 'function' && install(window, 'fetch', original => function (...args) {\n      const promise = original.apply(this, args);\n      return observePromise(promise, response => {\n        console.log('%c[fetch]', 'color:blue', response.url, response.status);\n        record('network', `fetch HTTP ${response.status}`, response.url);\n        try {\n          response.clone().text().then(body => {\n            if (body) {\n              const raw = preview(body);\n              console.log('%c[fetch] body', 'color:blue', response.url, raw);\n              record('network', `fetch body ${response.url}`, raw);\n            }\n          }, () => {});\n        } catch {}\n      });\n    }, 'window.fetch')) installed++;\n    if (typeof XMLHttpRequest !== 'undefined' &&\n        install(XMLHttpRequest.prototype, 'send', original => function (...args) {\n          this.addEventListener('loadend', () => {\n            console.log('%c[xhr]', 'color:blue', this.responseURL, this.status);\n            record('network', `xhr HTTP ${this.status}`, this.responseURL);\n            if (this.responseText) {\n              const raw = preview(this.responseText);\n              console.log('%c[xhr] body', 'color:blue', this.responseURL, raw);\n              record('network', `xhr body ${this.responseURL}`, raw);\n            }\n          }, { once: true });\n          return original.apply(this, args);\n        }, 'XMLHttpRequest.send')) installed++;\n    return installed;\n  }\n\n  // \uc0ac\uc6a9: recon.tryDecode('\uac12') \u2014 \uc9e7\uc740 Base64/hex/JWT \uac12\uc744 \ub85c\uceec\uc5d0\uc11c \ud574\uc11d\ud55c\ub2e4.\n  function tryDecode(value) {\n    const out = {};\n    try {\n      if (typeof value !== 'string' || value.length > 16384) return out;\n      try { out.base64 = atob(value); } catch {}\n      if (value.length % 2 === 0 && /^[0-9a-f]+$/i.test(value)) {\n        try {\n          out.hex = Array.from({ length: value.length / 2 }, (_, i) =>\n            String.fromCharCode(parseInt(value.slice(i * 2, i * 2 + 2), 16))).join('');\n        } catch {}\n      }\n      const parts = value.split('.');\n      if (parts.length === 3) {\n        try {\n          const decodePart = part => {\n            const binary = atob(part.replace(/-/g, '+').replace(/_/g, '/')\n              .padEnd(Math.ceil(part.length / 4) * 4, '='));\n            return JSON.parse(new TextDecoder('utf-8', { fatal: true })\n              .decode(Uint8Array.from(binary, char => char.charCodeAt(0))));\n          };\n          out.jwtHeader = decodePart(parts[0]);\n          out.jwtPayload = decodePart(parts[1]);\n        } catch {}\n      }\n    } catch {}\n    console.log('[decode]', out);\n    record('decode', '\uacb0\uacfc', out);\n    return out;\n  }\n\n  // \uc0ac\uc6a9: recon.hookAll() \u2014 \uc6f9\ud329, WebCrypto, \ub124\ud2b8\uc6cc\ud06c \uad00\ucc30 \ud6c4\ud0b9\uc744 \ud55c \ubc88\uc5d0 \uc124\uce58\ud55c\ub2e4.\n  function hookAll() {\n    return { webpack: hookWebpackCrypto(), webcrypto: hookWebCrypto(), network: hookNetwork() };\n  }\n\n  // \uc0ac\uc6a9: recon.unhookAll() \u2014 \uc774 \ub3c4\uad6c\uac00 \uc124\uce58\ud55c \ud6c4\ud0b9\uc744 \ubaa8\ub450 \uc6d0\ub798 \ud568\uc218\ub85c \ubcf5\uc6d0\ud55c\ub2e4.\n  function unhookAll() {\n    let restored = 0;\n    for (const { holder, name, original, wrapper, hadOwnProperty } of hooked.splice(0).reverse()) {\n      try {\n        if (holder[name] !== wrapper) continue;\n        if (hadOwnProperty) holder[name] = original;\n        else delete holder[name];\n        restored++;\n      } catch { console.warn(`[hook] \ubcf5\uc6d0 \uc2e4\ud328: ${name}`); }\n    }\n    return restored;\n  }\n\n  return { scanAllScripts, hookWebpackCrypto, hookWebCrypto, hookNetwork,\n    tryDecode, findWebpackExports, hookAll, unhookAll, hits, clearResults };\n})();\nconsole.log('recon \ub85c\ub4dc\ub428. recon.scanAllScripts() / recon.hookWebpackCrypto() / recon.hookWebCrypto() / recon.hookNetwork() / recon.hookAll() / recon.tryDecode(\"\uac12\") / recon.findWebpackExports([\"\uc774\ub984\"]) / recon.hits() / recon.clearResults() / recon.unhookAll()');\n";
+  // This duplicate must stay in sync with scripts/browser-crypto-recon.js; the standalone HTML cannot import the console paste-in.
+  const DANGEROUS_RE = /(enc|dec|crypt|cipher|aes|rsa|secret|private.?key|public.?key|password|token|jwt)/gi;
+  const VALUE_PATTERNS = [
+    /\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+    /[A-Za-z0-9+/]{24,}={0,2}/g,
+    /\b[0-9a-f]{32,}\b/gi,
+  ];
+  const MAX_CANDIDATES = 50;
+  const MAX_BODY_LENGTH = 2 * 1024 * 1024;
+
+  function responseText(content) {
+    if (!content || typeof content.text !== 'string') return null;
+    const mime = String(content.mimeType || '').toLowerCase();
+    if (/^(?:image|font|video|audio)\//.test(mime)) return null;
+    if (content.text.length > MAX_BODY_LENGTH * (content.encoding === 'base64' ? 1.4 : 1)) return null;
+    if (content.encoding !== 'base64') return content.text;
+    try {
+      const binary = atob(content.text);
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    } catch { return null; }
+  }
+
+  function isScript(content, url) {
+    if (String(content?.mimeType || '').toLowerCase().includes('javascript')) return true;
+    try { return new URL(url).pathname.toLowerCase().endsWith('.js'); }
+    catch { return /\.js(?:$|[?#])/i.test(url); }
+  }
+
+  function addCandidates(body, values, stats) {
+    for (const pattern of VALUE_PATTERNS) {
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(body))) {
+        const value = match[0];
+        if (value.length > 16384 || values.has(value)) continue;
+        if (values.size === MAX_CANDIDATES) { stats.candidateCap = true; return; }
+        values.add(value);
+      }
+    }
+  }
+
+  function table(container, headings, rows, renderRow) {
+    container.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('div'); empty.className = 'empty';
+      empty.textContent = '해당 항목이 없습니다.'; container.append(empty); return;
+    }
+    const element = document.createElement('table');
+    const head = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    for (const heading of headings) {
+      const cell = document.createElement('th'); cell.textContent = heading; headRow.append(cell);
+    }
+    head.append(headRow); element.append(head);
+    const body = document.createElement('tbody');
+    for (const row of rows) body.append(renderRow(row));
+    element.append(body); container.append(element);
+  }
+
+  function cell(row, text, className = '') {
+    const td = document.createElement('td'); td.className = className;
+    td.textContent = text; row.append(td); return td;
+  }
+
+  function renderScripts(urls) {
+    table($('scripts'), ['구분', '스크립트 URL'], urls, url => {
+      const row = document.createElement('tr');
+      const badge = cell(row, '키워드 일치'); badge.className = 'badge candidate';
+      cell(row, url, 'url'); return row;
+    });
+  }
+
+  function renderWrites(entries) {
+    table($('writes'), ['메서드', 'URL', '상태'], entries, item => {
+      const row = document.createElement('tr');
+      const methodCell = document.createElement('td');
+      const method = document.createElement('span'); method.className = 'method ' + item.method.toLowerCase();
+      method.textContent = item.method; methodCell.append(method); row.append(methodCell);
+      cell(row, item.url, 'url'); cell(row, String(item.status)); return row;
+    });
+  }
+
+  function makeBundle(values, scriptsFound) {
+    // HAR requests are never replayed; only stored values and passive live-page hooks are emitted.
+    const calls = [...values].map(value => `recon.tryDecode(${JSON.stringify(value)});`);
+    if (scriptsFound) calls.push(
+      '// 다음 후킹은 현재 페이지에서 앞으로 발생하는 암호 함수 호출과 네트워크 동작만 관찰합니다.',
+      'recon.hookWebpackCrypto();',
+      'recon.hookWebCrypto();',
+      'recon.hookNetwork();'
+    );
+    calls.push('// 페이지와 상호작용한 뒤 다시 실행해 누적 결과를 확인하세요.', 'recon.hits();');
+    return RECON_SOURCE + '\n' + calls.join('\n');
+  }
+
+  async function copy(text, button) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const area = document.createElement('textarea');
+      area.value = text; document.body.append(area); area.select();
+      document.execCommand('copy'); area.remove();
+    }
+    const old = button.textContent;
+    button.textContent = '복사됨';
+    setTimeout(() => { button.textContent = old; }, 1200);
+  }
+
+  $('analyze').addEventListener('click', async () => {
+    const files = [...$('files').files];
+    if (!files.length) { $('status').textContent = 'HAR 파일을 선택해 주세요.'; return; }
+    $('status').textContent = '분석 중…';
+    $('bundle').value = ''; $('copy').disabled = true;
+    const values = new Set(), scripts = new Set(), writes = [];
+    const stats = { entries: 0, reads: 0, writes: 0, others: 0, skippedBodies: 0, candidateCap: false };
+    try {
+      for (const file of files) {
+        const har = JSON.parse(await file.text());
+        const entries = har?.log?.entries;
+        if (!Array.isArray(entries)) throw new Error(`${file.name}: HAR 형식이 아닙니다 (log.entries 없음).`);
+        for (const entry of entries) {
+          stats.entries++;
+          const request = entry?.request || {};
+          const method = String(request.method || '').toUpperCase();
+          const url = String(request.url || '');
+          if (['GET', 'HEAD', 'OPTIONS'].includes(method)) stats.reads++;
+          else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+            stats.writes++;
+            writes.push({ method, url, status: entry?.response?.status ?? '미기록' });
+          } else stats.others++;
+          const content = entry?.response?.content;
+          const body = responseText(content);
+          if (body === null || body.length > MAX_BODY_LENGTH) { stats.skippedBodies++; continue; }
+          if (isScript(content, url)) {
+            DANGEROUS_RE.lastIndex = 0;
+            if (DANGEROUS_RE.test(body)) scripts.add(url || '(URL 미기록)');
+          }
+          if (!stats.candidateCap) addCandidates(body, values, stats);
+        }
+      }
+      renderScripts([...scripts]); renderWrites(writes);
+      $('summary').textContent = `${stats.entries}개 항목 분석 · 읽기 전용 ${stats.reads}개 · 변경 요청 후보 ${stats.writes}개 · 기타 메서드 ${stats.others}개 · 스크립트 후보 ${scripts.size}개 · 디코드 후보 ${values.size}개 · 본문 건너뜀 ${stats.skippedBodies}개 · 후보 50개 상한 ${stats.candidateCap ? '도달' : '미도달'}`;
+      $('bundle').value = makeBundle(values, scripts.size > 0);
+      $('copy').disabled = false;
+      $('status').textContent = `${files.length}개 HAR 분석 완료`;
+    } catch (error) { $('status').textContent = `분석 실패: ${error.message}`; }
+  });
+  $('copy').addEventListener('click', () => copy($('bundle').value, $('copy')));
+})();
+</script>
+</body>
+</html>
