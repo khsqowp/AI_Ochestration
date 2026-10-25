@@ -64,7 +64,13 @@ public class ResearchSource {
     if (consecutiveFailures <= backoffHours.length) nextRetryAt = Instant.now().plusSeconds(backoffHours[consecutiveFailures - 1] * 3600);
     else nextRetryAt = null;
   }
-  void recordNoContent() { consecutiveNoContentCycles++; }
+  // Alerted on at NO_CONTENT_ALERT_THRESHOLD (3, see DigestService) but left running in case it recovers;
+  // past this point it has shown nothing useful for a long time and stops wasting crawl/LLM budget on its own.
+  private static final int AUTO_DISABLE_THRESHOLD = 7;
+  void recordNoContent() {
+    consecutiveNoContentCycles++;
+    if (consecutiveNoContentCycles >= AUTO_DISABLE_THRESHOLD) enabled = false;
+  }
   void recordContentFound() { consecutiveNoContentCycles = 0; }
   void update(String name, ResearchDomain domain, int intervalHours, int crawlDepth, int maxPages, String note) {
     this.name = name; this.domain = domain; this.intervalHours = intervalHours; this.crawlDepth = crawlDepth; this.maxPages = maxPages; this.note = note;
