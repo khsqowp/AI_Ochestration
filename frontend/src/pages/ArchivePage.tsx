@@ -52,7 +52,10 @@ export function ArchivePage() {
 
   return <main className="archive-page">
     <header className="archive-page-header"><div><p className="eyebrow">LINKCOLLECT</p><h1>아카이브</h1><p>외부 LinkCollect에 저장된 자료를 읽기 전용으로 조회합니다.</p></div><button type="button" onClick={refresh}>새로고침</button></header>
-    {section('최근 접수', jobs, job => <h3 className="archive-card-title-clamp">{job.title || job.url || '제목 없음'}</h3>, job => job.id)}
+    {section('최근 접수', jobs, job => <>
+      {job.media_name && <img className="archive-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(job.id)}/thumbnail`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }}/>}
+      <h3 className="archive-card-title-clamp">{job.title || job.url || '제목 없음'}</h3>
+    </>, job => job.id)}
     {section('정보성 아카이브', knowledge, item => <>
       <h3 className="archive-card-title-clamp">{item.title}</h3>
       {!!item.category && <div className="archive-tags"><span className="archive-tag">{item.category}</span></div>}

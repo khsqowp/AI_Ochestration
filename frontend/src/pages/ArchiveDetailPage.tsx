@@ -60,6 +60,7 @@ export function ArchiveDetailPage() {
       : state.error ? <p className="archive-error">{state.error}</p>
         : !item ? <p className="empty-state">항목을 찾을 수 없습니다.</p>
           : item.kind === 'job' ? <section className="archive-detail">
+            {item.item.media_name && <img className="archive-detail-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(item.item.id)}/thumbnail`} alt="" onError={e => { e.currentTarget.style.display = 'none' }}/>}
             <h2>{item.item.title || item.item.url || '제목 없음'}</h2>
             <div className="archive-detail-meta"><span>{item.item.status}</span><time>{formatDate(item.item.created_at)}</time></div>
             {!!item.item.tags?.length && <div className="archive-tags">{item.item.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>{tag}</span>)}</div>}

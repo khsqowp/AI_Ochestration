@@ -35,4 +35,27 @@ class LinkCollectControllerTest {
         .andExpect(content().contentType(MediaType.APPLICATION_JSON))
         .andExpect(content().json("{\"error\":\"LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.\"}"));
   }
+
+  @Test
+  void returnsThumbnailBytesWhenPresent() throws Exception {
+    byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
+    when(client.thumbnail("45fe87b4d52a")).thenReturn(new LinkCollectClient.Thumbnail(jpeg, "image/jpeg"));
+
+    mvc.perform(get("/api/linkcollect/jobs/45fe87b4d52a/thumbnail"))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType(MediaType.IMAGE_JPEG))
+        .andExpect(content().bytes(jpeg));
+  }
+
+  @Test
+  void returnsNotFoundWhenThumbnailMissing() throws Exception {
+    when(client.thumbnail("45fe87b4d52a")).thenReturn(null);
+
+    mvc.perform(get("/api/linkcollect/jobs/45fe87b4d52a/thumbnail")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void rejectsInvalidJobIdForThumbnail() throws Exception {
+    mvc.perform(get("/api/linkcollect/jobs/not-a-valid-id/thumbnail")).andExpect(status().isBadRequest());
+  }
 }

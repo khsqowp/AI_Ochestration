@@ -1,10 +1,12 @@
 package com.orchestration.linkcollect;
 
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,6 +27,20 @@ public class LinkCollectController {
 
   @GetMapping(value = "/places", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<String> places() { return json(client.places()); }
+
+  private static final Pattern JOB_ID = Pattern.compile("[0-9a-f]{8,40}");
+
+  @GetMapping("/jobs/{jobId}/thumbnail")
+  public ResponseEntity<byte[]> thumbnail(@PathVariable String jobId) {
+    if (!JOB_ID.matcher(jobId).matches()) {
+      return ResponseEntity.badRequest().build();
+    }
+    LinkCollectClient.Thumbnail thumbnail = client.thumbnail(jobId);
+    if (thumbnail == null) {
+      return ResponseEntity.notFound().build();
+    }
+    return ResponseEntity.ok().contentType(MediaType.parseMediaType(thumbnail.contentType())).body(thumbnail.body());
+  }
 
   @ExceptionHandler(LinkCollectUnavailableException.class)
   public ResponseEntity<ErrorResponse> unavailable(LinkCollectUnavailableException exception) {
