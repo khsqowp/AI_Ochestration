@@ -22,6 +22,7 @@ const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then(m => (
 const DiagToolPage = lazy(() => import('./pages/DiagToolPage').then(m => ({ default: m.DiagToolPage })))
 const NotebookPage = lazy(() => import('./pages/NotebookPage').then(m => ({ default: m.NotebookPage })))
 const ArchivePage = lazy(() => import('./pages/ArchivePage').then(m => ({ default: m.ArchivePage })))
+const ArchiveDetailPage = lazy(() => import('./pages/ArchiveDetailPage').then(m => ({ default: m.ArchiveDetailPage })))
 const InvestPage = lazy(() => import('./pages/InvestPage').then(m => ({ default: m.InvestPage })))
 const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
 const OrderBoardPage = lazy(() => import('./pages/OrderBoardPage').then(m => ({ default: m.OrderBoardPage })))
@@ -55,6 +56,7 @@ export function App() {
               <Route path="feedback" element={<FeedbackPage/>}/>
               <Route element={<RequireAdmin/>}>
                 <Route path="archive" element={<ArchivePage/>}/>
+                <Route path="archive/:archiveId" element={<ArchiveDetailPage/>}/>
                 <Route path="order" element={<OrderBoardPage/>}/>
                 <Route path="invest/*" element={<InvestPage/>}/>
                 <Route path="admin/*" element={<AdminPage/>}/>
