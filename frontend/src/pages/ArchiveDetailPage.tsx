@@ -8,7 +8,7 @@ type Job = {
   extracted_caption: string; location_name: string; location_address: string
   analysis_error: string; tags: string[]
 }
-type ArchiveSource = { job_id: string; url: string; source: string; title: string; caption: string; summary: string; transcript: string; transcript_cleaned: string; created_at: string }
+type ArchiveSource = { job_id?: string; url?: string; source?: string; title?: string; caption?: string; summary?: string; transcript?: string; transcript_cleaned?: string; created_at?: string }
 type KnowledgeItem = {
   id: string; title: string; category: string; summary: string; content: string; language: string
   created_at: string; source_count: number
@@ -42,25 +42,44 @@ async function loadItems<T>(path: string): Promise<T[]> {
 }
 
 function formatDate(value: string) { return value ? new Date(value).toLocaleString() : '날짜 정보 없음' }
-function safeExternalUrl(value: string) {
+function mergeContent(...values: (string | null | undefined)[]) {
+  return [...new Set(values.map(value => value?.trim()).filter((value): value is string => Boolean(value)))].join('\n\n')
+}
+function safeExternalUrl(value?: string) {
+  if (!value) return ''
   try { const parsed = new URL(value); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '' }
   catch { return '' }
 }
-function TranscriptSections({ transcript, cleaned }: { transcript?: string; cleaned?: string }) {
-  if (!transcript && !cleaned) return <p className="archive-detail-note">저장된 STT 전사 데이터가 없습니다.</p>
-  return <>
-    <div className="archive-detail-field"><h3>STT 원본</h3><p className="archive-content">{transcript}</p></div>
-    <div className="archive-detail-field"><h3>STT 정리본</h3><p className="archive-detail-note">STT 원문과 정리본은 별도로 보관합니다. 원문 STT는 수정하지 않습니다.</p><p className="archive-content">{cleaned || (transcript ? '원문은 보존되어 있습니다. 문장 정리본은 아직 생성되지 않았습니다.' : 'STT 정리본이 없습니다.')}</p></div>
-  </>
+function ContentSection({ title, content, nested = false }: { title: string; content?: string | null; nested?: boolean }) {
+  if (!content?.trim()) return null
+  const Heading = nested ? 'h4' : 'h3'
+  return <section className="archive-detail-section archive-content-section">
+    <Heading>{title}</Heading>
+    <p className="archive-content">{content}</p>
+  </section>
+}
+function TranscriptSections({ transcript, cleaned, nested = false }: { transcript?: string; cleaned?: string; nested?: boolean }) {
+  if (!transcript?.trim() && !cleaned?.trim()) return null
+  const Heading = nested ? 'h4' : 'h3'
+  return <section className="archive-detail-section archive-transcript-section">
+    <div className="archive-section-title"><Heading>음성 전사</Heading><p>원본 전사와 읽기 편하게 정리한 내용을 따로 보관합니다.</p></div>
+    {cleaned?.trim() && <div className="archive-transcript-card archive-transcript-card--cleaned">
+      <h4>STT 문맥 정리본</h4><p className="archive-content">{cleaned}</p>
+    </div>}
+    {transcript?.trim() && <div className="archive-transcript-card archive-transcript-card--raw">
+      <h4>STT 원본</h4><p className="archive-content">{transcript}</p>
+    </div>}
+    {!cleaned?.trim() && <p className="archive-detail-subtle">정리본은 아직 없습니다. 아래에 저장된 원본 전사문을 표시합니다.</p>}
+  </section>
 }
 function ArchiveSources({ sources }: { sources?: ArchiveSource[] }) {
   if (!sources?.length) return <p className="archive-detail-note">연결된 원본 출처 정보가 없습니다.</p>
   return <div className="archive-source-list">{sources.map((source, index) => <article className="archive-source" key={source.job_id || `${source.url}-${index}`}>
     <div className="archive-detail-meta"><span>{source.source}</span>{source.created_at && <time>{formatDate(source.created_at)}</time>}</div>
     <h3>{source.title || '원본 자료'}</h3>
-    <TranscriptSections transcript={source.transcript} cleaned={source.transcript_cleaned} />
-    {!source.transcript && !source.transcript_cleaned && source.summary && <div className="archive-detail-field"><h3>저장된 내용</h3><p className="archive-content">{source.summary}</p></div>}
-    {source.caption && <div className="archive-detail-field"><h3>원문 캡션</h3><p className="archive-content">{source.caption}</p></div>}
+    <ContentSection title="요약 및 정리된 내용" content={source.summary} nested />
+    <TranscriptSections transcript={source.transcript} cleaned={source.transcript_cleaned} nested />
+    <ContentSection title="원문 캡션" content={source.caption} nested />
     {safeExternalUrl(source.url) && <a className="archive-link" href={safeExternalUrl(source.url)} target="_blank" rel="noopener noreferrer">원문 열기 ↗</a>}
   </article>)}</div>
 }
@@ -151,10 +170,12 @@ export function ArchiveDetailPage() {
             <div className="archive-detail-meta"><span>{item.item.status}</span><time>{formatDate(item.item.created_at)}</time></div>
             {!!item.item.tags?.length && <div className="archive-tags">{item.item.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>{tag}</span>)}</div>}
             {safeExternalUrl(item.item.url) && <a className="archive-link" href={safeExternalUrl(item.item.url)} target="_blank" rel="noopener noreferrer">원문 열기 ↗</a>}
-            {item.item.media_name && <p className="archive-detail-field"><strong>미디어</strong>{item.item.media_name}</p>}
+            {item.item.media_name && <p className="archive-detail-meta archive-media-name">미디어 파일 · {item.item.media_name}</p>}
+            <ContentSection title="요약 및 정리된 내용" content={mergeContent(item.item.summary, item.item.cleaned_content)} />
             <TranscriptSections transcript={item.item.transcript} cleaned={item.item.transcript_cleaned} />
-            {!item.item.transcript && !item.item.transcript_cleaned && (item.item.cleaned_content || item.item.summary) && <div className="archive-detail-field"><h3>저장된 내용</h3><p className="archive-content">{item.item.cleaned_content || item.item.summary}</p></div>}
-            {([['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
+            <ContentSection title="원문 캡션" content={item.item.extracted_caption} />
+            {item.item.source_title && <p className="archive-detail-meta archive-source-title">출처 제목 · {item.item.source_title}</p>}
+            {!mergeContent(item.item.summary, item.item.cleaned_content, item.item.transcript, item.item.transcript_cleaned, item.item.extracted_caption) && <p className="archive-detail-subtle">저장된 요약, 본문, STT, 캡션이 아직 없습니다.</p>}
             {item.item.analysis_error && <div className="archive-detail-note"><strong>분석 오류 기록</strong><p>{item.item.analysis_error}</p></div>}
           </section> : item.kind === 'knowledge' ? <section className="archive-detail">
             <div className="archive-reclassify">
@@ -166,7 +187,11 @@ export function ArchiveDetailPage() {
             <h2>{item.item.title}</h2>
             {!!item.item.category || item.item.tags?.length ? <div className="archive-tags">{[categoryLabels[item.item.category] ?? item.item.category, ...(item.item.tags ?? [])].filter(Boolean).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div> : null}
             <div className="archive-detail-meta"><time>{formatDate(item.item.created_at)}</time><span>출처 {item.item.source_count}개</span></div>
-            {!item.item.sources?.some(source => source.transcript || source.transcript_cleaned) && !item.item.transcript && !item.item.transcript_cleaned && (item.item.cleaned_content || item.item.content || item.item.summary) && <div className="archive-detail-field"><h3>저장된 내용</h3><p className="archive-content">{item.item.cleaned_content || item.item.content || item.item.summary}</p></div>}
+            <ContentSection title="요약 및 정리된 내용" content={mergeContent(item.item.summary, item.item.cleaned_content, item.item.content)} />
+            <TranscriptSections
+              transcript={item.item.sources?.some(source => source.transcript?.trim() === item.item.transcript?.trim()) ? undefined : item.item.transcript}
+              cleaned={item.item.sources?.some(source => source.transcript_cleaned?.trim() === item.item.transcript_cleaned?.trim()) ? undefined : item.item.transcript_cleaned}
+            />
             <div className="archive-detail-field"><h3>원본 출처</h3><ArchiveSources sources={item.item.sources} /></div>
           </section> : <section className="archive-detail">
             <div className="archive-reclassify">
@@ -192,7 +217,7 @@ export function ArchiveDetailPage() {
               {regeocodeState.message && <p className={`archive-regeocode-status${regeocodeState.status === 'error' ? ' archive-error' : ''}`} role={regeocodeState.status === 'error' ? 'alert' : 'status'}>{regeocodeState.message}</p>}
               {regeocodeState.status === 'success' && <button type="button" className="archive-refresh-place" onClick={() => { regeocodeLocked.current = false; setReloadVersion(value => value + 1) }}>좌표 상태 새로고침</button>}
             </form>
-            <div className="archive-detail-field"><h3>원본 출처와 캡션</h3><ArchiveSources sources={item.item.sources} /></div>
+            <div className="archive-detail-field"><h3>원본 출처</h3><ArchiveSources sources={item.item.sources} /></div>
           </section>}
   </main>
 }

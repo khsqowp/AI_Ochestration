@@ -1331,6 +1331,21 @@ small { letter-spacing:.005em; line-height:1.55; }
 .archive-source { padding:14px; border:1px solid #e7e4ed; border-radius:11px; background:#fbfaff; }
 .archive-source h3 { margin:8px 0; color:#302c38; font-size:14px; }
 .archive-source p { margin:7px 0; color:#514e59; font-size:13px; line-height:1.6; white-space:pre-wrap; }
+.archive-detail { max-width:1240px; margin-inline:auto; padding:26px 30px; }
+.archive-detail-section { max-width:1000px; margin:24px 0 0; }
+.archive-detail-section > h3,.archive-section-title h3,.archive-section-title h4 { margin:0 0 10px; color:#302c38; font-size:16px; }
+.archive-source .archive-detail-section > h4 { margin:0 0 8px; color:#302c38; font-size:13px; }
+.archive-detail-section .archive-content { max-width:88ch; color:#383542; font-size:14px; line-height:1.8; }
+.archive-section-title p,.archive-detail-subtle { margin:0; color:#777482; font-size:12px; line-height:1.6; }
+.archive-transcript-card { margin-top:12px; padding:16px 18px; border:1px solid #e7e4ed; border-radius:12px; background:#fff; }
+.archive-transcript-card--cleaned { border-color:#ded9f1; background:#f8f7fd; }
+.archive-transcript-card h4 { margin:0 0 9px; color:#51469b; font-size:13px; }
+.archive-source .archive-detail-section { margin-top:16px; }
+.archive-source .archive-detail-section > h3,.archive-source .archive-detail-section > h4,.archive-source .archive-section-title h4 { font-size:13px; }
+.archive-source .archive-transcript-card { padding:12px 14px; }
+.archive-media-name,.archive-source-title { margin-top:10px; }
+.archive-detail :focus-visible { outline:3px solid #6154c5; outline-offset:3px; }
+@media (max-width:700px) { .archive-detail { padding:18px 16px; } .archive-transcript-card { padding:13px; } }
 .archive-map-location { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:16px 0; padding:14px; border:1px solid #d9e9dc; border-radius:11px; background:#f5fbf6; }
 .archive-map-location .archive-detail-field { margin:0; }
 .archive-map-link { display:inline-flex; min-height:40px; align-items:center; padding:8px 12px; border-radius:9px; background:#e7f5eb; color:#285f3b; font-size:12px; font-weight:700; text-decoration:none; }
