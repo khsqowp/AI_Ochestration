@@ -4,15 +4,15 @@ import { Link, useParams } from 'react-router-dom'
 type Job = {
   id: string; source: string; url: string; text: string; media_name: string; media_type: string
   status: string; created_at: string; title: string; category: string; summary: string
-  cleaned_content: string; transcript: string; ocr_text: string; source_title: string
+  cleaned_content: string; transcript: string; transcript_cleaned: string; ocr_text: string; source_title: string
   extracted_caption: string; location_name: string; location_address: string
   analysis_error: string; tags: string[]
 }
-type ArchiveSource = { job_id: string; url: string; source: string; title: string; caption: string; summary: string; created_at: string }
+type ArchiveSource = { job_id: string; url: string; source: string; title: string; caption: string; summary: string; transcript: string; transcript_cleaned: string; created_at: string }
 type KnowledgeItem = {
   id: string; title: string; category: string; summary: string; content: string; language: string
   created_at: string; source_count: number
-  cleaned_content: string; transcript: string; ocr_text: string; source_title: string; extracted_caption: string
+  cleaned_content: string; transcript: string; transcript_cleaned: string; ocr_text: string; source_title: string; extracted_caption: string
   tags: string[]; sources: ArchiveSource[]
 }
 type Place = { id: string; name: string; address: string; category: string; latitude: number | null; longitude: number | null; naver_map_url: string; created_at: string; source_count: number; tags: string[]; geocode_status: string; sources: ArchiveSource[] }
@@ -42,20 +42,25 @@ async function loadItems<T>(path: string): Promise<T[]> {
 }
 
 function formatDate(value: string) { return value ? new Date(value).toLocaleString() : '날짜 정보 없음' }
-function mergeContent(...values: (string | null | undefined)[]) {
-  return [...new Set(values.map(value => value?.trim()).filter((value): value is string => Boolean(value)))]
-    .join('\n\n')
-}
 function safeExternalUrl(value: string) {
   try { const parsed = new URL(value); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '' }
   catch { return '' }
+}
+function TranscriptSections({ transcript, cleaned }: { transcript?: string; cleaned?: string }) {
+  if (!transcript && !cleaned) return <p className="archive-detail-note">저장된 STT 전사 데이터가 없습니다.</p>
+  return <>
+    <div className="archive-detail-field"><h3>STT 원본</h3><p className="archive-content">{transcript}</p></div>
+    <div className="archive-detail-field"><h3>STT 정리본</h3><p className="archive-detail-note">STT 원문과 정리본은 별도로 보관합니다. 원문 STT는 수정하지 않습니다.</p><p className="archive-content">{cleaned || (transcript ? '원문은 보존되어 있습니다. 문장 정리본은 아직 생성되지 않았습니다.' : 'STT 정리본이 없습니다.')}</p></div>
+  </>
 }
 function ArchiveSources({ sources }: { sources?: ArchiveSource[] }) {
   if (!sources?.length) return <p className="archive-detail-note">연결된 원본 출처 정보가 없습니다.</p>
   return <div className="archive-source-list">{sources.map((source, index) => <article className="archive-source" key={source.job_id || `${source.url}-${index}`}>
     <div className="archive-detail-meta"><span>{source.source}</span>{source.created_at && <time>{formatDate(source.created_at)}</time>}</div>
     <h3>{source.title || '원본 자료'}</h3>
-    {mergeContent(source.caption, source.summary) && <p className="archive-content">{mergeContent(source.caption, source.summary)}</p>}
+    <TranscriptSections transcript={source.transcript} cleaned={source.transcript_cleaned} />
+    {!source.transcript && !source.transcript_cleaned && source.summary && <div className="archive-detail-field"><h3>저장된 내용</h3><p className="archive-content">{source.summary}</p></div>}
+    {source.caption && <div className="archive-detail-field"><h3>원문 캡션</h3><p className="archive-content">{source.caption}</p></div>}
     {safeExternalUrl(source.url) && <a className="archive-link" href={safeExternalUrl(source.url)} target="_blank" rel="noopener noreferrer">원문 열기 ↗</a>}
   </article>)}</div>
 }
@@ -147,8 +152,8 @@ export function ArchiveDetailPage() {
             {!!item.item.tags?.length && <div className="archive-tags">{item.item.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>{tag}</span>)}</div>}
             {safeExternalUrl(item.item.url) && <a className="archive-link" href={safeExternalUrl(item.item.url)} target="_blank" rel="noopener noreferrer">원문 열기 ↗</a>}
             {item.item.media_name && <p className="archive-detail-field"><strong>미디어</strong>{item.item.media_name}</p>}
-            {mergeContent(item.item.summary, item.item.cleaned_content) && <div className="archive-detail-field"><h3>요약 및 정리</h3><p className="archive-content">{mergeContent(item.item.summary, item.item.cleaned_content)}</p></div>}
-            {item.item.transcript && <div className="archive-detail-field"><h3>STT</h3><p className="archive-content">{item.item.transcript}</p></div>}
+            <TranscriptSections transcript={item.item.transcript} cleaned={item.item.transcript_cleaned} />
+            {!item.item.transcript && !item.item.transcript_cleaned && (item.item.cleaned_content || item.item.summary) && <div className="archive-detail-field"><h3>저장된 내용</h3><p className="archive-content">{item.item.cleaned_content || item.item.summary}</p></div>}
             {([['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
             {item.item.analysis_error && <div className="archive-detail-note"><strong>분석 오류 기록</strong><p>{item.item.analysis_error}</p></div>}
           </section> : item.kind === 'knowledge' ? <section className="archive-detail">
@@ -161,10 +166,7 @@ export function ArchiveDetailPage() {
             <h2>{item.item.title}</h2>
             {!!item.item.category || item.item.tags?.length ? <div className="archive-tags">{[categoryLabels[item.item.category] ?? item.item.category, ...(item.item.tags ?? [])].filter(Boolean).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div> : null}
             <div className="archive-detail-meta"><time>{formatDate(item.item.created_at)}</time><span>출처 {item.item.source_count}개</span></div>
-            {mergeContent(item.item.summary, item.item.cleaned_content, item.item.content) && <div className="archive-detail-field"><h3>요약 및 정리</h3><p className="archive-content">{mergeContent(item.item.summary, item.item.cleaned_content, item.item.content)}</p></div>}
-            {item.item.transcript && <div className="archive-detail-field"><h3>STT</h3><p className="archive-content">{item.item.transcript}</p></div>}
-            {([['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
-            {item.item.language && <p className="archive-detail-field"><strong>언어</strong>{item.item.language}</p>}
+            {!item.item.sources?.some(source => source.transcript || source.transcript_cleaned) && !item.item.transcript && !item.item.transcript_cleaned && (item.item.cleaned_content || item.item.content || item.item.summary) && <div className="archive-detail-field"><h3>저장된 내용</h3><p className="archive-content">{item.item.cleaned_content || item.item.content || item.item.summary}</p></div>}
             <div className="archive-detail-field"><h3>원본 출처</h3><ArchiveSources sources={item.item.sources} /></div>
           </section> : <section className="archive-detail">
             <div className="archive-reclassify">
