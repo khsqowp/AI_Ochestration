@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -14,7 +15,7 @@ import org.mockito.Mockito;
 
 class LinkCollectControllerTest {
   private final LinkCollectClient client = Mockito.mock(LinkCollectClient.class);
-  private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new LinkCollectController(client)).build();
+  private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new LinkCollectController(client, new ObjectMapper())).build();
 
   @Test
   void returnsRawJsonForAllEndpoints() throws Exception {

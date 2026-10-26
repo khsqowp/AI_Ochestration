@@ -26,6 +26,10 @@ public class LinkCollectClient {
     return post("/api/archive/reclassify", requestBody);
   }
 
+  public ReclassifyResult regeocode(String placeId, String requestBody) {
+    return post("/api/places/" + placeId + "/regeocode", requestBody);
+  }
+
   public Thumbnail thumbnail(String jobId) {
     HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(properties.baseUrl() + "/api/jobs/" + jobId + "/thumbnail"))
         .timeout(Duration.ofSeconds(8)).GET();
@@ -86,7 +90,7 @@ public class LinkCollectClient {
     try {
       HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
       int status = response.statusCode();
-      if (status == 200 || status == 400 || status == 404) {
+      if (status == 200 || status == 400 || status == 404 || status == 409) {
         return new ReclassifyResult(status, response.body());
       }
       String responseBody = response.body();
