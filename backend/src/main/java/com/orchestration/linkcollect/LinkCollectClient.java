@@ -22,6 +22,10 @@ public class LinkCollectClient {
   public String knowledge() { return get("/api/knowledge"); }
   public String places() { return get("/api/places"); }
 
+  public ReclassifyResult reclassify(String requestBody) {
+    return post("/api/archive/reclassify", requestBody);
+  }
+
   public Thumbnail thumbnail(String jobId) {
     HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(properties.baseUrl() + "/api/jobs/" + jobId + "/thumbnail"))
         .timeout(Duration.ofSeconds(8)).GET();
@@ -47,6 +51,7 @@ public class LinkCollectClient {
   }
 
   public record Thumbnail(byte[] body, String contentType) {}
+  public record ReclassifyResult(int status, String body) {}
 
   private String get(String path) {
     HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(properties.baseUrl() + path))
@@ -62,6 +67,31 @@ public class LinkCollectClient {
         throw new LinkCollectUnavailableException("LinkCollect HTTP " + response.statusCode() + ": " + snippet);
       }
       return response.body();
+    } catch (IOException exception) {
+      throw new LinkCollectUnavailableException("LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.", exception);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new LinkCollectUnavailableException("LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.", exception);
+    }
+  }
+
+  private ReclassifyResult post(String path, String body) {
+    HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(properties.baseUrl() + path))
+        .timeout(Duration.ofSeconds(8))
+        .header("Content-Type", "application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(body));
+    if (properties.token() != null && !properties.token().isBlank()) {
+      request.header("Authorization", "Bearer " + properties.token());
+    }
+    try {
+      HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+      int status = response.statusCode();
+      if (status == 200 || status == 400 || status == 404) {
+        return new ReclassifyResult(status, response.body());
+      }
+      String responseBody = response.body();
+      String snippet = responseBody.length() > 300 ? responseBody.substring(0, 300) : responseBody;
+      throw new LinkCollectUnavailableException("LinkCollect HTTP " + status + ": " + snippet);
     } catch (IOException exception) {
       throw new LinkCollectUnavailableException("LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.", exception);
     } catch (InterruptedException exception) {

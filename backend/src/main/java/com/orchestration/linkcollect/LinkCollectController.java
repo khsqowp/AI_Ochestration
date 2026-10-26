@@ -7,6 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,6 +29,12 @@ public class LinkCollectController {
 
   @GetMapping(value = "/places", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<String> places() { return json(client.places()); }
+
+  @PostMapping(value = "/archive/reclassify", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<String> reclassify(@RequestBody String body) {
+    LinkCollectClient.ReclassifyResult result = client.reclassify(body);
+    return ResponseEntity.status(result.status()).contentType(MediaType.APPLICATION_JSON).body(result.body());
+  }
 
   private static final Pattern JOB_ID = Pattern.compile("[0-9a-f]{8,40}");
 

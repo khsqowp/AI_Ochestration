@@ -51,21 +51,29 @@ export function ArchivePage() {
           : <div className="archive-grid">{state.items.map(item => <Link className="archive-card" key={keyOf(item)} to={`/dashboard/archive/${encodeURIComponent(keyOf(item))}`}>{render(item)}</Link>)}</div>}
   </section>
 
+  const knowledgeSection = (category: string) => ({ ...knowledge, items: knowledge.items.filter(item => item.category === category) })
+  const renderKnowledgeItem = (item: KnowledgeItem) => <>
+    {item.thumbnail_job_id && <img className="archive-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(item.thumbnail_job_id)}/thumbnail`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }}/>}
+    <h3 className="archive-card-title-clamp">{item.title}</h3>
+    {!!item.category && <div className="archive-tags"><span className="archive-tag">{item.category}</span></div>}
+  </>
+
   return <main className="archive-page">
     <header className="archive-page-header"><div><p className="eyebrow">LINKCOLLECT</p><h1>아카이브</h1><p>외부 LinkCollect에 저장된 자료를 읽기 전용으로 조회합니다.</p></div><button type="button" onClick={refresh}>새로고침</button></header>
     {section('최근 접수', jobs, job => <>
       {['received', 'processing', 'waiting_ai'].includes(job.status) && <span className="archive-status-badge">작업중</span>}
       <h3 className="archive-card-title-clamp">{job.title || job.url || '제목 없음'}</h3>
     </>, job => job.id)}
-    {section('정보성 아카이브', knowledge, item => <>
-      {item.thumbnail_job_id && <img className="archive-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(item.thumbnail_job_id)}/thumbnail`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }}/>}
-      <h3 className="archive-card-title-clamp">{item.title}</h3>
-      {!!item.category && <div className="archive-tags"><span className="archive-tag">{item.category}</span></div>}
-    </>, item => item.id)}
-    {section('장소 아카이브', places, place => <>
+    {section('보안', knowledgeSection('security'), renderKnowledgeItem, item => item.id)}
+    {section('개발', knowledgeSection('development'), renderKnowledgeItem, item => item.id)}
+    {section('투자', knowledgeSection('investment'), renderKnowledgeItem, item => item.id)}
+    {section('패션뷰티', knowledgeSection('fashion_beauty'), renderKnowledgeItem, item => item.id)}
+    {section('맛집놀거리등', places, place => <>
       {place.thumbnail_job_id && <img className="archive-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(place.thumbnail_job_id)}/thumbnail`} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }}/>}
       <h3 className="archive-card-title-clamp">{place.name}</h3>
       {!!place.category && <div className="archive-tags"><span className="archive-tag">{place.category}</span></div>}
     </>, place => place.id)}
+    {/* Keep unknown categories visible instead of silently losing their data. */}
+    {section('기타', { ...knowledge, items: knowledge.items.filter(item => !['security', 'development', 'investment', 'fashion_beauty'].includes(item.category)) }, renderKnowledgeItem, item => item.id)}
   </main>
 }

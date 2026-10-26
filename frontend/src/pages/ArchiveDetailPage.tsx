@@ -12,7 +12,18 @@ type KnowledgeItem = { id: string; title: string; category: string; summary: str
 type Place = { id: string; name: string; address: string; category: string; latitude: number | null; longitude: number | null; naver_map_url: string; created_at: string; source_count: number }
 type ArchiveItem = { kind: 'job'; item: Job } | { kind: 'knowledge'; item: KnowledgeItem } | { kind: 'place'; item: Place }
 type DetailState = { loading: boolean; error: string; item: ArchiveItem | null }
+type ReclassifyState = { status: 'idle' | 'pending' | 'success' | 'error'; message: string }
 const tunnelError = 'LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.'
+
+async function reclassify(kind: 'knowledge' | 'place', id: string, target: 'place' | 'information') {
+  const response = await fetch('/api/linkcollect/archive/reclassify', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, id, target }),
+  })
+  if (!response.ok) throw new Error(`재분류 요청 실패 (${response.status})`)
+}
 
 async function loadItems<T>(path: string): Promise<T[]> {
   const response = await fetch(path, { credentials: 'include' })
@@ -27,6 +38,17 @@ function formatDate(value: string) { return value ? new Date(value).toLocaleStri
 export function ArchiveDetailPage() {
   const { archiveId } = useParams<{ archiveId: string }>()
   const [state, setState] = useState<DetailState>({ loading: true, error: '', item: null })
+  const [reclassifyState, setReclassifyState] = useState<ReclassifyState>({ status: 'idle', message: '' })
+
+  const submitReclassification = async (kind: 'knowledge' | 'place', id: string, target: 'place' | 'information') => {
+    setReclassifyState({ status: 'pending', message: '' })
+    try {
+      await reclassify(kind, id, target)
+      setReclassifyState({ status: 'success', message: '재분류 요청됨. 최근 접수에서 다시 처리됩니다.' })
+    } catch (error) {
+      setReclassifyState({ status: 'error', message: error instanceof Error ? error.message : '재분류 요청 실패' })
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -69,6 +91,12 @@ export function ArchiveDetailPage() {
             {([['요약', item.item.summary], ['정리된 내용', item.item.cleaned_content], ['텍스트', item.item.text], ['음성 기록', item.item.transcript], ['OCR 텍스트', item.item.ocr_text], ['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
             {item.item.analysis_error && <div className="archive-detail-note"><strong>분석 오류 기록</strong><p>{item.item.analysis_error}</p></div>}
           </section> : item.kind === 'knowledge' ? <section className="archive-detail">
+            <div className="archive-reclassify">
+              <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('knowledge', item.item.id, 'place')}>위치류로 재분류</button>
+              <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('knowledge', item.item.id, 'information')}>정보류로 재분류</button>
+            </div>
+            {reclassifyState.message && <p className={`archive-reclassify-status${reclassifyState.status === 'error' ? ' archive-error' : ''}`}>{reclassifyState.message}</p>}
+            {reclassifyState.status === 'success' && <Link className="archive-back" to="/dashboard/archive">아카이브 목록으로</Link>}
             <h2>{item.item.title}</h2>
             {!!item.item.category && <div className="archive-tags"><span className="archive-tag">{item.item.category}</span></div>}
             <div className="archive-detail-meta"><time>{formatDate(item.item.created_at)}</time><span>출처 {item.item.source_count}개</span></div>
@@ -76,6 +104,12 @@ export function ArchiveDetailPage() {
             {item.item.summary && <div className="archive-detail-field"><h3>요약</h3><p className="archive-content">{item.item.summary}</p></div>}
             {item.item.language && <p className="archive-detail-field"><strong>언어</strong>{item.item.language}</p>}
           </section> : <section className="archive-detail">
+            <div className="archive-reclassify">
+              <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('place', item.item.id, 'place')}>위치류로 재분류</button>
+              <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('place', item.item.id, 'information')}>정보류로 재분류</button>
+            </div>
+            {reclassifyState.message && <p className={`archive-reclassify-status${reclassifyState.status === 'error' ? ' archive-error' : ''}`}>{reclassifyState.message}</p>}
+            {reclassifyState.status === 'success' && <Link className="archive-back" to="/dashboard/archive">아카이브 목록으로</Link>}
             <h2>{item.item.name}</h2>
             {!!item.item.category && <div className="archive-tags"><span className="archive-tag">{item.item.category}</span></div>}
             <div className="archive-detail-meta"><time>{formatDate(item.item.created_at)}</time><span>출처 {item.item.source_count}개</span></div>

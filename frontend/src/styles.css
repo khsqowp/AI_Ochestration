@@ -1309,3 +1309,7 @@ small { letter-spacing:.005em; line-height:1.55; }
 .archive-status-badge { align-self:flex-start; margin-bottom:2px; padding:3px 8px; border-radius:999px; background:#fff4db; color:#936316; font-size:10px; font-weight:700; animation:archive-pulse 1.8s ease-in-out infinite; }
 @keyframes archive-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.72; transform:scale(.97); } }
 .archive-error { padding:14px; border-radius:10px; background:#fff1f1; color:#a94444; font-size:13px; }
+.archive-reclassify { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+.archive-reclassify button { padding:8px 11px; border:1px solid #ded9ef; border-radius:9px; background:#f7f6fc; color:#5d50ba; font-size:12px; font-weight:700; }
+.archive-reclassify button:disabled { opacity:.55; cursor:default; }
+.archive-reclassify-status { margin:0 0 10px; color:#39765b; font-size:13px; }

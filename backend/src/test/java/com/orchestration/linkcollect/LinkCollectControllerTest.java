@@ -7,6 +7,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.mockito.Mockito;
@@ -31,6 +32,41 @@ class LinkCollectControllerTest {
     when(client.jobs()).thenThrow(new LinkCollectUnavailableException("LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요."));
 
     mvc.perform(get("/api/linkcollect/jobs"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+        .andExpect(content().json("{\"error\":\"LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.\"}"));
+  }
+
+  @Test
+  void passesThroughSuccessfulReclassificationResponse() throws Exception {
+    String requestBody = "{\"kind\":\"knowledge\",\"id\":\"abc\",\"target\":\"place\"}";
+    String responseBody = "{\"requeued\":1}";
+    when(client.reclassify(requestBody)).thenReturn(new LinkCollectClient.ReclassifyResult(200, responseBody));
+
+    mvc.perform(post("/api/linkcollect/archive/reclassify").contentType(MediaType.APPLICATION_JSON).content(requestBody))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+        .andExpect(content().string(responseBody));
+  }
+
+  @Test
+  void passesThroughReclassificationNotFoundResponse() throws Exception {
+    String requestBody = "{\"kind\":\"knowledge\",\"id\":\"missing\",\"target\":\"place\"}";
+    String responseBody = "{\"error\":\"not found\"}";
+    when(client.reclassify(requestBody)).thenReturn(new LinkCollectClient.ReclassifyResult(404, responseBody));
+
+    mvc.perform(post("/api/linkcollect/archive/reclassify").contentType(MediaType.APPLICATION_JSON).content(requestBody))
+        .andExpect(status().isNotFound())
+        .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+        .andExpect(content().string(responseBody));
+  }
+
+  @Test
+  void returnsServiceUnavailableWhenReclassificationLinkCollectIsUnavailable() throws Exception {
+    String requestBody = "{\"kind\":\"knowledge\",\"id\":\"abc\",\"target\":\"place\"}";
+    when(client.reclassify(requestBody)).thenThrow(new LinkCollectUnavailableException("LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요."));
+
+    mvc.perform(post("/api/linkcollect/archive/reclassify").contentType(MediaType.APPLICATION_JSON).content(requestBody))
         .andExpect(status().isServiceUnavailable())
         .andExpect(content().contentType(MediaType.APPLICATION_JSON))
         .andExpect(content().json("{\"error\":\"LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.\"}"));
