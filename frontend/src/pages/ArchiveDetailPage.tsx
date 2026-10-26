@@ -42,6 +42,10 @@ async function loadItems<T>(path: string): Promise<T[]> {
 }
 
 function formatDate(value: string) { return value ? new Date(value).toLocaleString() : '날짜 정보 없음' }
+function mergeContent(...values: (string | null | undefined)[]) {
+  return [...new Set(values.map(value => value?.trim()).filter((value): value is string => Boolean(value)))]
+    .join('\n\n')
+}
 function safeExternalUrl(value: string) {
   try { const parsed = new URL(value); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '' }
   catch { return '' }
@@ -51,8 +55,7 @@ function ArchiveSources({ sources }: { sources?: ArchiveSource[] }) {
   return <div className="archive-source-list">{sources.map((source, index) => <article className="archive-source" key={source.job_id || `${source.url}-${index}`}>
     <div className="archive-detail-meta"><span>{source.source}</span>{source.created_at && <time>{formatDate(source.created_at)}</time>}</div>
     <h3>{source.title || '원본 자료'}</h3>
-    {source.caption && <p className="archive-content">{source.caption}</p>}
-    {source.summary && <p className="archive-content">{source.summary}</p>}
+    {mergeContent(source.caption, source.summary) && <p className="archive-content">{mergeContent(source.caption, source.summary)}</p>}
     {safeExternalUrl(source.url) && <a className="archive-link" href={safeExternalUrl(source.url)} target="_blank" rel="noopener noreferrer">원문 열기 ↗</a>}
   </article>)}</div>
 }
@@ -139,13 +142,14 @@ export function ArchiveDetailPage() {
       : state.error ? <p className="archive-error" role="alert">{state.error}</p>
         : !item ? <p className="empty-state">항목을 찾을 수 없습니다.</p>
           : item.kind === 'job' ? <section className="archive-detail">
-            {item.item.media_name && <img className="archive-detail-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(item.item.id)}/thumbnail`} alt={`원본 미디어 미리보기: ${item.item.media_name}`} onError={e => { e.currentTarget.style.display = 'none' }}/>}
-            <h2>{item.item.title || item.item.url || '제목 없음'}</h2>
+            <h2>{item.item.title || '제목 없음'}</h2>
             <div className="archive-detail-meta"><span>{item.item.status}</span><time>{formatDate(item.item.created_at)}</time></div>
             {!!item.item.tags?.length && <div className="archive-tags">{item.item.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>{tag}</span>)}</div>}
-            {safeExternalUrl(item.item.url) && <a className="archive-link" href={safeExternalUrl(item.item.url)} target="_blank" rel="noopener noreferrer">{item.item.url}</a>}
+            {safeExternalUrl(item.item.url) && <a className="archive-link" href={safeExternalUrl(item.item.url)} target="_blank" rel="noopener noreferrer">원문 열기 ↗</a>}
             {item.item.media_name && <p className="archive-detail-field"><strong>미디어</strong>{item.item.media_name}</p>}
-            {([['요약', item.item.summary], ['정리된 내용', item.item.cleaned_content], ['텍스트', item.item.text], ['음성 기록', item.item.transcript], ['OCR 텍스트', item.item.ocr_text], ['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
+            {mergeContent(item.item.summary, item.item.cleaned_content) && <div className="archive-detail-field"><h3>요약 및 정리</h3><p className="archive-content">{mergeContent(item.item.summary, item.item.cleaned_content)}</p></div>}
+            {item.item.transcript && <div className="archive-detail-field"><h3>STT</h3><p className="archive-content">{item.item.transcript}</p></div>}
+            {([['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
             {item.item.analysis_error && <div className="archive-detail-note"><strong>분석 오류 기록</strong><p>{item.item.analysis_error}</p></div>}
           </section> : item.kind === 'knowledge' ? <section className="archive-detail">
             <div className="archive-reclassify">
@@ -157,7 +161,9 @@ export function ArchiveDetailPage() {
             <h2>{item.item.title}</h2>
             {!!item.item.category || item.item.tags?.length ? <div className="archive-tags">{[categoryLabels[item.item.category] ?? item.item.category, ...(item.item.tags ?? [])].filter(Boolean).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div> : null}
             <div className="archive-detail-meta"><time>{formatDate(item.item.created_at)}</time><span>출처 {item.item.source_count}개</span></div>
-            {([['요약', item.item.summary], ['정리된 내용', item.item.cleaned_content], ['내용', item.item.content], ['음성 기록', item.item.transcript], ['OCR 텍스트', item.item.ocr_text], ['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
+            {mergeContent(item.item.summary, item.item.cleaned_content, item.item.content) && <div className="archive-detail-field"><h3>요약 및 정리</h3><p className="archive-content">{mergeContent(item.item.summary, item.item.cleaned_content, item.item.content)}</p></div>}
+            {item.item.transcript && <div className="archive-detail-field"><h3>STT</h3><p className="archive-content">{item.item.transcript}</p></div>}
+            {([['출처 제목', item.item.source_title], ['추출 캡션', item.item.extracted_caption]] as [string, string][]).map(([label, value]) => value && <div className="archive-detail-field" key={label}><h3>{label}</h3><p className="archive-content">{value}</p></div>)}
             {item.item.language && <p className="archive-detail-field"><strong>언어</strong>{item.item.language}</p>}
             <div className="archive-detail-field"><h3>원본 출처</h3><ArchiveSources sources={item.item.sources} /></div>
           </section> : <section className="archive-detail">
