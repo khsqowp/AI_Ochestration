@@ -30,6 +30,11 @@ const categoryLabels: Record<string, string> = {
 }
 const searchable = (values: unknown[]) => values.filter((value): value is string => typeof value === 'string').join(' ').toLocaleLowerCase()
 
+function ArchiveCardThumbnail({ jobId }: { jobId?: string }) {
+  if (!jobId) return null
+  return <img className="archive-card-thumb" src={`/api/linkcollect/jobs/${encodeURIComponent(jobId)}/thumbnail`} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={event => { event.currentTarget.style.display = 'none' }} />
+}
+
 async function loadItems<T>(path: string): Promise<T[]> {
   const response = await fetch(path, { credentials: 'include' })
   if (response.status === 503) throw new Error(tunnelError)
@@ -100,6 +105,7 @@ export function ArchivePage() {
 
   const knowledgeSection = (sectionCategory: string) => ({ ...knowledge, items: filteredKnowledgeItems.filter(item => item.category === sectionCategory) })
   const renderKnowledgeItem = (item: KnowledgeItem) => <>
+    <ArchiveCardThumbnail jobId={item.thumbnail_job_id} />
     <h3 className="archive-card-title-clamp">{item.title}</h3>
     {!!item.category || item.tags?.length ? <div className="archive-tags" aria-label="분류와 태그">
       {!!item.category && <span className="archive-tag">#{categoryLabels[item.category] ?? item.category}</span>}
@@ -120,6 +126,7 @@ export function ArchivePage() {
     <p className="archive-result-count" role="status" aria-live="polite">{isLoading ? `자료를 불러오는 중${matchCount ? ` · 현재 ${matchCount}건 표시` : '…'}` : hasError ? `일부 자료만 표시 중 · 확인된 ${matchCount}건` : `검색 결과 ${matchCount}건`}</p>
     {matchCount === 0 && !isLoading && !hasError && <div className="archive-no-results"><p>{storedCount === 0 ? '아직 저장된 자료가 없습니다. Telegram 봇이나 입력 화면에서 링크를 보내세요.' : '조건에 맞는 자료가 없습니다.'}</p><button type="button" onClick={storedCount === 0 ? refresh : () => { setQuery(''); setKind('all'); setCategory('all'); setTagFilter('all'); setStatus('all') }}>{storedCount === 0 ? '새로고침' : '검색 조건 지우기'}</button></div>}
     {(kind === 'all' || kind === 'recent') && section('최근 접수', filteredJobs, job => <>
+      <ArchiveCardThumbnail jobId={job.media_name ? job.id : undefined} />
       <h3 className="archive-card-title-clamp">{job.title || job.url || '제목 없음'}</h3>
     </>, job => job.id)}
     {(kind === 'all' || kind === 'information') && section('보안', knowledgeSection('security'), renderKnowledgeItem, item => item.id)}
@@ -127,6 +134,7 @@ export function ArchivePage() {
     {(kind === 'all' || kind === 'information') && section('투자', knowledgeSection('investment'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('패션·뷰티', knowledgeSection('fashion_beauty'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'place') && section('장소 아카이브', filteredPlaces, place => <>
+      <ArchiveCardThumbnail jobId={place.thumbnail_job_id} />
       <h3 className="archive-card-title-clamp">{place.name}</h3>
       <div className="archive-tags" aria-label="장소 태그">{[place.category, ...(place.tags ?? [])].filter(Boolean).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>
     </>, place => place.id)}
