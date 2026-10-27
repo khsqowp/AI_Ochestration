@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
+import { ARCHIVE_CARD_MIN_WIDTH_PX, ARCHIVE_GRID_GAP_PX, visibleCollapsedCount } from './ArchivePage.logic'
 
 type Job = {
   id: string; source: string; url: string; text: string; media_name: string; media_type: string
@@ -29,8 +30,6 @@ const categoryLabels: Record<string, string> = {
   security: '보안', development: '개발', investment: '투자', fashion_beauty: '패션·뷰티',
 }
 const searchable = (values: unknown[]) => values.filter((value): value is string => typeof value === 'string').join(' ').toLocaleLowerCase()
-const formatDate = (value: string) => value ? new Date(value).toLocaleString() : '날짜 정보 없음'
-const safeJobUrl = (value: string) => { try { const parsed = new URL(value); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '' } catch { return '' } }
 
 async function loadItems<T>(path: string): Promise<T[]> {
   const response = await fetch(path, { credentials: 'include' })
@@ -50,6 +49,8 @@ export function ArchivePage() {
   const [knowledge, setKnowledge] = useState<SectionState<KnowledgeItem>>({ items: [], loading: true, error: '' })
   const [places, setPlaces] = useState<SectionState<Place>>({ items: [], loading: true, error: '' })
   const [jobsExpanded, setJobsExpanded] = useState(false)
+  const recentJobsGrid = useRef<HTMLDivElement>(null)
+  const [recentJobsGridWidth, setRecentJobsGridWidth] = useState(0)
 
   const refresh = useCallback(() => {
     const request = <T,>(path: string, update: (state: SectionState<T> | ((current: SectionState<T>) => SectionState<T>)) => void) => {
@@ -72,6 +73,17 @@ export function ArchivePage() {
       job.title, job.url, job.source_title, job.text, job.extracted_caption, job.summary,
       job.cleaned_content, job.transcript, job.ocr_text, job.location_name, job.location_address, ...(job.tags ?? []),
     ]).includes(normalizedQuery))) }
+
+  useEffect(() => {
+    const grid = recentJobsGrid.current
+    if (!grid) return
+    const measure = () => setRecentJobsGridWidth(grid.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(grid)
+    return () => observer.disconnect()
+  }, [filteredJobs.items.length, jobs.loading, kind])
+
   const selectedCategory = kind === 'information' ? category : 'all'
   const filteredKnowledgeItems = knowledge.items.filter(item =>
     (selectedCategory === 'all' || categories.includes(selectedCategory) && item.category === selectedCategory) && matchesTag(item.tags) && (!normalizedQuery || searchable([
@@ -90,48 +102,31 @@ export function ArchivePage() {
   const isLoading = jobs.loading || knowledge.loading || places.loading
   const hasError = Boolean(jobs.error || knowledge.error || places.error)
   const storedCount = jobs.items.length + knowledge.items.length + places.items.length
-  const section = <T,>(title: string, state: SectionState<T>, render: (item: T) => ReactNode, keyOf: (item: T) => string, headerAction?: ReactNode) => {
+  const section = <T,>(title: string, state: SectionState<T>, render: (item: T) => ReactNode, keyOf: (item: T) => string, headerAction?: ReactNode, gridRef?: RefObject<HTMLDivElement | null>, displayItems?: T[]) => {
     if (state.loading && state.items.length === 0) return null
     if (!state.loading && !state.error && state.items.length === 0) return null
     return <section className="archive-section">
       <div className="archive-heading"><div className="archive-heading-title"><h2>{title}</h2><span>{state.items.length}건</span>{headerAction}</div></div>
       {state.error && <div className="archive-error"><p>{state.error}</p><button type="button" onClick={refresh}>다시 시도</button></div>}
       {state.loading && state.items.length === 0 ? <p className="empty-state">불러오는 중…</p>
-        : <div className="archive-grid">{state.items.map(item => <Link className="archive-card" key={keyOf(item)} to={`/dashboard/archive/${encodeURIComponent(keyOf(item))}`}>{render(item)}</Link>)}</div>}
+        : <div className="archive-grid" ref={gridRef}>{(displayItems ?? state.items).map(item => <Link className="archive-card" key={keyOf(item)} to={`/dashboard/archive/${encodeURIComponent(keyOf(item))}`}>{render(item)}</Link>)}</div>}
     </section>
   }
 
-  const renderJobItem = (job: Job) => {
-    const combinedSummary = [job.summary, job.cleaned_content].filter(Boolean).join('\n\n')
-    const safeUrl = job.url ? safeJobUrl(job.url) : ''
-    return <>
-      <div className="archive-job-row">
-        <h3 className="archive-card-title-clamp archive-job-title">{job.title || '제목 없음'}</h3>
-      </div>
-      {jobsExpanded && <div className="archive-job-expanded">
-        <div className="archive-detail-meta"><span>{statusLabels[job.status] ?? job.status}</span>{job.created_at && <time>{formatDate(job.created_at)}</time>}</div>
-        {!!job.tags?.length && <div className="archive-tags" aria-label="태그">{job.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>}
-        {safeUrl && <a className="archive-link" href={safeUrl} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()}>원문 열기 ↗</a>}
-        {job.media_name && <p className="archive-detail-meta archive-media-name">미디어 파일 · {job.media_name}</p>}
-        {combinedSummary && <section className="archive-detail-section archive-content-section"><h4>요약 및 정리된 내용</h4><p className="archive-content">{combinedSummary}</p></section>}
-        {job.transcript && <section className="archive-detail-section archive-transcript-section"><h4>음성 전사</h4><p className="archive-content">{job.transcript}</p></section>}
-        {job.ocr_text && <section className="archive-detail-section archive-content-section"><h4>영상 OCR 텍스트</h4><p className="archive-content">{job.ocr_text}</p></section>}
-        {job.extracted_caption && <section className="archive-detail-section archive-content-section"><h4>원문 캡션</h4><p className="archive-content">{job.extracted_caption}</p></section>}
-        {job.source_title && <p className="archive-detail-meta archive-source-title">출처 제목 · {job.source_title}</p>}
-        {(job.location_name || job.location_address) && <p className="archive-detail-field"><strong>위치 정보</strong>{[job.location_name, job.location_address].filter(Boolean).join(' · ')}</p>}
-        {job.analysis_error && <div className="archive-detail-note"><strong>분석 오류 기록</strong><p>{job.analysis_error}</p></div>}
-      </div>}
-    </>
-  }
+  const renderJobItem = (job: Job) => <>
+    <h3 className="archive-card-title-clamp">{job.title || '제목 없음'}</h3>
+  </>
 
   const knowledgeSection = (sectionCategory: string) => ({ ...knowledge, items: filteredKnowledgeItems.filter(item => item.category === sectionCategory) })
-  const renderKnowledgeItem = (item: KnowledgeItem) => <>
-    <h3 className="archive-card-title-clamp">{item.title}</h3>
-    {!!item.category || item.tags?.length ? <div className="archive-tags" aria-label="분류와 태그">
-      {!!item.category && <span className="archive-tag">#{categoryLabels[item.category] ?? item.category}</span>}
-      {item.tags?.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}
-    </div> : null}
-  </>
+  const renderKnowledgeItem = (item: KnowledgeItem) => {
+    const visibleTags = [item.category ? categoryLabels[item.category] ?? item.category : '', ...(item.tags ?? [])].filter(Boolean).slice(0, 3)
+    return <>
+      <h3 className="archive-card-title-clamp">{item.title}</h3>
+      {visibleTags.length > 0 ? <div className="archive-tags" aria-label="분류와 태그">
+        {visibleTags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}
+      </div> : null}
+    </>
+  }
 
   return <main className="archive-page">
     <header className="archive-page-header"><div><p className="eyebrow">LINKCOLLECT</p><h1>아카이브</h1><p>정보와 장소 자료를 유형별로 찾아봅니다.</p></div><button type="button" onClick={refresh}>새로고침</button></header>
@@ -149,16 +144,16 @@ export function ArchivePage() {
       type="button"
       className={`archive-caret-button${jobsExpanded ? ' archive-caret-button--open' : ''}`}
       aria-expanded={jobsExpanded}
-      aria-label={jobsExpanded ? '세부 내용 접기' : '세부 내용 펼치기'}
+      aria-label={jobsExpanded ? '타일 접기' : '타일 펼치기'}
       onClick={() => setJobsExpanded(expanded => !expanded)}
-    ><span aria-hidden="true" className="archive-caret-icon">▾</span></button>)}
+    ><span aria-hidden="true" className="archive-caret-icon">▾</span></button>, recentJobsGrid, jobsExpanded ? filteredJobs.items : filteredJobs.items.slice(0, visibleCollapsedCount(recentJobsGridWidth, ARCHIVE_CARD_MIN_WIDTH_PX, ARCHIVE_GRID_GAP_PX, filteredJobs.items.length)))}
     {(kind === 'all' || kind === 'information') && section('보안', knowledgeSection('security'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('개발', knowledgeSection('development'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('투자', knowledgeSection('investment'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('패션·뷰티', knowledgeSection('fashion_beauty'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'place') && section('장소 아카이브', filteredPlaces, place => <>
       <h3 className="archive-card-title-clamp">{place.name}</h3>
-      <div className="archive-tags" aria-label="장소 태그">{[place.category, ...(place.tags ?? [])].filter(Boolean).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>
+      <div className="archive-tags" aria-label="장소 태그">{[place.category, ...(place.tags ?? [])].filter(Boolean).slice(0, 3).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>
     </>, place => place.id)}
     {/* Keep unknown categories visible instead of silently losing their data. */}
     {(kind === 'all' || kind === 'information') && section('기타', { ...knowledge, items: filteredKnowledgeItems.filter(item => !categories.includes(item.category)) }, renderKnowledgeItem, item => item.id)}
