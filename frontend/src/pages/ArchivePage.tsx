@@ -49,12 +49,7 @@ export function ArchivePage() {
   const [jobs, setJobs] = useState<SectionState<Job>>({ items: [], loading: true, error: '' })
   const [knowledge, setKnowledge] = useState<SectionState<KnowledgeItem>>({ items: [], loading: true, error: '' })
   const [places, setPlaces] = useState<SectionState<Place>>({ items: [], loading: true, error: '' })
-  const [expandedJobIds, setExpandedJobIds] = useState<Set<string>>(new Set())
-  const toggleJobExpanded = (id: string) => setExpandedJobIds(current => {
-    const next = new Set(current)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
+  const [jobsExpanded, setJobsExpanded] = useState(false)
 
   const refresh = useCallback(() => {
     const request = <T,>(path: string, update: (state: SectionState<T> | ((current: SectionState<T>) => SectionState<T>)) => void) => {
@@ -95,11 +90,11 @@ export function ArchivePage() {
   const isLoading = jobs.loading || knowledge.loading || places.loading
   const hasError = Boolean(jobs.error || knowledge.error || places.error)
   const storedCount = jobs.items.length + knowledge.items.length + places.items.length
-  const section = <T,>(title: string, state: SectionState<T>, render: (item: T) => ReactNode, keyOf: (item: T) => string) => {
+  const section = <T,>(title: string, state: SectionState<T>, render: (item: T) => ReactNode, keyOf: (item: T) => string, headerAction?: ReactNode) => {
     if (state.loading && state.items.length === 0) return null
     if (!state.loading && !state.error && state.items.length === 0) return null
     return <section className="archive-section">
-      <div className="archive-heading"><h2>{title}</h2><span>{state.items.length}건</span></div>
+      <div className="archive-heading"><div className="archive-heading-title"><h2>{title}</h2><span>{state.items.length}건</span>{headerAction}</div></div>
       {state.error && <div className="archive-error"><p>{state.error}</p><button type="button" onClick={refresh}>다시 시도</button></div>}
       {state.loading && state.items.length === 0 ? <p className="empty-state">불러오는 중…</p>
         : <div className="archive-grid">{state.items.map(item => <Link className="archive-card" key={keyOf(item)} to={`/dashboard/archive/${encodeURIComponent(keyOf(item))}`}>{render(item)}</Link>)}</div>}
@@ -107,21 +102,13 @@ export function ArchivePage() {
   }
 
   const renderJobItem = (job: Job) => {
-    const isExpanded = expandedJobIds.has(job.id)
     const combinedSummary = [job.summary, job.cleaned_content].filter(Boolean).join('\n\n')
     const safeUrl = job.url ? safeJobUrl(job.url) : ''
     return <>
       <div className="archive-job-row">
         <h3 className="archive-card-title-clamp archive-job-title">{job.title || '제목 없음'}</h3>
-        <button
-          type="button"
-          className={`archive-caret-button${isExpanded ? ' archive-caret-button--open' : ''}`}
-          aria-expanded={isExpanded}
-          aria-label={isExpanded ? '세부 내용 접기' : '세부 내용 펼치기'}
-          onClick={event => { event.preventDefault(); event.stopPropagation(); toggleJobExpanded(job.id) }}
-        ><span aria-hidden="true" className="archive-caret-icon">▾</span></button>
       </div>
-      {isExpanded && <div className="archive-job-expanded">
+      {jobsExpanded && <div className="archive-job-expanded">
         <div className="archive-detail-meta"><span>{statusLabels[job.status] ?? job.status}</span>{job.created_at && <time>{formatDate(job.created_at)}</time>}</div>
         {!!job.tags?.length && <div className="archive-tags" aria-label="태그">{job.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>}
         {safeUrl && <a className="archive-link" href={safeUrl} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()}>원문 열기 ↗</a>}
@@ -158,7 +145,13 @@ export function ArchivePage() {
     </section>
     <p className="archive-result-count" role="status" aria-live="polite">{isLoading ? `자료를 불러오는 중${matchCount ? ` · 현재 ${matchCount}건 표시` : '…'}` : hasError ? `일부 자료만 표시 중 · 확인된 ${matchCount}건` : `검색 결과 ${matchCount}건`}</p>
     {matchCount === 0 && !isLoading && !hasError && <div className="archive-no-results"><p>{storedCount === 0 ? '아직 저장된 자료가 없습니다. Telegram 봇이나 입력 화면에서 링크를 보내세요.' : '조건에 맞는 자료가 없습니다.'}</p><button type="button" onClick={storedCount === 0 ? refresh : () => { setQuery(''); setKind('all'); setCategory('all'); setTagFilter('all'); setStatus('all') }}>{storedCount === 0 ? '새로고침' : '검색 조건 지우기'}</button></div>}
-    {(kind === 'all' || kind === 'recent') && section('최근 접수', filteredJobs, renderJobItem, job => job.id)}
+    {(kind === 'all' || kind === 'recent') && section('최근 접수', filteredJobs, renderJobItem, job => job.id, <button
+      type="button"
+      className={`archive-caret-button${jobsExpanded ? ' archive-caret-button--open' : ''}`}
+      aria-expanded={jobsExpanded}
+      aria-label={jobsExpanded ? '세부 내용 접기' : '세부 내용 펼치기'}
+      onClick={() => setJobsExpanded(expanded => !expanded)}
+    ><span aria-hidden="true" className="archive-caret-icon">▾</span></button>)}
     {(kind === 'all' || kind === 'information') && section('보안', knowledgeSection('security'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('개발', knowledgeSection('development'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('투자', knowledgeSection('investment'), renderKnowledgeItem, item => item.id)}
