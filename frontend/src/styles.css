@@ -1297,6 +1297,17 @@ small { letter-spacing:.005em; line-height:1.55; }
 .archive-card:hover { border-color:#c9c2f2; box-shadow:0 4px 14px #463b8a12; }
 .archive-card h3 { margin:9px 0; color:#302c38; font-size:15px; }.archive-card p { margin:8px 0; color:#55515f; font-size:13px; line-height:1.55; white-space:pre-wrap; }
 .archive-card-title-clamp { display:-webkit-box; min-height:4.2em; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.archive-job-row { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.archive-job-row .archive-job-title { flex:1; min-width:0; }
+.archive-caret-button { flex-shrink:0; display:flex; align-items:center; justify-content:center; width:28px; height:28px; margin-top:9px; border:1px solid #eceaf0; border-radius:8px; background:#f7f6fc; color:#51469b; cursor:pointer; }
+.archive-caret-button:hover { border-color:#c9c2f2; }
+.archive-caret-icon { display:inline-block; font-size:12px; line-height:1; transition:transform .15s ease; }
+.archive-caret-button--open .archive-caret-icon { transform:rotate(180deg); }
+.archive-job-expanded { margin-top:4px; padding-top:10px; border-top:1px solid #eceaf0; }
+.archive-job-expanded .archive-detail-section { margin-top:14px; }
+.archive-job-expanded .archive-detail-section > h4 { margin:0 0 8px; color:#302c38; font-size:13px; }
+.archive-job-expanded .archive-content { font-size:13px; line-height:1.6; }
+@media (prefers-reduced-motion:reduce) { .archive-caret-icon { transition:none; } }
 .archive-detail { padding:20px; border:1px solid #eceaf0; border-radius:14px; background:#fff; overflow-wrap:anywhere; }
 .archive-detail h2 { margin:0 0 12px; font-size:20px; }.archive-detail-field { margin:16px 0; color:#55515f; font-size:13px; line-height:1.55; white-space:pre-wrap; }
 .archive-detail-field h3 { margin:0 0 6px; color:#302c38; font-size:14px; }.archive-detail-field p { margin:0; }

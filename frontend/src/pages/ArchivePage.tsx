@@ -29,6 +29,8 @@ const categoryLabels: Record<string, string> = {
   security: '보안', development: '개발', investment: '투자', fashion_beauty: '패션·뷰티',
 }
 const searchable = (values: unknown[]) => values.filter((value): value is string => typeof value === 'string').join(' ').toLocaleLowerCase()
+const formatDate = (value: string) => value ? new Date(value).toLocaleString() : '날짜 정보 없음'
+const safeJobUrl = (value: string) => { try { const parsed = new URL(value); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '' } catch { return '' } }
 
 async function loadItems<T>(path: string): Promise<T[]> {
   const response = await fetch(path, { credentials: 'include' })
@@ -47,6 +49,12 @@ export function ArchivePage() {
   const [jobs, setJobs] = useState<SectionState<Job>>({ items: [], loading: true, error: '' })
   const [knowledge, setKnowledge] = useState<SectionState<KnowledgeItem>>({ items: [], loading: true, error: '' })
   const [places, setPlaces] = useState<SectionState<Place>>({ items: [], loading: true, error: '' })
+  const [expandedJobIds, setExpandedJobIds] = useState<Set<string>>(new Set())
+  const toggleJobExpanded = (id: string) => setExpandedJobIds(current => {
+    const next = new Set(current)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
 
   const refresh = useCallback(() => {
     const request = <T,>(path: string, update: (state: SectionState<T> | ((current: SectionState<T>) => SectionState<T>)) => void) => {
@@ -98,6 +106,37 @@ export function ArchivePage() {
     </section>
   }
 
+  const renderJobItem = (job: Job) => {
+    const isExpanded = expandedJobIds.has(job.id)
+    const combinedSummary = [job.summary, job.cleaned_content].filter(Boolean).join('\n\n')
+    const safeUrl = job.url ? safeJobUrl(job.url) : ''
+    return <>
+      <div className="archive-job-row">
+        <h3 className="archive-card-title-clamp archive-job-title">{job.title || '제목 없음'}</h3>
+        <button
+          type="button"
+          className={`archive-caret-button${isExpanded ? ' archive-caret-button--open' : ''}`}
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? '세부 내용 접기' : '세부 내용 펼치기'}
+          onClick={event => { event.preventDefault(); event.stopPropagation(); toggleJobExpanded(job.id) }}
+        ><span aria-hidden="true" className="archive-caret-icon">▾</span></button>
+      </div>
+      {isExpanded && <div className="archive-job-expanded">
+        <div className="archive-detail-meta"><span>{statusLabels[job.status] ?? job.status}</span>{job.created_at && <time>{formatDate(job.created_at)}</time>}</div>
+        {!!job.tags?.length && <div className="archive-tags" aria-label="태그">{job.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>}
+        {safeUrl && <a className="archive-link" href={safeUrl} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()}>원문 열기 ↗</a>}
+        {job.media_name && <p className="archive-detail-meta archive-media-name">미디어 파일 · {job.media_name}</p>}
+        {combinedSummary && <section className="archive-detail-section archive-content-section"><h4>요약 및 정리된 내용</h4><p className="archive-content">{combinedSummary}</p></section>}
+        {job.transcript && <section className="archive-detail-section archive-transcript-section"><h4>음성 전사</h4><p className="archive-content">{job.transcript}</p></section>}
+        {job.ocr_text && <section className="archive-detail-section archive-content-section"><h4>영상 OCR 텍스트</h4><p className="archive-content">{job.ocr_text}</p></section>}
+        {job.extracted_caption && <section className="archive-detail-section archive-content-section"><h4>원문 캡션</h4><p className="archive-content">{job.extracted_caption}</p></section>}
+        {job.source_title && <p className="archive-detail-meta archive-source-title">출처 제목 · {job.source_title}</p>}
+        {(job.location_name || job.location_address) && <p className="archive-detail-field"><strong>위치 정보</strong>{[job.location_name, job.location_address].filter(Boolean).join(' · ')}</p>}
+        {job.analysis_error && <div className="archive-detail-note"><strong>분석 오류 기록</strong><p>{job.analysis_error}</p></div>}
+      </div>}
+    </>
+  }
+
   const knowledgeSection = (sectionCategory: string) => ({ ...knowledge, items: filteredKnowledgeItems.filter(item => item.category === sectionCategory) })
   const renderKnowledgeItem = (item: KnowledgeItem) => <>
     <h3 className="archive-card-title-clamp">{item.title}</h3>
@@ -119,9 +158,7 @@ export function ArchivePage() {
     </section>
     <p className="archive-result-count" role="status" aria-live="polite">{isLoading ? `자료를 불러오는 중${matchCount ? ` · 현재 ${matchCount}건 표시` : '…'}` : hasError ? `일부 자료만 표시 중 · 확인된 ${matchCount}건` : `검색 결과 ${matchCount}건`}</p>
     {matchCount === 0 && !isLoading && !hasError && <div className="archive-no-results"><p>{storedCount === 0 ? '아직 저장된 자료가 없습니다. Telegram 봇이나 입력 화면에서 링크를 보내세요.' : '조건에 맞는 자료가 없습니다.'}</p><button type="button" onClick={storedCount === 0 ? refresh : () => { setQuery(''); setKind('all'); setCategory('all'); setTagFilter('all'); setStatus('all') }}>{storedCount === 0 ? '새로고침' : '검색 조건 지우기'}</button></div>}
-    {(kind === 'all' || kind === 'recent') && section('최근 접수', filteredJobs, job => <>
-      <h3 className="archive-card-title-clamp">{job.title || '제목 없음'}</h3>
-    </>, job => job.id)}
+    {(kind === 'all' || kind === 'recent') && section('최근 접수', filteredJobs, renderJobItem, job => job.id)}
     {(kind === 'all' || kind === 'information') && section('보안', knowledgeSection('security'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('개발', knowledgeSection('development'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'information') && section('투자', knowledgeSection('investment'), renderKnowledgeItem, item => item.id)}
