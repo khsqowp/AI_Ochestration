@@ -1344,6 +1344,7 @@ small { letter-spacing:.005em; line-height:1.55; }
 .archive-section-title p,.archive-detail-subtle { margin:0; color:#777482; font-size:12px; line-height:1.6; }
 .archive-transcript-card { margin-top:12px; padding:16px 18px; border:1px solid #e7e4ed; border-radius:12px; background:#fff; }
 .archive-transcript-card--cleaned { border-color:#ded9f1; background:#f8f7fd; }
+.archive-transcript-card--corrected { border-color:#d4e8dc; background:#f3fbf6; }
 .archive-transcript-card h4 { margin:0 0 9px; color:#51469b; font-size:13px; }
 .archive-source .archive-detail-section { margin-top:16px; }
 .archive-source .archive-detail-section > h3,.archive-source .archive-detail-section > h4,.archive-source .archive-section-title h4 { font-size:13px; }
