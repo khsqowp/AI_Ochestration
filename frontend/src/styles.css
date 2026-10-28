@@ -1179,6 +1179,8 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .js-parser-hit { color:#d32f2f; background:rgba(211,47,47,.08); border-radius:8px; padding:0 1px; font-weight:600; }
 
 /* ── Error Page Fingerprint ───────────────────────────────────── */
+.error-fp-platform { display:flex; gap:18px; margin:4px 0 2px; font-size:13px; }
+.error-fp-platform label { display:flex; align-items:center; gap:6px; cursor:pointer; }
 .error-fp-inputs { display:grid; grid-template-columns:1fr 1fr 1.5fr; gap:12px; margin:12px 0 20px; }
 .error-fp-input { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .error-fp-layout { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:20px; }

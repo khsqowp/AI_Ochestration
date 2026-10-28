@@ -66,6 +66,9 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
   const [path, setPath] = useState('')
   const [spoofTarget, setSpoofTarget] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [platform, setPlatform] = useState<'linux' | 'windows'>('linux')
+  const curlBin = platform === 'windows' ? 'curl.exe' : 'curl'
+  const quoteChar = platform === 'windows' ? '"' : "'"
   const targetHost = host.trim() || 'example.com'
   const trimmedPath = path.trim()
   const targetPath = trimmedPath ? trimmedPath.startsWith('/') ? trimmedPath : `/${trimmedPath}` : '/'
@@ -89,6 +92,10 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
       <div className="explorer-preview-body cheatsheet-options-body">
         <Note>{DISCLAIMER}</Note>
         <Note>메서드·경로·헤더 조작으로 커스텀 에러 페이지가 아닌 서버/프레임워크 기본 에러 페이지를 유도해 인프라 정보(서버명·버전·스택트레이스)를 노출시키는지 점검합니다.</Note>
+        <div className="error-fp-platform">
+          <label><input type="checkbox" checked={platform === 'linux'} onChange={() => setPlatform('linux')}/> 리눅스 (curl)</label>
+          <label><input type="checkbox" checked={platform === 'windows'} onChange={() => setPlatform('windows')}/> 윈도우 (curl.exe)</label>
+        </div>
         <div className="error-fp-inputs">
           <div className="error-fp-input"><TextInput label="대상 Host" value={host} onChange={setHost} placeholder="example.com"/></div>
           <div className="error-fp-input"><TextInput label="대상 경로" value={path} onChange={setPath} placeholder="/api/v1/resource"/></div>
@@ -99,14 +106,14 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
             <section className="error-fp-group">
               <h3 className="payload-group-title">메서드로 유발 (Method)</h3>
               {METHODS.map(item => <div key={item.id} className={`error-fp-item${selectedId === `method-${item.id}` ? ' error-fp-item--selected' : ''}`} onClick={() => setSelectedId(`method-${item.id}`)}>
-                <Readout title={item.method.length > 30 ? '긴 메서드 토큰 (2,000자)' : item.method} value={`curl -i -X ${item.method} https://${targetHost}${targetPath}`} wrap="anywhere"/>
+                <Readout title={item.method.length > 30 ? '긴 메서드 토큰 (2,000자)' : item.method} value={`${curlBin} -i -X ${item.method} https://${targetHost}${targetPath}`} wrap="anywhere"/>
                 <p className="error-fp-hint">점검 포인트: {item.checkpoint}</p>
               </div>)}
             </section>
             <section className="error-fp-group">
               <h3 className="payload-group-title">경로로 유발 (Path)</h3>
               {PATHS.map(item => <div key={item.id} className={`error-fp-item${selectedId === `path-${item.id}` ? ' error-fp-item--selected' : ''}`} onClick={() => setSelectedId(`path-${item.id}`)}>
-                <Readout title={item.title} value={`curl -i "https://${targetHost}${targetPath}${item.suffix}"`} wrap="anywhere"/>
+                <Readout title={item.title} value={`${curlBin} -i "https://${targetHost}${targetPath}${item.suffix}"`} wrap="anywhere"/>
                 <p className="error-fp-hint">점검 포인트: {item.checkpoint}</p>
               </div>)}
             </section>
@@ -116,7 +123,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
                 <Readout title={item.title} value={headerPayload(item)} wrap="anywhere"/>
                 <p className="error-fp-hint">점검 포인트: {item.checkpoint}</p>
               </div>)}
-              <Note>curl 사용 시 각 줄을 `-H '...'` 플래그로 변환하세요. 이 블록은 Burp Repeater나 `nc`에 그대로 붙여넣는 용도입니다.</Note>
+              <Note>{curlBin} 사용 시 각 줄을 `-H {quoteChar}...{quoteChar}` 플래그로 변환하세요. 이 블록은 Burp Repeater나 `nc`에 그대로 붙여넣는 용도입니다.</Note>
             </section>
           </div>
           <div className="error-fp-preview-pane">
@@ -125,7 +132,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
             {selectedMethod && <>
               <div className="error-fp-term">
                 <div className="error-fp-term-header"><span className="error-fp-term-dot"/><span className="error-fp-term-dot"/><span className="error-fp-term-dot"/><span>터미널</span></div>
-                <pre>$ curl -i -X <span className="error-fp-highlight">{selectedMethod.method}</span> https://{targetHost}{targetPath}</pre>
+                <pre>$ {curlBin} -i -X <span className="error-fp-highlight">{selectedMethod.method}</span> https://{targetHost}{targetPath}</pre>
               </div>
               <p className="error-fp-hint">점검 포인트: {selectedMethod.checkpoint}</p>
             </>}
