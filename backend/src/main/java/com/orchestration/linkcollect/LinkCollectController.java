@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -31,14 +32,20 @@ public class LinkCollectController {
   public ResponseEntity<String> jobs() { return json(client.jobs()); }
 
   @GetMapping(value = "/knowledge", produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<String> knowledge() { return json(client.knowledge()); }
+  public ResponseEntity<String> knowledge(@RequestParam(name = "include_hidden", defaultValue = "false") boolean includeHidden) { return json(client.knowledge(includeHidden)); }
 
   @GetMapping(value = "/places", produces = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<String> places() { return json(client.places()); }
+  public ResponseEntity<String> places(@RequestParam(name = "include_hidden", defaultValue = "false") boolean includeHidden) { return json(client.places(includeHidden)); }
 
   @PostMapping(value = "/archive/reclassify", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<String> reclassify(@RequestBody String body) {
     LinkCollectClient.ReclassifyResult result = client.reclassify(body);
+    return ResponseEntity.status(result.status()).contentType(MediaType.APPLICATION_JSON).body(result.body());
+  }
+
+  @PostMapping(value = "/archive/visibility", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<String> visibility(@RequestBody String body) {
+    LinkCollectClient.ReclassifyResult result = client.visibility(body);
     return ResponseEntity.status(result.status()).contentType(MediaType.APPLICATION_JSON).body(result.body());
   }
 

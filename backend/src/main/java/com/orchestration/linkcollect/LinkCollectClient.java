@@ -21,9 +21,15 @@ public class LinkCollectClient {
   public String jobs() { return get("/api/jobs"); }
   public String knowledge() { return get("/api/knowledge"); }
   public String places() { return get("/api/places"); }
+  public String knowledge(boolean includeHidden) { return get("/api/knowledge" + (includeHidden ? "?include_hidden=1" : "")); }
+  public String places(boolean includeHidden) { return get("/api/places" + (includeHidden ? "?include_hidden=1" : "")); }
 
   public ReclassifyResult reclassify(String requestBody) {
     return post("/api/archive/reclassify", requestBody);
+  }
+
+  public ReclassifyResult visibility(String requestBody) {
+    return post("/api/archive/visibility", requestBody);
   }
 
   public ReclassifyResult regeocode(String placeId, String requestBody) {

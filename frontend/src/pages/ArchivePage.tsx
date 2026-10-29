@@ -14,12 +14,13 @@ type KnowledgeItem = { id: string; title: string; category: string; summary: str
 type Place = {
   id: string; name: string; address: string; category: string; latitude: number | null
   longitude: number | null; naver_map_url: string; created_at: string; source_count: number
-  thumbnail_job_id: string; tags: string[]; geocode_status: string
+  thumbnail_job_id: string; tags: string[]; geocode_status: string; region_sido?: string; region_sigungu?: string; hidden?: boolean
   sources: { job_id: string; url: string; title: string; caption: string; summary: string }[]
 }
 type SectionState<T> = { items: T[]; loading: boolean; error: string }
 type ArchiveKind = 'all' | 'recent' | 'information' | 'place'
 const tunnelError = 'LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.'
+const accessRestrictedError = '사이트에서 공개 미디어를 제공하지 않았거나 로그인이 필요합니다. 접근 제한은 우회하지 않습니다.'
 
 const statusLabels: Record<string, string> = {
   received: '접수됨', processing: '분석 중', waiting_ai: '분석 대기', analyzed: '완료',
@@ -45,6 +46,7 @@ export function ArchivePage() {
   const [category, setCategory] = useState('all')
   const [tagFilter, setTagFilter] = useState('all')
   const [status, setStatus] = useState('all')
+  const [showHidden, setShowHidden] = useState(false)
   const [jobs, setJobs] = useState<SectionState<Job>>({ items: [], loading: true, error: '' })
   const [knowledge, setKnowledge] = useState<SectionState<KnowledgeItem>>({ items: [], loading: true, error: '' })
   const [places, setPlaces] = useState<SectionState<Place>>({ items: [], loading: true, error: '' })
@@ -59,9 +61,10 @@ export function ArchivePage() {
         .catch(error => update(current => ({ ...current, loading: false, error: error instanceof Error ? error.message : '불러오지 못했습니다.' })))
     }
     request('/api/linkcollect/jobs', setJobs)
-    request('/api/linkcollect/knowledge', setKnowledge)
-    request('/api/linkcollect/places', setPlaces)
-  }, [])
+    const visibilityQuery = showHidden ? '?include_hidden=1' : ''
+    request(`/api/linkcollect/knowledge${visibilityQuery}`, setKnowledge)
+    request(`/api/linkcollect/places${visibilityQuery}`, setPlaces)
+  }, [showHidden])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -114,7 +117,7 @@ export function ArchivePage() {
   }
 
   const renderJobItem = (job: Job) => <>
-    <h3 className="archive-card-title-clamp">{job.title || '제목 없음'}</h3>
+    <h3 className="archive-card-title-clamp">{(!job.title || job.title === '제목 없음') && job.analysis_error === accessRestrictedError ? '비공개/접근제한 게시물' : job.title || '제목 없음'}</h3>
   </>
 
   const knowledgeSection = (sectionCategory: string) => ({ ...knowledge, items: filteredKnowledgeItems.filter(item => item.category === sectionCategory) })
@@ -131,6 +134,7 @@ export function ArchivePage() {
   return <main className="archive-page">
     <header className="archive-page-header"><div><p className="eyebrow">LINKCOLLECT</p><h1>아카이브</h1><p>정보와 장소 자료를 유형별로 찾아봅니다.</p></div><button type="button" onClick={refresh}>새로고침</button></header>
     <section className="archive-toolbar" aria-label="아카이브 검색 및 필터">
+      <label><span>숨김 자료</span><input type="checkbox" checked={showHidden} onChange={event => setShowHidden(event.target.checked)} /> 숨김 포함</label>
       <label className="archive-search"><span>검색</span><input type="search" placeholder="제목, 본문, 주소, 출처 검색" value={query} onChange={event => setQuery(event.target.value)} /></label>
       <label><span>유형</span><select value={kind} onChange={event => { const value = event.target.value as ArchiveKind; setKind(value); setTagFilter('all'); if (value !== 'recent') setStatus('all'); if (value !== 'information' && value !== 'place' || value === 'information' && category === 'places' || value === 'place' && categories.includes(category)) setCategory('all') }}><option value="all">전체</option><option value="recent">최근 접수</option><option value="information">정보 아카이브</option><option value="place">장소 아카이브</option></select></label>
       {(kind === 'information' || kind === 'place') && <label><span>분류</span><select value={category} onChange={event => setCategory(event.target.value)}><option value="all">전체 분류</option>{kind === 'information' ? categories.map(value => <option value={value} key={value}>{categoryLabels[value]}</option>) : <option value="places">장소</option>}</select></label>}
@@ -153,7 +157,7 @@ export function ArchivePage() {
     {(kind === 'all' || kind === 'information') && section('패션·뷰티', knowledgeSection('fashion_beauty'), renderKnowledgeItem, item => item.id)}
     {(kind === 'all' || kind === 'place') && section('장소 아카이브', filteredPlaces, place => <>
       <h3 className="archive-card-title-clamp">{place.name}</h3>
-      <div className="archive-tags" aria-label="장소 태그">{[place.category, ...(place.tags ?? [])].filter(Boolean).slice(0, 3).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>
+      <div className="archive-tags" aria-label="장소 태그">{[place.category, ...(place.tags ?? [])].filter(Boolean).slice(0, 3).concat([place.region_sido, place.region_sigungu].filter((tag): tag is string => Boolean(tag))).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>
     </>, place => place.id)}
     {/* Keep unknown categories visible instead of silently losing their data. */}
     {(kind === 'all' || kind === 'information') && section('기타', { ...knowledge, items: filteredKnowledgeItems.filter(item => !categories.includes(item.category)) }, renderKnowledgeItem, item => item.id)}

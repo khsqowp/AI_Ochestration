@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { visibleTranscriptCards } from './ArchiveDetailPage.logic'
 
 type Job = {
@@ -14,13 +15,14 @@ type KnowledgeItem = {
   id: string; title: string; category: string; summary: string; content: string; language: string
   created_at: string; source_count: number
   cleaned_content: string; transcript: string; transcript_cleaned: string; stt_corrected_text: string; ocr_text: string; source_title: string; extracted_caption: string
-  tags: string[]; sources: ArchiveSource[]
+  tags: string[]; sources: ArchiveSource[]; hidden?: boolean
 }
-type Place = { id: string; name: string; address: string; category: string; latitude: number | null; longitude: number | null; naver_map_url: string; created_at: string; source_count: number; tags: string[]; geocode_status: string; sources: ArchiveSource[] }
+type Place = { id: string; name: string; address: string; category: string; latitude: number | null; longitude: number | null; naver_map_url: string; created_at: string; source_count: number; tags: string[]; geocode_status: string; sources: ArchiveSource[]; region_sido?: string; region_sigungu?: string; hidden?: boolean }
 type ArchiveItem = { kind: 'job'; item: Job } | { kind: 'knowledge'; item: KnowledgeItem } | { kind: 'place'; item: Place }
 type DetailState = { loading: boolean; error: string; item: ArchiveItem | null }
 type ReclassifyState = { status: 'idle' | 'pending' | 'success' | 'error'; message: string }
 type RegeocodeState = { status: 'idle' | 'pending' | 'success' | 'error'; message: string }
+type VisibilityState = { status: 'idle' | 'pending' | 'success' | 'error'; message: string }
 const tunnelError = 'LinkCollect 연결 실패 — SSH 터널 상태를 확인하세요.'
 const categoryLabels: Record<string, string> = { security: '보안', development: '개발', investment: '투자', fashion_beauty: '패션·뷰티' }
 
@@ -32,6 +34,11 @@ async function reclassify(kind: 'knowledge' | 'place', id: string, target: 'plac
     body: JSON.stringify({ kind, id, target }),
   })
   if (!response.ok) throw new Error(`재분류 요청 실패 (${response.status})`)
+}
+async function setVisibility(kind: 'knowledge' | 'place', id: string, hidden: boolean) {
+  const response = await fetch('/api/linkcollect/archive/visibility', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, id, hidden }) })
+  const payload = await response.json().catch(() => ({})) as { error?: string }
+  if (!response.ok) throw new Error(payload.error ?? `숨김 상태 변경 실패 (${response.status})`)
 }
 
 async function loadItems<T>(path: string): Promise<T[]> {
@@ -94,6 +101,7 @@ export function ArchiveDetailPage() {
   const [state, setState] = useState<DetailState>({ loading: true, error: '', item: null })
   const [reclassifyState, setReclassifyState] = useState<ReclassifyState>({ status: 'idle', message: '' })
   const [regeocodeState, setRegeocodeState] = useState<RegeocodeState>({ status: 'idle', message: '' })
+  const [visibilityState, setVisibilityState] = useState<VisibilityState>({ status: 'idle', message: '' })
   const [addressDraft, setAddressDraft] = useState<string | null>(null)
   const [reloadVersion, setReloadVersion] = useState(0)
   const regeocodeRequest = useRef(0)
@@ -110,6 +118,14 @@ export function ArchiveDetailPage() {
       setReclassifyState({ status: 'error', message: error instanceof Error ? error.message : '재분류 요청 실패' })
     }
   }
+  const submitVisibility = async (kind: 'knowledge' | 'place', id: string, hidden: boolean) => {
+    setVisibilityState({ status: 'pending', message: '' })
+    try {
+      await setVisibility(kind, id, hidden)
+      setState(current => current.item?.kind === kind && current.item.item.id === id ? { ...current, item: { ...current.item, item: { ...current.item.item, hidden } } as ArchiveItem } : current)
+      setVisibilityState({ status: 'success', message: hidden ? '목록에서 숨겼습니다.' : '목록에 다시 표시합니다.' })
+    } catch (error) { setVisibilityState({ status: 'error', message: error instanceof Error ? error.message : '숨김 상태 변경 실패' }) }
+  }
 
   useEffect(() => {
     setAddressDraft(null)
@@ -120,8 +136,8 @@ export function ArchiveDetailPage() {
     setState({ loading: true, error: '', item: null })
     Promise.allSettled([
       loadItems<Job>('/api/linkcollect/jobs'),
-      loadItems<KnowledgeItem>('/api/linkcollect/knowledge'),
-      loadItems<Place>('/api/linkcollect/places'),
+      loadItems<KnowledgeItem>('/api/linkcollect/knowledge?include_hidden=1'),
+      loadItems<Place>('/api/linkcollect/places?include_hidden=1'),
     ]).then(results => {
       if (!active) return
       const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
@@ -171,7 +187,7 @@ export function ArchiveDetailPage() {
       : state.error ? <p className="archive-error" role="alert">{state.error}</p>
         : !item ? <p className="empty-state">항목을 찾을 수 없습니다.</p>
           : item.kind === 'job' ? <section className="archive-detail">
-            <h2>{item.item.title || '제목 없음'}</h2>
+            <h2>{(!item.item.title || item.item.title === '제목 없음') && item.item.analysis_error === '사이트에서 공개 미디어를 제공하지 않았거나 로그인이 필요합니다. 접근 제한은 우회하지 않습니다.' ? '비공개/접근제한 게시물' : item.item.title || '제목 없음'}</h2>
             <div className="archive-detail-meta"><span>{item.item.status}</span><time>{formatDate(item.item.created_at)}</time></div>
             {!!item.item.tags?.length && <div className="archive-tags">{item.item.tags.map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>{tag}</span>)}</div>}
             {safeExternalUrl(item.item.url) && <a className="archive-link" href={safeExternalUrl(item.item.url)} target="_blank" rel="noopener noreferrer">원문 열기 ↗</a>}
@@ -186,7 +202,9 @@ export function ArchiveDetailPage() {
             <div className="archive-reclassify">
               <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('knowledge', item.item.id, 'place')}>위치류로 재분류</button>
               <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('knowledge', item.item.id, 'information')}>정보류로 재분류</button>
+              <button type="button" aria-label={item.item.hidden ? '숨김 해제' : '숨기기'} title={item.item.hidden ? '숨김 해제' : '숨기기'} disabled={visibilityState.status === 'pending'} onClick={() => void submitVisibility('knowledge', item.item.id, !item.item.hidden)}>{item.item.hidden ? <Eye size={16} /> : <EyeOff size={16} />}</button>
             </div>
+            {visibilityState.message && <p className={`archive-reclassify-status${visibilityState.status === 'error' ? ' archive-error' : ''}`} role={visibilityState.status === 'error' ? 'alert' : 'status'}>{visibilityState.message}</p>}
             {reclassifyState.message && <p className={`archive-reclassify-status${reclassifyState.status === 'error' ? ' archive-error' : ''}`} role={reclassifyState.status === 'error' ? 'alert' : 'status'}>{reclassifyState.message}</p>}
             {reclassifyState.status === 'success' && <Link className="archive-back" to="/dashboard/archive">아카이브 목록으로</Link>}
             <h2>{item.item.title}</h2>
@@ -203,11 +221,13 @@ export function ArchiveDetailPage() {
             <div className="archive-reclassify">
               <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('place', item.item.id, 'place')}>위치류로 재분류</button>
               <button type="button" disabled={reclassifyState.status === 'pending'} onClick={() => void submitReclassification('place', item.item.id, 'information')}>정보류로 재분류</button>
+              <button type="button" aria-label={item.item.hidden ? '숨김 해제' : '숨기기'} title={item.item.hidden ? '숨김 해제' : '숨기기'} disabled={visibilityState.status === 'pending'} onClick={() => void submitVisibility('place', item.item.id, !item.item.hidden)}>{item.item.hidden ? <Eye size={16} /> : <EyeOff size={16} />}</button>
             </div>
+            {visibilityState.message && <p className={`archive-reclassify-status${visibilityState.status === 'error' ? ' archive-error' : ''}`} role={visibilityState.status === 'error' ? 'alert' : 'status'}>{visibilityState.message}</p>}
             {reclassifyState.message && <p className={`archive-reclassify-status${reclassifyState.status === 'error' ? ' archive-error' : ''}`} role={reclassifyState.status === 'error' ? 'alert' : 'status'}>{reclassifyState.message}</p>}
             {reclassifyState.status === 'success' && <Link className="archive-back" to="/dashboard/archive">아카이브 목록으로</Link>}
             <h2>{item.item.name}</h2>
-            <div className="archive-tags">{[item.item.category, ...(item.item.tags ?? [])].filter(Boolean).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>
+            <div className="archive-tags">{[item.item.category, ...(item.item.tags ?? []), item.item.region_sido, item.item.region_sigungu].filter(Boolean).map((tag, index) => <span className="archive-tag" key={`${tag}-${index}`}>#{tag}</span>)}</div>
             <div className="archive-detail-meta"><time>{formatDate(item.item.created_at)}</time><span>출처 {item.item.source_count}개</span></div>
             {item.item.address && <p className="archive-detail-field"><strong>주소</strong>{item.item.address}</p>}
             {item.item.latitude != null && item.item.longitude != null
