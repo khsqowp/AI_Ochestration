@@ -282,11 +282,15 @@ for (const name of ['request','response']) $(name+'Mode').addEventListener('chan
 const wordlist = () => paths.join('\n')+'\n';
 const clipboardWordlist = () => paths.join('\r\n')+'\r\n';
 $('copy').addEventListener('click', async () => {
+  let copied = false;
   try {
-    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(clipboardWordlist());
-    else {
-      const area = document.createElement('textarea'); area.value = clipboardWordlist(); document.body.append(area); area.select();
-      try { if (!document.execCommand('copy')) throw new Error('copy failed'); } finally { area.remove(); }
+    if (navigator.clipboard && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(clipboardWordlist()); copied = true; } catch {}
+    }
+    if (!copied) {
+      const area = document.createElement('textarea'); area.value = clipboardWordlist();
+      try { document.body.append(area); area.select(); copied = document.execCommand('copy'); } finally { area.remove(); }
+      if (!copied) throw new Error('copy failed');
     }
     $('status').textContent = '경로 목록 복사 완료';
   } catch { $('status').textContent = '클립보드 복사 실패 -- txt 다운로드를 사용하세요.'; }
