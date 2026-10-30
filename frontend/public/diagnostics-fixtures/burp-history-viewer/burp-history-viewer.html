@@ -78,6 +78,9 @@ html.embedded main > .panel { margin-top: 6px; padding: 10px; min-height: 0; }
 .history-workspace .table-wrap { min-height: 0; }
 .history-workspace #detail .result-grid { flex: 1 1 auto; min-height: 0; grid-template-columns: 1fr; grid-template-rows: repeat(2,minmax(0,1fr)); }
 .history-workspace .bc-pane, .history-workspace .bc-pane-body { min-height: 0; }
+  #vresize { flex: 0 0 9px; margin: 4px 0; border-radius: 999px; background: #eceaf0; cursor: row-resize; touch-action: none; display: flex; align-items: center; justify-content: center; }
+  #vresize::after { content: ''; width: 34px; height: 3px; border-radius: 999px; background: #dcd8e5; }
+  #vresize:hover, #vresize:focus-visible { background: #dcd8e5; outline: 2px solid rgba(118,103,220,.38); outline-offset: 1px; }
 html.embedded #drop { flex: 0 0 auto; }
 html.embedded #drop p { margin: 4px 0; }
 html.embedded .history-paths { flex: 0 0 auto; max-height: 150px; overflow: auto; }
@@ -90,10 +93,10 @@ html.embedded .history-paths pre { min-height: 35px; max-height: 70px; }
 }
 </style></head><body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')"><main>
 <h1>Burp History 뷰어</h1><p>Burp Suite의 HTTP history XML을 요청 한 줄씩 살펴보고 요청·응답 원문과 경로 목록을 확인한다. 서버로 전송하지 않음, 브라우저 안에서만 파싱 -- 이 HTML 파일 하나로 인터넷 없는 PC에서도 동작한다.</p>
-<section class="panel" id="drop"><button id="load" type="button">파일 불러오기</button><input type="file" id="file" accept=".xml,application/xml,text/xml" hidden><p>Proxy &gt; HTTP history에서 우클릭 &gt; Save items로 저장한 XML을 선택하거나 여기에 끌어 놓으세요.</p><span id="status" role="status" aria-live="polite"></span></section>
+<section class="panel" id="drop"><button id="load" type="button">파일 불러오기</button> <button id="paste" type="button">클립보드 붙여넣기</button><input type="file" id="file" accept=".xml,application/xml,text/xml" hidden><p>Proxy &gt; HTTP history에서 우클릭 &gt; Save items로 저장한 XML을 선택하거나 여기에 끌어 놓으세요.</p><span id="status" role="status" aria-live="polite"></span></section>
 <div class="history-workspace"><section class="panel"><h2>HTTP History</h2><p id="summary">XML 파일을 불러오세요.</p><div class="controls"><label>URL 검색 <input id="search" type="search" placeholder="URL 문자열 포함 검색"></label><label>상태 <select id="filter"><option value="">전체</option></select></label></div><div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">Host</th><th scope="col">Method</th><th scope="col">URL</th><th scope="col">Status</th><th scope="col">Length</th><th scope="col">MIME type</th><th scope="col">Time</th></tr></thead><tbody id="rows"></tbody></table></div><div class="controls"><button id="prev" disabled>이전</button><span id="page" role="status"></span><button id="next" disabled>다음</button></div></section>
 <section class="panel" id="detail" hidden><h2 id="selection"></h2><div class="result-grid"><div class="bc-pane"><div class="bc-pane-head"><label>Request <select id="requestMode"><option>Raw</option><option>Pretty</option></select></label></div><pre class="bc-pane-body" id="request"></pre></div><div class="bc-pane"><div class="bc-pane-head"><label>Response <select id="responseMode"><option>Raw</option><option>Pretty</option></select></label></div><pre class="bc-pane-body" id="response"></pre></div></div></section></div>
-<section class="panel history-paths"><h2>중복 제거 URL 경로 목록</h2><p>쿼리스트링·프래그먼트·맨 앞 슬래시를 제거하고 정렬한다. 루트 경로는 목록에서 제외한다. 필터와 관계없이 전체 히스토리를 사용한다.</p><div class="controls"><button id="copy" disabled>클립보드 복사</button><button id="download" disabled>txt로 다운로드</button></div><pre class="bc-pane-body" id="paths"></pre></section>
+<div id="vresize" role="separator" aria-orientation="horizontal" aria-label="영역 크기 조절" tabindex="0"></div><section class="panel history-paths"><h2>중복 제거 URL 경로 목록</h2><p>쿼리스트링·프래그먼트·맨 앞 슬래시를 제거하고 정렬한다. 루트 경로는 목록에서 제외한다. 필터와 관계없이 전체 히스토리를 사용한다.</p><div class="controls"><button id="copy" disabled>클립보드 복사</button><button id="download" disabled>txt로 다운로드</button></div><pre class="bc-pane-body" id="paths"></pre></section>
 </main><script>
 (() => {
 'use strict';
@@ -234,6 +237,12 @@ async function loadFile(file) {
   const version = ++loadVersion; $('status').textContent = 'XML 읽는 중…';
   try {
     const text = await file.text(); if (version !== loadVersion) return;
+    loadText(text, file.name, version);
+  } catch (error) { if(version === loadVersion) $('status').textContent = error.message || '파일 읽기 실패'; }
+}
+function loadText(text, sourceLabel, version) {
+  if (version !== loadVersion) return;
+  try {
     const parsed = parseHistory(text);
     items = parsed; selected = null; $('detail').hidden = true;
     paths = [...new Set(items.map(item => normalizePath(item.path)).filter(Boolean))].sort((a,b) => {
@@ -247,9 +256,21 @@ async function loadFile(file) {
     $('filter').replaceChildren(new Option('전체','')); for (const code of [...counts.keys()].sort()) $('filter').add(new Option(code,code));
     $('search').value = ''; $('paths').textContent = paths.join('\n');
     $('copy').disabled = $('download').disabled = paths.length === 0;
-    applyFilters(); $('status').textContent = `${file.name} 불러오기 완료`;
+    applyFilters(); $('status').textContent = `${sourceLabel} 불러오기 완료`;
   } catch (error) { if(version === loadVersion) $('status').textContent = error.message || '파일 읽기 실패'; }
 }
+$('paste').addEventListener('click', async () => {
+  const version = ++loadVersion; $('status').textContent = '클립보드 읽는 중…'; $('status').classList.add('busy');
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') throw new Error('clipboard unavailable');
+    const text = await navigator.clipboard.readText();
+    if (version !== loadVersion) return;
+    if (!text) throw new Error('clipboard empty');
+    $('status').classList.remove('busy'); loadText(text, '클립보드', version);
+  } catch (error) {
+    if (version === loadVersion) { $('status').classList.remove('busy'); $('status').textContent = '클립보드 읽기 실패 -- 권한을 확인하거나 파일을 직접 선택하세요.'; }
+  }
+});
 $('load').addEventListener('click', () => $('file').click());
 $('file').addEventListener('change', () => { loadFile($('file').files[0]); $('file').value = ''; });
 for (const event of ['dragenter','dragover']) $('drop').addEventListener(event, e => { e.preventDefault(); $('drop').classList.add('drag'); });
@@ -259,15 +280,35 @@ $('search').addEventListener('input',applyFilters); $('filter').addEventListener
 $('prev').addEventListener('click', () => { page--; renderRows(); }); $('next').addEventListener('click', () => { page++; renderRows(); });
 for (const name of ['request','response']) $(name+'Mode').addEventListener('change',renderDetail);
 const wordlist = () => paths.join('\n')+'\n';
+const clipboardWordlist = () => paths.join('\r\n')+'\r\n';
 $('copy').addEventListener('click', async () => {
   try {
-    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(wordlist());
+    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(clipboardWordlist());
     else {
-      const area = document.createElement('textarea'); area.value = wordlist(); document.body.append(area); area.select();
+      const area = document.createElement('textarea'); area.value = clipboardWordlist(); document.body.append(area); area.select();
       try { if (!document.execCommand('copy')) throw new Error('copy failed'); } finally { area.remove(); }
     }
     $('status').textContent = '경로 목록 복사 완료';
   } catch { $('status').textContent = '클립보드 복사 실패 -- txt 다운로드를 사용하세요.'; }
+});
+$('vresize').addEventListener('pointerdown', e => {
+  if (window.matchMedia('(max-width: 850px)').matches) return;
+  e.preventDefault(); $('vresize').setPointerCapture(e.pointerId);
+  const workspace = document.querySelector('.history-workspace'), pathsPanel = document.querySelector('.history-paths');
+  const startY = e.clientY, startWorkspace = workspace.getBoundingClientRect().height, startPaths = pathsPanel.getBoundingClientRect().height;
+  const minWorkspace = 120, minPaths = 80;
+  function move(event) {
+    const delta = event.clientY - startY;
+    const change = Math.max(minWorkspace - startWorkspace, Math.min(startPaths - minPaths, delta));
+    workspace.style.flex = `0 0 ${startWorkspace + change}px`;
+    pathsPanel.style.flex = `0 0 ${startPaths - change}px`;
+    pathsPanel.style.maxHeight = 'none';
+  }
+  function finish() {
+    document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', finish);
+    document.removeEventListener('pointercancel', finish);
+  }
+  document.addEventListener('pointermove', move); document.addEventListener('pointerup', finish); document.addEventListener('pointercancel', finish);
 });
 $('download').addEventListener('click', () => {
   const url = URL.createObjectURL(new Blob([wordlist()],{type:'text/plain;charset=utf-8'}));
