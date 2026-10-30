@@ -16,7 +16,7 @@ export function BurpHistoryViewerModal({ onClose, embedded }: { onClose?: () => 
             <Download size={14}/><span><b>폐쇄망용 HTML 다운로드</b><small>독립 실행형 파일로 인터넷 없이 열 수 있습니다.</small></span>
           </a>
         </div>
-        <iframe className="diag-route-tree-frame" src={`${href}?embedded=1`} title="Burp History 뷰어" sandbox="allow-scripts allow-downloads allow-popups"/>
+        <iframe className="diag-route-tree-frame" src={`${href}?embedded=1`} title="Burp History 뷰어" sandbox="allow-scripts allow-downloads allow-popups" allow="clipboard-read; clipboard-write"/>
       </div>
     </div>
   </PanelShell>
