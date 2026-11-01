@@ -565,13 +565,13 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
   const statusLabel = data?.halted ? '⚠ 킬 스위치 발동 · 정지됨' : (live ? `가동 중 · mainnet 총 ${grossMultiple}` : '가동 중 · 백테스트(페이퍼)')
   return <Wrap embedded={embedded} onClose={onClose} eyebrow="TRADER Q" title="모멘텀 로테이션 대시보드">
     <p className="source-intro">{live
-      ? `바이낸스 실계좌(mainnet) 코인 선물 상대모멘텀 롱숏 로테이션입니다. 14일 모멘텀 · 3일마다 리밸런스 · 롱/숏 각 최대 8종목 · 규모는 equity의 약 2배 · 디레버 없음 · 손실 35% 도달 시 전량 청산 후 14일 쉬고 자동 재개 · BTC 14일 -10% 급락 시 전량 현금 대기.`
+      ? `바이낸스 실계좌(mainnet) 코인 선물 상대모멘텀 롱숏 로테이션입니다. 14일 모멘텀 · 3일마다 리밸런스 · 롱/숏 각 최대 8종목 · 레버리지 4x · 총명목 약 3.8x(equity의 95% 배치) · 디레버 없음 · 손실 35% 도달 시 전량 청산 후 14일 쉬고 자동 재개 · BTC 14일 -10% 급락 시 전량 현금 대기.`
       : '코인 선물 상대모멘텀 롱숏 로테이션 백테스트(페이퍼) 현황입니다. 실주문 없음 — 가상자본 시뮬레이션.'}</p>
     <div className="trading-status-card">
       <BotStatusPill tone={statusTone} label={statusLabel}/>
       {data && sessionStartTs && <p className="trading-headline-stat">이번 세션 수익률({fmt(sessionStartTs)}부터) <b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}% ({sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)})</b> — 자동/수동 리밸런스가 일어날 때마다 0으로 다시 시작합니다.</p>}
       <p>지갑잔고(실현, 바이낸스 앱 Asset Value) <b>{data?.walletBalance == null ? '-' : `$${data.walletBalance.toFixed(2)}`}</b> · 마진잔고(equity, 미실현 포함) <b>{data?.marginBalance == null ? '-' : `$${data.marginBalance.toFixed(2)}`}</b> · 미실현손익 {data ? `$${unrealized.toFixed(2)}` : '-'}</p>
-      <p>전체 누적손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} · 실현 누적손익(수수료·펀딩 포함) 3개월 {data?.realizedIncome?.realized3m == null ? '-' : `$${data.realizedIncome.realized3m.toFixed(2)}`} / 30일 {data?.realizedIncome?.realized30d == null ? '-' : `$${data.realizedIncome.realized30d.toFixed(2)}`} / 7일 {data?.realizedIncome?.realized7d == null ? '-' : `$${data.realizedIncome.realized7d.toFixed(2)}`}</p>
+      <p>전체 누적손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} · 실현 누적손익(수수료·펀딩 포함) <span title="실현 누적손익 = 바이낸스 앱 PNL 정의(실현+수수료+펀딩, 미실현 제외)">ⓘ</span> 3개월 {data?.realizedIncome?.realized3m == null ? '-' : `$${data.realizedIncome.realized3m.toFixed(2)}`} / 30일 {data?.realizedIncome?.realized30d == null ? '-' : `$${data.realizedIncome.realized30d.toFixed(2)}`} / 7일 {data?.realizedIncome?.realized7d == null ? '-' : `$${data.realizedIncome.realized7d.toFixed(2)}`}</p>
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (킬 35%, 디레버 없음)</p>}
     </div>
@@ -591,8 +591,8 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
         <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span title="inception 대비, 미실현 포함. 바이낸스 앱 Cum%는 평균자본 등 다른 정의입니다.">전체 수익률 ⓘ (inception 대비, 미실현 포함)</span></div>
         <div><b>{data?.marginUtilization == null ? '-' : `${(data.marginUtilization * 100).toFixed(1)}%`}{data?.marginUtilization != null && data.marginUtilization >= .95 && <small className="negative"> 경고</small>}</b><span>마진 사용률(초기증거금/마진잔고)</span></div>
         <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
-        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
-        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span title="기간 수익률/손익은 equity(마진잔고) 변화 기준이며 미실현 포함. 바이낸스 앱 PNL(실현+수수료+펀딩)과 정의가 다릅니다.">{TRADING_PERIOD_LABEL[period]} 수익률 (equity 변화 기준, 미실현 포함){periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span title="기간 수익률/손익은 equity(마진잔고) 변화 기준이며 미실현 포함. 바이낸스 앱 PNL(실현+수수료+펀딩)과 정의가 다릅니다.">{TRADING_PERIOD_LABEL[period]} 손익 (equity 변화 기준, 미실현 포함){periodShort ? ' *' : ''}</span></div>
         <div><b className={drawdown > 0.15 ? 'negative' : ''}>{(drawdown * 100).toFixed(1)}%</b><span>현재 낙폭</span></div>
         <div><RebalanceCountdown target={data.nextRebalanceTs}/><span>다음 리밸런스까지{data.rebalanceEveryDays ? ` (${data.rebalanceEveryDays}일 주기)` : ''}</span></div>
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
@@ -658,7 +658,7 @@ export function RealTradingHub({ onClose, initialTab, embedded }: { onClose?: ()
     <div className="explorer-body">
       <nav className="explorer-sidebar">
         <div className="file-list">
-          <button className={tab === 'momentum-rotation-trading' ? 'active' : ''} onClick={() => setTab('momentum-rotation-trading')}><TrendingUp size={16}/><span><b>모멘텀 로테이션</b><small>바이낸스 실계좌 · 2x</small></span></button>
+          <button className={tab === 'momentum-rotation-trading' ? 'active' : ''} onClick={() => setTab('momentum-rotation-trading')}><TrendingUp size={16}/><span><b>모멘텀 로테이션</b><small>바이낸스 실계좌 · 4x</small></span></button>
           <button className={tab === 'trading' ? 'active' : ''} onClick={() => setTab('trading')}><TrendingUp size={16}/><span><b>펀딩비 차익거래</b><small>바이낸스 실계좌</small></span></button>
         </div>
       </nav>
