@@ -570,7 +570,8 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
     <div className="trading-status-card">
       <BotStatusPill tone={statusTone} label={statusLabel}/>
       {data && sessionStartTs && <p className="trading-headline-stat">이번 세션 수익률({fmt(sessionStartTs)}부터) <b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}% ({sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)})</b> — 자동/수동 리밸런스가 일어날 때마다 0으로 다시 시작합니다.</p>}
-      <p>잔고(바이낸스 API) {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>${equity.toFixed(2)}</b> : '-'} · 전체 누적손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} (미실현 {data ? unrealized.toFixed(2) : '-'})</p>
+      <p>지갑잔고(실현, 바이낸스 앱 Asset Value) <b>{data?.walletBalance == null ? '-' : `$${data.walletBalance.toFixed(2)}`}</b> · 마진잔고(equity, 미실현 포함) <b>{data?.marginBalance == null ? '-' : `$${data.marginBalance.toFixed(2)}`}</b> · 미실현손익 {data ? `$${unrealized.toFixed(2)}` : '-'}</p>
+      <p>전체 누적손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} · 실현 누적손익(수수료·펀딩 포함) 3개월 {data?.realizedIncome?.realized3m == null ? '-' : `$${data.realizedIncome.realized3m.toFixed(2)}`} / 30일 {data?.realizedIncome?.realized30d == null ? '-' : `$${data.realizedIncome.realized30d.toFixed(2)}`} / 7일 {data?.realizedIncome?.realized7d == null ? '-' : `$${data.realizedIncome.realized7d.toFixed(2)}`}</p>
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (킬 35%, 디레버 없음)</p>}
     </div>
@@ -583,10 +584,12 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
         {/* 2열 그리드라 인접 두 칸이 한 행 — 서로 짝이 되는 지표끼리 붙여야 시각적으로 헷갈리지 않는다
             (전엔 세션수익률/세션손익이 다른 행에 떨어져 표시됐음). */}
         <div><b>${startingCapital.toFixed(2)}</b><span>진입금액(시작 자본)</span></div>
-        <div><b>${equity.toFixed(2)}</b><span>현재금액(API 잔고)</span></div>
+        <div><b>{data?.walletBalance == null ? '-' : `$${data.walletBalance.toFixed(2)}`}</b><span>지갑잔고(실현)</span></div>
+        <div><b>{data?.marginBalance == null ? '-' : `$${data.marginBalance.toFixed(2)}`}</b><span>마진잔고(equity, 미실현 포함)</span></div>
         <div><b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}%</b><span>이번 세션 수익률(마지막 리밸런스 이후)</span></div>
         <div><b className={sessionPnl >= 0 ? 'positive' : 'negative'}>{sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)}</b><span>이번 세션 손익</span></div>
-        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span>전체 수익률(inception 이후 누적)</span></div>
+        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span title="inception 대비, 미실현 포함. 바이낸스 앱 Cum%는 평균자본 등 다른 정의입니다.">전체 수익률 ⓘ (inception 대비, 미실현 포함)</span></div>
+        <div><b>{data?.marginUtilization == null ? '-' : `${(data.marginUtilization * 100).toFixed(1)}%`}{data?.marginUtilization != null && data.marginUtilization >= .95 && <small className="negative"> 경고</small>}</b><span>마진 사용률(초기증거금/마진잔고)</span></div>
         <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
         <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span>{TRADING_PERIOD_LABEL[period]} 수익률{periodShort ? ' *' : ''}</span></div>
         <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span>{TRADING_PERIOD_LABEL[period]} 손익{periodShort ? ' *' : ''}</span></div>
