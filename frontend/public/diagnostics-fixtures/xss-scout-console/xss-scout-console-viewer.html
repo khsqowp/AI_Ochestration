@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>XSS Scout 결과 뷰어</title>
+<style>
+  :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #252537; background: #f4f4f7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; padding: 24px 22px 48px; }
+  h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: -.02em; line-height: 1.2; }
+  h2 { margin: 0 0 10px; font-size: 18px; }
+  p { margin: 0 0 14px; color: #6f6977; line-height: 1.6; }
+  .panel { background: #fff; border: 1px solid #eceaf0; border-radius: 16px; padding: 16px; margin-top: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.03), 0 14px 36px rgba(0,0,0,.04); }
+  textarea, button, select { font: inherit; }
+  textarea { display: block; width: 100%; min-height: 120px; resize: vertical; padding: 12px; background: #fff; border: 1px solid #dcd8e5; border-radius: 12px; color: #252537; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
+  textarea::placeholder { color: #6f6977; }
+  button, select { padding: 9px 12px; border-radius: 10px; border: 1px solid #dcd8e5; background: #fff; color: #252537; cursor: pointer; }
+  button:active:not(:disabled) { transform: scale(.97); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  button.primary { background: #7667dc; border-color: #7667dc; color: #fff; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .controls label { display: inline-flex; align-items: center; gap: 7px; }
+  #status { color: #6f6977; font-size: 13px; }
+  #status.error { color: #bc3038; }
+  .table-wrap { overflow: auto; background: #fafafc; border: 1px solid #eceaf0; border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px; border-bottom: 1px solid #d1cce0; text-align: left; vertical-align: top; }
+  th { white-space: nowrap; background: #f4f4f7; color: #6f6977; }
+  td { overflow-wrap: anywhere; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .badge.high { color: #a5242b; background: #fde8e8; border: 1px solid #e9a3a6; }
+  .badge.medium { color: #995607; background: #fff0d6; border: 1px solid #e3bf77; }
+  .empty { padding: 14px; color: #6f6977; }
+  #summary { color: #6f6977; font-size: 13px; margin: 4px 0 10px; }
+  [hidden] { display: none !important; }
+  button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(118,103,220,.38); outline-offset: 2px; }
+  @media (hover: hover) and (pointer: fine) { button:not(:disabled):hover { background: #f4f1ff; border-color: #8b80e4; } button.primary:hover:not(:disabled) { background: #5d50ba; border-color: #5d50ba; } tbody tr:hover { background: #f4f1ff; } }
+  html.embedded main { height: 100dvh; min-height: 0; padding: 8px; overflow: auto; }
+  html.embedded main > h1, html.embedded main > h1 + p { display: none; }
+  html.embedded main > .panel { margin-top: 6px; padding: 10px; }
+  html.embedded #input-panel { flex: 0 0 auto; }
+  html.embedded .results-panel { flex: 1 0 auto; }
+  @media (max-width: 850px) { main { padding: 14px 10px 32px; } th, td { padding: 7px; } }
+</style>
+</head>
+<body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')">
+<main>
+  <h1>XSS Scout v3.3 결과 뷰어</h1>
+  <p>결과 확인 스크립트 실행 후 <code>copy(window.__XSS_SCOUT_V33__)</code> 를 콘솔에 입력하면 클립보드에 복사된다. JSON은 서버로 보내지 않고 브라우저 안에서만 파싱한다.</p>
+  <section class="panel" id="input-panel">
+    <h2>결과 JSON 붙여넣기</h2>
+    <textarea id="input" placeholder="여기에 결과 JSON 붙여넣기" aria-label="여기에 결과 JSON 붙여넣기"></textarea>
+    <div class="controls"><button id="paste" class="primary" type="button">붙여넣기</button><span id="status" role="status" aria-live="polite"></span></div>
+  </section>
+  <section id="results" hidden>
+    <section class="panel"><h2>GET 반사 HIGH / MEDIUM</h2><div id="get-summary"></div><div class="controls"><label>등급 <select id="grade"><option value="">전체</option><option>HIGH</option><option>MEDIUM</option></select></label><label>정렬 <select id="sort"><option value="grade">등급</option><option value="path">경로</option><option value="parameter">파라미터</option></select></label></div><div class="table-wrap"><table><thead><tr><th>등급</th><th>경로</th><th>파라미터 (출처)</th><th>페이로드</th><th>판정</th><th>발견된 조각</th><th>URL</th></tr></thead><tbody id="get-rows"></tbody></table></div></section>
+    <section class="panel"><h2>DOM sink HIGH</h2><div class="table-wrap"><table><thead><tr><th>Kind</th><th>Target</th><th>Value</th><th>Time</th></tr></thead><tbody id="dom-rows"></tbody></table><div id="dom-empty" class="empty" hidden>이번 스캔에서 DOM sink HIGH 없음</div></div></section>
+    <section class="panel"><h2>파라미터별 통과 가능 특수기호/키워드 후보</h2><p id="char-note"></p><div class="table-wrap"><table><thead><tr><th>경로</th><th>파라미터</th><th>통과 후보 (RAW)</th><th>인코딩됨</th><th>차단 또는 미확인</th><th>문자별 요약</th></tr></thead><tbody id="char-rows"></tbody></table><div id="char-empty" class="empty" hidden>표시할 파라미터별 문자 데이터가 없습니다.</div></div></section>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let getRows = [];
+  const text = value => value == null ? '—' : typeof value === 'string' ? value : JSON.stringify(value);
+  function addCell(row, value) { const cell = document.createElement('td'); cell.textContent = text(value); row.append(cell); }
+  function setStatus(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
+  function renderGet() {
+    const grade = $('grade').value;
+    const sort = $('sort').value;
+    const rows = getRows.filter(row => !grade || row.Signal === grade).sort((a,b) => sort === 'path' ? text(a.Path).localeCompare(text(b.Path)) : sort === 'parameter' ? text(a.Parameter).localeCompare(text(b.Parameter)) : (a.Signal === b.Signal ? 0 : a.Signal === 'HIGH' ? -1 : 1));
+    $('get-summary').textContent = `전체 ${getRows.length}건 · 표시 ${rows.length}건`;
+    const fragment = document.createDocumentFragment();
+    for (const item of rows) {
+      const row = document.createElement('tr'), gradeCell = document.createElement('td'), badge = document.createElement('span');
+      badge.className = `badge ${String(item.Signal || '').toLowerCase()}`; badge.textContent = text(item.Signal); gradeCell.append(badge); row.append(gradeCell);
+      addCell(row, item.Path); addCell(row, `${text(item.Parameter)} (${text(item.ParamSource)})`); addCell(row, item.Payload); addCell(row, item.Result); addCell(row, item.Context); addCell(row, item.URL);
+      fragment.append(row);
+    }
+    $('get-rows').replaceChildren(fragment);
+    if (!rows.length) { const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 7; cell.className = 'empty'; cell.textContent = getRows.length ? '선택한 등급의 결과가 없습니다.' : '이번 스캔에서 HIGH/MEDIUM 없음'; row.append(cell); $('get-rows').append(row); }
+  }
+  function renderData(data) {
+    const scout = data?.__XSS_SCOUT_V33__ || data;
+    if (!scout || typeof scout !== 'object' || Array.isArray(scout)) throw new Error('XSS Scout 결과 객체가 아닙니다. window.__XSS_SCOUT_V33__ 객체를 복사했는지 확인하세요.');
+    getRows = [...(Array.isArray(scout.highSignal) ? scout.highSignal : []), ...(Array.isArray(scout.mediumSignal) ? scout.mediumSignal : [])];
+    renderGet();
+    const dom = Array.isArray(scout.domHighSignal) ? scout.domHighSignal : Array.isArray(scout.domSummary?.high) ? scout.domSummary.high : Array.isArray(scout.domObserver?.summary?.high) ? scout.domObserver.summary.high : [];
+    const domFragment = document.createDocumentFragment();
+    for (const item of dom) { const row = document.createElement('tr'); for (const key of ['Kind','Target','Value','Time']) addCell(row, item[key]); domFragment.append(row); }
+    $('dom-rows').replaceChildren(domFragment); $('dom-empty').hidden = dom.length > 0;
+    const params = new Map();
+    for (const item of getRows) {
+      const key = `${text(item.Path)}\u0000${text(item.Parameter)}\u0000${text(item.ParamSource)}`;
+      if (!params.has(key)) params.set(key, { item, counts: Object.create(null), summaries: new Set() });
+      const entry = params.get(key);
+      if (item.CharacterMap && typeof item.CharacterMap === 'object') for (const [character, statuses] of Object.entries(item.CharacterMap)) {
+        if (statuses && typeof statuses === 'object') { const count = params.get(key).counts[character] ||= Object.create(null); for (const [status, value] of Object.entries(statuses)) if (Number.isFinite(value)) count[status] = (count[status] || 0) + value; }
+      }
+      if (item.CharacterSummary) entry.summaries.add(item.CharacterSummary);
+    }
+    const charFragment = document.createDocumentFragment();
+    for (const {item, counts, summaries} of params.values()) {
+      const row = document.createElement('tr'); addCell(row, item.Path); addCell(row, `${text(item.Parameter)} (${text(item.ParamSource)})`);
+      const raw = [], encoded = [], blocked = [];
+      for (const [character, states] of Object.entries(counts)) {
+        if ((states.RAW || 0) > 0) raw.push(character);
+        if (['HTML_ENTITY','JSON_ESCAPE','JS_ESCAPE','URL_ENCODED'].some(status => (states[status] || 0) > 0)) encoded.push(character);
+        if ((states.MISSING || 0) > 0 || (states.MISSING_OR_TRUNCATED || 0) > 0) blocked.push(character);
+      }
+      addCell(row, raw.length ? raw.join(' ') : '없음'); addCell(row, encoded.length ? encoded.join(' ') : '없음'); addCell(row, blocked.length ? blocked.join(' ') : '없음'); addCell(row, [...summaries].join(' · ') || '—'); charFragment.append(row);
+    }
+    $('char-rows').replaceChildren(charFragment); $('char-empty').hidden = params.size > 0;
+    $('char-note').textContent = params.size ? 'CharacterMap 구조화 데이터의 문자별 상태 횟수를 합산했다. RAW는 그대로 반사된 후보이며, 인코딩됨과 누락 상태를 별도 표시한다.' : '문자별 구조화 데이터가 없으면 CharacterSummary 문자열을 해석하지 않고 원문 그대로만 표시한다.';
+    $('results').hidden = false; setStatus('JSON 파싱 완료');
+  }
+  $('paste').addEventListener('click', async () => {
+    try { $('input').value = await navigator.clipboard.readText(); if (!$('input').value.trim()) { setStatus('클립보드가 비어 있습니다.', true); return; } parseInput(); }
+    catch { setStatus('클립보드를 읽지 못했습니다. 권한을 허용하거나 텍스트 상자에 직접 붙여넣으세요.', true); }
+  });
+  function parseInput() { try { renderData(JSON.parse($('input').value)); } catch (error) { $('results').hidden = true; setStatus(error instanceof SyntaxError ? '유효한 JSON이 아님' : error.message || '결과를 처리할 수 없습니다.', true); } }
+  $('input').addEventListener('paste', () => window.setTimeout(parseInput, 0));
+  $('input').addEventListener('input', () => { if ($('input').value.trim()) parseInput(); else { $('results').hidden = true; setStatus(''); } });
+  $('grade').addEventListener('change', renderGet); $('sort').addEventListener('change', renderGet);
+})();
+</script>
+</body>
+</html>

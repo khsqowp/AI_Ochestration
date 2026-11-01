@@ -98,4 +98,5 @@
     통제가능입력마커수: observed.controlledInputMarkerCount,
     관측된상태변경요청수: observed.stateChangingRequestShapes.length,
   }]);
+  console.log('[XSS Scout v3.3] 결과를 뷰어로 가져오려면 copy(window.__XSS_SCOUT_V33__) 를 콘솔에 입력해 클립보드에 복사하세요.');
 })();

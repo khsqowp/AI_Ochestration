@@ -58,6 +58,9 @@ export function DiagnosticsPage() {
           <Link className="diag-tile" to="/dashboard/diag/error-page-fingerprint">
             <ServerCrash size={20}/><span>기본 에러 페이지 탐지</span>
           </Link>
+          <Link className="diag-tile" to="/dashboard/diag/xss-scout-console">
+            <Bug size={20}/><span>XSS 콘솔 스캐너</span>
+          </Link>
         </div>
       </section>
 
