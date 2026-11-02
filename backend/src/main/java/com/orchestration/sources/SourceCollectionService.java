@@ -108,7 +108,7 @@ public class SourceCollectionService {
   /** Nightly routine collection: submitted to Gemini's Batch API (50% cost) rather than run in real
    * time, since nobody is waiting on this interactively — {@link #collectNow} (manual button) and
    * {@link #retryFailedSources} (failure-retry sweep) stay real-time on purpose. */
-  @Scheduled(cron = "${app.sources.daily-cron:0 0 0 * * *}")
+  @Scheduled(cron = "${app.sources.daily-cron:0 0 1 * * *}")
   public void collectDueSources() {
     if (!collectionSettings.enabled()) { log.info("source_collection_skipped reason=disabled_by_owner"); return; }
     submitBatchForSources(sources.due());
