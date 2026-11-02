@@ -36,6 +36,15 @@ class SourceCollectionServiceTest {
   private final Map<String, PageSnapshot> store = new HashMap<>();
   private SourceCollectionService service;
 
+  private SourceCollectionService serviceAllowingLoopbackForLocalServer() {
+    return new SourceCollectionService(mock(ResearchSourceService.class), new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L),
+        mock(TaskService.class), mock(SecurityCalendarService.class), mock(LlmGateway.class),
+        mock(GeminiCollectionBatchRepository.class), mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class),
+        mock(Executor.class), mock(CollectionSettingService.class)) {
+      @Override InetAddress resolveAndValidate(URI uri) throws Exception { return InetAddress.getLoopbackAddress(); }
+    };
+  }
+
   @BeforeEach
   void setUp() {
     PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
@@ -53,19 +62,20 @@ class SourceCollectionServiceTest {
   }
 
   @Test
-  void pinnedHttpRequest_usesValidatedAddressAndOriginalHostHeader() throws Exception {
+  void sendValidated_connectsToHostnameUri() throws Exception {
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/", exchange -> {
-      byte[] body = exchange.getRequestHeaders().getFirst("Host").getBytes(StandardCharsets.UTF_8);
+      byte[] body = "collected".getBytes(StandardCharsets.UTF_8);
       exchange.sendResponseHeaders(200, body.length);
       try (var output = exchange.getResponseBody()) { output.write(body); }
     });
     server.start();
     try {
-      URI uri = URI.create("http://research.example:" + server.getAddress().getPort() + "/");
-      HttpResponse<byte[]> response = service.sendToValidatedAddress(uri, InetAddress.getByName("127.0.0.1"));
+      service = serviceAllowingLoopbackForLocalServer();
+      URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/");
+      HttpResponse<byte[]> response = service.sendValidated(uri);
       assertThat(response.statusCode()).isEqualTo(200);
-      assertThat(new String(response.body(), StandardCharsets.UTF_8)).isEqualTo("research.example:" + server.getAddress().getPort());
+      assertThat(new String(response.body(), StandardCharsets.UTF_8)).isEqualTo("collected");
     } finally { server.stop(0); }
   }
 
@@ -79,8 +89,9 @@ class SourceCollectionServiceTest {
     });
     server.start();
     try {
-      URI uri = URI.create("http://research.example:" + server.getAddress().getPort() + "/large");
-      assertThatThrownBy(() -> service.sendToValidatedAddress(uri, InetAddress.getByName("127.0.0.1")))
+      service = serviceAllowingLoopbackForLocalServer();
+      URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/large");
+      assertThatThrownBy(() -> service.sendValidated(uri))
           .hasMessageContaining("response exceeds 2MB limit");
     } finally { server.stop(0); }
   }

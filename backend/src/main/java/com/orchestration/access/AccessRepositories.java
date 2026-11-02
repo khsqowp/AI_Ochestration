@@ -15,7 +15,10 @@ interface AccessEventRepository extends JpaRepository<AccessEvent, UUID> {
 
   long countByTsAfter(Instant since);
 
-  long deleteByTsBefore(Instant cutoff);
+  List<AccessEvent> findTop5000ByOrderByTsAsc();
+
+  @Query(value = "SELECT data_length + index_length FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'access_event'", nativeQuery = true)
+  Long tableSizeBytes();
 
   @Query("select distinct e.ip from AccessEvent e where e.ip not in (select l.ip from IpLocation l)")
   List<String> findIpsWithoutLocation();

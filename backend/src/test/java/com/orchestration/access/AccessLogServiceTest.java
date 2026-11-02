@@ -2,6 +2,8 @@ package com.orchestration.access;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -73,6 +75,32 @@ class AccessLogServiceTest {
 
     assertThat(activity).hasSize(1);
     assertThat(activity.get(0).userEmail()).isEqualTo("target@example.com");
+  }
+
+  @Test
+  void purgeOld_deletesOldestBatchesUntilTableIsUnderOneGiB() {
+    AccessEvent first = new AccessEvent("1.1.1.1", "GET", "/", 200, "ua", false, "api", null, null);
+    AccessEvent second = new AccessEvent("2.2.2.2", "GET", "/", 200, "ua", false, "api", null, null);
+    when(events.tableSizeBytes()).thenReturn(1_200_000_000L, 1_100_000_000L, 1_000_000_000L);
+    when(events.findTop5000ByOrderByTsAsc()).thenReturn(List.of(first), List.of(second));
+
+    service().purgeOld();
+
+    verify(events, times(2)).deleteAll(org.mockito.ArgumentMatchers.<Iterable<AccessEvent>>any());
+    verify(events, times(3)).tableSizeBytes();
+    verify(events, times(2)).findTop5000ByOrderByTsAsc();
+  }
+
+  @Test
+  void purgeOld_stopsWhenTableIsEmptyEvenIfSizeRemainsOverCap() {
+    when(events.tableSizeBytes()).thenReturn(1_200_000_000L);
+    when(events.findTop5000ByOrderByTsAsc()).thenReturn(List.of());
+
+    service().purgeOld();
+
+    verify(events).findTop5000ByOrderByTsAsc();
+    verify(events).tableSizeBytes();
+    verify(events, org.mockito.Mockito.never()).deleteAll(org.mockito.ArgumentMatchers.<Iterable<AccessEvent>>any());
   }
 
   private static AccessEventRepository.UserAggregate userAggregate(String email, String displayName, long hits, Instant lastSeen) {

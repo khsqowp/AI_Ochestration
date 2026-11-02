@@ -39,9 +39,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Flow;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SNIHostName;
-import javax.net.ssl.SSLParameters;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -383,10 +380,19 @@ public class SourceCollectionService {
    * {@link #rejectPrivateTarget} <em>before</em> ever connecting to it -- used by both the page crawl and
    * the robots.txt fetch, since both were SSRF vectors (robots.txt had no validation at all; the page
    * fetch validated only after the JDK client had already auto-followed redirects). */
-  private HttpResponse<byte[]> sendValidated(URI uri) throws Exception {
+  HttpResponse<byte[]> sendValidated(URI uri) throws Exception {
     URI current = uri;
     for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      HttpResponse<byte[]> response = sendToValidatedAddress(current, resolveAndValidate(current));
+      // Validate each hop before requesting its original hostname URI. This accepts the narrow DNS-rebinding
+      // TOCTOU gap between validation and connect because sources are owner-registered and trusted. IP pinning
+      // with manual SNI broke TLS verification for CDN/load-balancer origins; a JVM-wide resolver override was
+      // rejected because it would affect every hostname lookup, including MySQL and all outbound integrations.
+      resolveAndValidate(current);
+      HttpRequest request = HttpRequest.newBuilder(current).timeout(Duration.ofSeconds(30))
+          .header("User-Agent", USER_AGENT)
+          .header("Accept", "text/html,application/xhtml+xml,application/xml,text/xml,text/plain;q=0.8,*/*;q=0.1")
+          .GET().build();
+      HttpResponse<byte[]> response = client.send(request, info -> new BoundedBodySubscriber());
       int status = response.statusCode();
       if (status < 300 || status >= 400) return response;
       URI location = response.headers().firstValue("Location").map(current::resolve)
@@ -394,34 +400,6 @@ public class SourceCollectionService {
       current = normalize(location);
     }
     throw new IOException("too many redirects (>" + MAX_REDIRECTS + ")");
-  }
-
-  HttpResponse<byte[]> sendToValidatedAddress(URI uri, InetAddress address) throws Exception {
-    String ip = address.getHostAddress();
-    String authority = (ip.contains(":") ? "[" + ip + "]" : ip) + (uri.getPort() < 0 ? "" : ":" + uri.getPort());
-    String path = uri.getRawPath();
-    URI target = URI.create(uri.getScheme() + "://" + authority + (path == null || path.isEmpty() ? "/" : path)
-        + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery()));
-    String host = uri.getHost() + (uri.getPort() < 0 ? "" : ":" + uri.getPort());
-    HttpRequest request = HttpRequest.newBuilder(target).timeout(Duration.ofSeconds(30))
-        .header("Host", host).header("User-Agent", USER_AGENT)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml,text/xml,text/plain;q=0.8,*/*;q=0.1")
-        .GET().build();
-    HttpClient outgoing = client;
-    if ("https".equalsIgnoreCase(uri.getScheme())) {
-      SSLParameters parameters = new SSLParameters();
-      parameters.setServerNames(List.of(new SNIHostName(uri.getHost())));
-      // A non-null empty algorithm prevents HttpClient from replacing it with IP-based HTTPS checking.
-      // The original hostname is checked explicitly against the TLS session below.
-      parameters.setEndpointIdentificationAlgorithm("");
-      outgoing = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15))
-          .followRedirects(HttpClient.Redirect.NEVER).sslParameters(parameters).build();
-    }
-    HttpResponse<byte[]> response = outgoing.send(request, info -> new BoundedBodySubscriber());
-    if ("https".equalsIgnoreCase(uri.getScheme()) && !HttpsURLConnection.getDefaultHostnameVerifier()
-        .verify(uri.getHost(), response.sslSession().orElseThrow(() -> new SecurityException("missing TLS session"))))
-      throw new SecurityException("TLS certificate does not match " + uri.getHost());
-    return response;
   }
 
   private static final class BoundedBodySubscriber implements HttpResponse.BodySubscriber<byte[]> {

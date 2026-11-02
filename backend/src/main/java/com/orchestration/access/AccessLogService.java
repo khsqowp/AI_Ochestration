@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AccessLogService {
   private static final Logger log = LoggerFactory.getLogger(AccessLogService.class);
-  private static final int RETENTION_DAYS = 45;
+  private static final long MAX_TABLE_SIZE_BYTES = 1_073_741_824L;
 
   private final AccessEventRepository events;
   private final IpLocationRepository locations;
@@ -103,10 +103,17 @@ public class AccessLogService {
   }
 
   @Scheduled(cron = "0 30 4 * * *")
-  @Transactional
   public void purgeOld() {
-    long removed = events.deleteByTsBefore(Instant.now().minus(RETENTION_DAYS, ChronoUnit.DAYS));
-    if (removed > 0) log.info("access log purge: {} rows", removed);
+    long removed = 0;
+    Long size = events.tableSizeBytes();
+    while (size != null && size > MAX_TABLE_SIZE_BYTES) {
+      List<AccessEvent> batch = events.findTop5000ByOrderByTsAsc();
+      if (batch.isEmpty()) break;
+      events.deleteAll(batch);
+      removed += batch.size();
+      size = events.tableSizeBytes();
+    }
+    if (removed > 0) log.info("access log size-cap purge: {} rows", removed);
   }
 
   public record Point(String ip, double lat, double lon, String accuracy, String city, String region,
