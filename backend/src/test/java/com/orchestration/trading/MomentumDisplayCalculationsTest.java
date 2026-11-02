@@ -11,6 +11,13 @@ class MomentumDisplayCalculationsTest {
     assertEquals(0, MomentumDisplayCalculations.entryCapital(List.of(), 100));
     assertEquals(100, MomentumDisplayCalculations.entryCapital(null, 100));
   }
+  @Test void entryCapitalBaselinePlusLaterTransfersIgnoresOlderRows() {
+    long base = java.time.Instant.parse("2026-11-02T00:00:00Z").toEpochMilli();
+    var rows = List.of(new MomentumDisplayCalculations.Income("TRANSFER",74.01,base-1000), new MomentumDisplayCalculations.Income("TRANSFER",10,base+1000), new MomentumDisplayCalculations.Income("TRANSFER",-3,base+2000), new MomentumDisplayCalculations.Income("REALIZED_PNL",50,base+3000));
+    assertEquals(151.01, MomentumDisplayCalculations.entryCapitalFromBaseline(144.01, base, rows), 1e-8);
+    assertEquals(144.01, MomentumDisplayCalculations.entryCapitalFromBaseline(144.01, base, List.of()), 1e-8);
+    assertEquals(144.01, MomentumDisplayCalculations.entryCapitalFromBaseline(144.01, base, null), 1e-8);
+  }
   @Test void sessionPnlMatchesUnrealizedAndUsesPreUnrealizedEquityAsBasis() {
     assertEquals(4.47, MomentumDisplayCalculations.sessionPnl(4.47), 1e-8);
     assertEquals(4.47 / (200 - 4.47) * 100, MomentumDisplayCalculations.sessionReturnPct(4.47, 200), 1e-8);

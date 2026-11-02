@@ -22,10 +22,10 @@ class BinanceDisplayService {
     try { JsonNode n = request("/fapi/v2/account", Map.of()); JsonNode v = mapper.createObjectNode().put("walletBalance", n.path("totalWalletBalance").asDouble()).put("marginBalance", n.path("totalMarginBalance").asDouble()).put("initialMargin", n.path("totalInitialMargin").asDouble()); accountCache = new Cached(Instant.now(), v); return v; }
     catch (Exception e) { return accountCache == null ? mapper.createObjectNode() : accountCache.value; }
   }
-  synchronized JsonNode realized(long inceptionMillis) {
+  synchronized JsonNode realized() {
     if (incomeCache != null && incomeCache.at.plusSeconds(3600).isAfter(Instant.now())) return incomeCache.value;
     try {
-      long now = System.currentTimeMillis(), start = inceptionMillis > 0 ? inceptionMillis : now - 90L * 86400000;
+      long now = System.currentTimeMillis(), start = now - 90L * 86400000; // 고정 룩백(바이낸스 income은 최근 3개월만 지원). inception과 무관
       List<MomentumDisplayCalculations.Income> all = new ArrayList<>();
       for (long a = start; a < now; a += 7L * 86400000) {
         long b = Math.min(now, a + 7L * 86400000 - 1);
@@ -42,7 +42,6 @@ class BinanceDisplayService {
       double d7 = sumSince(days, now - 7L*86400000), d30 = sumSince(days, now - 30L*86400000);
       var value = mapper.createObjectNode().put("realized7d", d7).put("realized30d", d30).put("realized3m", days.values().stream().mapToDouble(Double::doubleValue).sum());
       value.set("daily", mapper.valueToTree(days));
-      value.put("entryCapitalUsdt", MomentumDisplayCalculations.entryCapital(all, 0));
       value.put("querySucceeded", true);
       value.set("transfers", mapper.valueToTree(all.stream().filter(i -> "TRANSFER".equals(i.type())).map(i -> Map.of("time", i.time(), "income", i.income())).toList()));
       JsonNode v = value;

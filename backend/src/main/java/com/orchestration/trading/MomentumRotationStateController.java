@@ -57,15 +57,13 @@ public class MomentumRotationStateController {
     result.set("marginBalance", account.has("marginBalance") ? account.get("marginBalance") : null);
     double utilization = MomentumDisplayCalculations.marginUtilization(account.has("initialMargin") ? account.get("initialMargin").asDouble() : null, account.has("marginBalance") ? account.get("marginBalance").asDouble() : null);
     if (Double.isFinite(utilization)) result.put("marginUtilization", utilization); else result.putNull("marginUtilization");
-    long inceptionMillis = parseMillis(state.inceptionTs());
-    ObjectNode income = (ObjectNode) binance.realized(inceptionMillis);
+    ObjectNode income = (ObjectNode) binance.realized();
     result.set("realizedIncome", income);
-    double entryCapital = income.path("querySucceeded").asBoolean(false)
-        ? income.path("entryCapitalUsdt").asDouble(0) : state.inceptionEquityUsdt();
-    income.put("entryCapitalUsdt", entryCapital);
-    result.put("entryCapitalUsdt", entryCapital);
     List<MomentumDisplayCalculations.Income> transfers = new ArrayList<>();
     if (income.path("transfers").isArray()) for (var row : income.path("transfers")) transfers.add(new MomentumDisplayCalculations.Income("TRANSFER", row.path("income").asDouble(), row.path("time").asLong()));
+    double entryCapital = MomentumDisplayCalculations.entryCapitalFromBaseline(ENTRY_CAPITAL_BASELINE_USDT, ENTRY_CAPITAL_BASELINE_MS, transfers);
+    income.put("entryCapitalUsdt", entryCapital);
+    result.put("entryCapitalUsdt", entryCapital);
     List<MomentumRotationState.EquityPoint> history = new ArrayList<>(state.equityHistory() == null ? List.of() : state.equityHistory());
     if (state.equityHistoryDaily() != null) for (var point : state.equityHistoryDaily()) {
       double corrected = MomentumDisplayCalculations.correctedDailyPnl(point.ts(), point.value(), state.inceptionEquityUsdt(), correctionInception);
@@ -91,6 +89,9 @@ public class MomentumRotationStateController {
     return result;
   }
 
+  /** 2026-11-02T00:00Z 기준 순입금 합계(8-23 +35, 9-2 +35, 9-17 +74.01, 출금 없음). 이후 TRANSFER만 가산. */
+  static final double ENTRY_CAPITAL_BASELINE_USDT = 144.01;
+  static final long ENTRY_CAPITAL_BASELINE_MS = java.time.Instant.parse("2026-11-02T00:00:00Z").toEpochMilli();
   private long parseMillis(String value) {
     if (value == null || value.isBlank()) return 0;
     try { return Instant.parse(value).toEpochMilli(); } catch (Exception ignored) {

@@ -16,6 +16,11 @@ final class MomentumDisplayCalculations {
     if (rows == null) return fallback;
     return rows.stream().filter(row -> "TRANSFER".equals(row.type())).mapToDouble(Income::income).sum();
   }
+  /** 진입금액 = 기준값(기준 시각까지의 순입금 합계) + 기준 시각 이후 TRANSFER 순합. 조회 룩백과 무관. */
+  static double entryCapitalFromBaseline(double baseline, long baselineMillis, List<Income> rows) {
+    if (rows == null) return baseline;
+    return baseline + rows.stream().filter(r -> "TRANSFER".equals(r.type()) && r.time() > baselineMillis).mapToDouble(Income::income).sum();
+  }
   static double positionRoePct(double pnl, double notional, double leverage) {
     double lev = leverage > 0 ? leverage : 4;
     double margin = Math.abs(notional) / lev;
