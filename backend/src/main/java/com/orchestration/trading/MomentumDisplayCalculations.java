@@ -10,8 +10,34 @@ import java.util.*;
 /** Display-only calculations; never writes to the trading bot state. */
 final class MomentumDisplayCalculations {
   private MomentumDisplayCalculations() {}
-  static double sessionPnl(double equity, double start) { return equity - start; }
-  static double sessionReturnPct(double pnl, double start) { return start == 0 ? 0 : pnl / start * 100; }
+  static double sessionPnl(double unrealized) { return unrealized; }
+  static double sessionReturnPct(double unrealized, double equity) { double basis = equity - unrealized; return basis <= 0 ? 0 : unrealized / basis * 100; }
+  static double entryCapital(List<Income> rows, double fallback) {
+    if (rows == null) return fallback;
+    return rows.stream().filter(row -> "TRANSFER".equals(row.type())).mapToDouble(Income::income).sum();
+  }
+  static double positionRoePct(double pnl, double notional, double leverage) {
+    double lev = leverage > 0 ? leverage : 4;
+    double margin = Math.abs(notional) / lev;
+    return margin == 0 ? 0 : pnl / margin * 100;
+  }
+  static double positionPriceReturnPct(double pnl, double notional) { return notional == 0 ? 0 : pnl / Math.abs(notional) * 100; }
+  static PeriodResult rollingPeriod(List<MomentumRotationState.EquityPoint> history, double currentEquity,
+      double inceptionEquity, long now, long durationMillis, List<Income> rows) {
+    if (history == null || history.isEmpty()) return new PeriodResult(0, 0, null, true);
+    long target = now - durationMillis;
+    MomentumRotationState.EquityPoint base = history.stream().filter(p -> {
+      Instant ts = parse(p.ts()); return ts != null && ts.toEpochMilli() <= target;
+    }).max(Comparator.comparing(p -> parse(p.ts()))).orElseGet(() -> history.stream()
+      .min(Comparator.comparing(p -> Optional.ofNullable(parse(p.ts())).orElse(Instant.MAX))).orElse(null));
+    if (base == null) return new PeriodResult(0, 0, null, true);
+    Instant baseTime = parse(base.ts());
+    double transfer = rows == null ? 0 : rows.stream().filter(r -> "TRANSFER".equals(r.type()) && r.time() > baseTime.toEpochMilli() && r.time() <= now).mapToDouble(Income::income).sum();
+    double baseEquity = base.equityUsdt() > 0 ? base.equityUsdt() : inceptionEquity + base.totalPnlUsdt();
+    double adjustedBasis = baseEquity + transfer;
+    double pnl = currentEquity - baseEquity - transfer;
+    return new PeriodResult(pnl, adjustedBasis <= 0 ? 0 : pnl / adjustedBasis * 100, base.ts(), baseTime.toEpochMilli() > target);
+  }
   static double correctedPnl(String ts, double pnl, double equity, double inception) {
     return correctedPnl(ts, pnl, equity, inception, 144.45);
   }
@@ -45,4 +71,5 @@ final class MomentumDisplayCalculations {
   }
   private static Instant parse(String ts) { try { return Instant.parse(ts); } catch (DateTimeParseException e) { try { return OffsetDateTime.parse(ts).toInstant(); } catch (Exception ignored) { try { return LocalDate.parse(ts).atStartOfDay(ZoneOffset.UTC).toInstant(); } catch (Exception invalid) { return null; } } } }
   record Income(String type, double income, long time) {}
+  record PeriodResult(double pnl, double returnPct, String basisTs, boolean shortHistory) {}
 }

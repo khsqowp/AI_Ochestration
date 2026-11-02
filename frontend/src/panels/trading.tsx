@@ -289,10 +289,10 @@ function PositionTable({ title, head, rows, empty }: { title: string; head: stri
   </div>
 }
 
-type PositionBookEntry = { side: 'long' | 'short'; entryPrice: number; markPrice?: number; notionalUsdt: number; unrealizedPnlUsdt: number }
+type PositionBookEntry = { side: 'long' | 'short'; entryPrice: number; markPrice?: number; notionalUsdt: number; unrealizedPnlUsdt: number; leverage?: number }
 
 // 거래소 포지션 탭 스타일 — 롱/숏 한 표에 방향 배지·ROE·미실현손익, ROE 내림차순 정렬.
-function PositionBook({ positions }: { positions: [string, PositionBookEntry][] }) {
+function PositionBook({ positions, fallbackLeverage = 4 }: { positions: [string, PositionBookEntry][]; fallbackLeverage?: number }) {
   if (positions.length === 0) return <div className="posbook"><p className="empty-state">보유 중인 포지션이 없습니다.</p></div>
   const price = (v: number) => v >= 1000 ? v.toFixed(1) : v >= 1 ? v.toFixed(4) : v.toPrecision(3)
   const rows = positions
@@ -303,7 +303,10 @@ function PositionBook({ positions }: { positions: [string, PositionBookEntry][] 
       entry: p.entryPrice,
       mark: p.markPrice,
       pnl: p.unrealizedPnlUsdt,
-      roe: p.notionalUsdt ? (p.unrealizedPnlUsdt / Math.abs(p.notionalUsdt)) * 100 : 0,
+      leverage: p.leverage && p.leverage > 0 ? p.leverage : fallbackLeverage,
+      leverageSource: p.leverage && p.leverage > 0 ? '포지션 leverage 값' : 'broker/state 설정값, 없으면 기본 4x',
+      roe: p.notionalUsdt ? MomentumDisplayRoe(p.unrealizedPnlUsdt, p.notionalUsdt, p.leverage || fallbackLeverage) : 0,
+      priceReturn: p.notionalUsdt ? (p.unrealizedPnlUsdt / Math.abs(p.notionalUsdt)) * 100 : 0,
     }))
     .sort((a, b) => b.roe - a.roe)
   const longN = rows.filter(r => r.side === 'long').length
@@ -323,23 +326,33 @@ function PositionBook({ positions }: { positions: [string, PositionBookEntry][] 
       </div>
     </div>
     <div className="posbook-grid">
-      <div className="posbook-row posbook-hd">
+      <div className="posbook-row posbook-hd" style={{ gridTemplateColumns: '1.3fr .8fr 1fr .9fr .9fr 1.1fr 1.1fr 1.1fr' }}>
         <span>종목</span><span>방향</span><span className="ta-r">명목가치</span>
-        <span className="ta-r">진입가</span><span className="ta-r">현재가</span><span className="ta-r">ROE</span><span className="ta-r">미실현 PnL</span>
+        <span className="ta-r">진입가</span><span className="ta-r">현재가</span><span className="ta-r" title="uPnL ÷ (명목가치 ÷ 레버리지). ROE 산식은 바이낸스 앱과 동일하며, 레버리지 출처는 포지션 값 → broker/state 설정값 → 기본 4x 순입니다.">ROE (증거금 대비)</span><span className="ta-r" title="uPnL ÷ 명목가치">가격 변동률 (명목 대비)</span><span className="ta-r">미실현 PnL</span>
       </div>
       {rows.map(r => (
-        <div key={r.symbol} className={`posbook-row side-${r.side}`}>
+        <div key={r.symbol} className={`posbook-row side-${r.side}`} style={{ gridTemplateColumns: '1.3fr .8fr 1fr .9fr .9fr 1.1fr 1.1fr 1.1fr' }}>
           <span className="posbook-sym">{r.symbol}<i>/USDT</i></span>
           <span><em className={`posbook-dir ${r.side}`}>{r.side === 'long' ? 'LONG' : 'SHORT'}</em></span>
           <span className="ta-r mono">${r.notional.toFixed(2)}</span>
           <span className="ta-r mono">{price(r.entry)}</span>
           <span className="ta-r mono">{r.mark ? price(r.mark) : '-'}</span>
-          <span className={`ta-r mono ${r.roe >= 0 ? 'up' : 'down'}`}>{r.roe >= 0 ? '+' : ''}{r.roe.toFixed(2)}%</span>
+          <span className={`ta-r mono ${r.roe >= 0 ? 'up' : 'down'}`} title={`${r.leverage}x · ${r.leverageSource}`}>{r.roe >= 0 ? '+' : ''}{r.roe.toFixed(2)}%</span>
+          <span className={`ta-r mono ${r.priceReturn >= 0 ? 'up' : 'down'}`}>{r.priceReturn >= 0 ? '+' : ''}{r.priceReturn.toFixed(2)}%</span>
           <span className={`ta-r mono ${r.pnl >= 0 ? 'up' : 'down'}`}>{r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</span>
         </div>
       ))}
+      <div className="posbook-row posbook-hd" style={{ gridTemplateColumns: '1.3fr .8fr 1fr .9fr .9fr 1.1fr 1.1fr 1.1fr' }}>
+        <span style={{ gridColumn: '1 / 8' }}>포지션 합계 (이번 세션 손익)</span>
+        <span className={`ta-r mono ${totalPnl >= 0 ? 'up' : 'down'}`}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</span>
+      </div>
     </div>
   </div>
+}
+
+function MomentumDisplayRoe(pnl: number, notional: number, leverage?: number) {
+  const margin = Math.abs(notional) / (leverage && leverage > 0 ? leverage : 4)
+  return margin > 0 ? pnl / margin * 100 : 0
 }
 
 function Wrap({ embedded, onClose, eyebrow, title, children }: { embedded?: boolean; onClose?: () => void; eyebrow: string; title: string; children: React.ReactNode }) {
@@ -538,27 +551,28 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
   const longs = positions.filter(([, p]) => p.side === 'long')
   const shorts = positions.filter(([, p]) => p.side === 'short')
   const equity = data?.broker?.equityUsdt ?? data?.equityUsdt ?? 0
-  const unrealized = data?.broker?.unrealizedPnlUsdt ?? data?.unrealizedPnlUsdt ?? 0
-  const inceptionEquity = data?.inceptionEquityUsdt || 0
-  const totalPnl = inceptionEquity > 0 ? equity - inceptionEquity : ((data?.cumulativeRealizedPnlUsdt ?? 0) + (data?.unrealizedPnlUsdt ?? 0) - (data?.cumulativeFeeUsdt ?? 0))
-  const startingCapital = inceptionEquity > 0 ? inceptionEquity : ((data?.equityUsdt ?? 0) - totalPnl)
+  const unrealized = positions.reduce((sum, [, p]) => sum + p.unrealizedPnlUsdt, 0)
+  const displayEquity = data?.marginBalance ?? equity
+  const startingCapital = data?.entryCapitalUsdt ?? data?.inceptionEquityUsdt ?? 0
+  const totalPnl = displayEquity - startingCapital
   const overallReturnPct = startingCapital > 0 ? (totalPnl / startingCapital) * 100 : 0
   const drawdown = data?.broker?.drawdown ?? data?.drawdown ?? 0
   const hwm = data?.broker?.hwmUsdt ?? data?.hwmUsdt ?? 0
   const grossNotional = data?.broker?.grossNotionalUsdt ?? 0
   const grossMultiple = equity > 0 && grossNotional > 0 ? `${(grossNotional / equity).toFixed(1)}x` : '-'
-  // 세션 = 마지막 리밸런스(정기 또는 수동 즉시매도 후 재진입) 이후 손익 — inception 이후 누적인
-  // overallReturnPct 와 달리 리밸런스마다 0으로 리셋된다. "일간" 수익률(periodReturnPct, 'day' 탭)은
-  // 달력상 24시간 창이라 세션과 무관하게 계속 이어진다.
-  const sessionPnl = data?.broker?.sessionPnlUsdt ?? 0
-  const sessionReturnPct = data?.broker?.sessionReturnPct ?? 0
-  const sessionStartTs = data?.broker?.sessionStartTs ?? null
+  // 세션 손익은 현재 포지션 uPnL 합계이며 ROE 분모는 equity에서 이 미실현 금액을 뺀 자본이다.
+  const sessionPnl = unrealized
+  const sessionReturnPct = displayEquity > unrealized ? unrealized / (displayEquity - unrealized) * 100 : 0
   const pnlSeries: ChartPoint[] = mergeHistorySeries(
     (data?.equityHistory ?? []).map(point => ({ ts: point.ts, value: point.totalPnlUsdt })),
     data?.equityHistoryDaily ?? [],
   )
-  const { pnl: periodPnl, shortHistory: periodShort } = periodPnlFromSeries(pnlSeries, totalPnl, period)
-  const periodReturnPct = startingCapital > 0 ? (periodPnl / startingCapital) * 100 : 0
+  const rollingKey = period === 'day' ? 'day' : period === 'week' ? 'week' : period === 'month' ? 'month' : null
+  const rolling = rollingKey ? data?.rollingPeriods?.[rollingKey] : null
+  const legacyPeriod = periodPnlFromSeries(pnlSeries, totalPnl, period)
+  const periodPnl = period === 'all' ? totalPnl : (rolling?.pnl ?? legacyPeriod.pnl)
+  const periodReturnPct = period === 'all' ? overallReturnPct : (rolling?.returnPct ?? 0)
+  const periodShort = period === 'all' ? false : (rolling?.shortHistory ?? legacyPeriod.shortHistory)
   const chartPoints: ChartPoint[] = filterChartPoints(pnlSeries, period)
   const symbolSeries: Record<string, ChartPoint[]> = Object.fromEntries(Object.entries(data?.positionHistory ?? {}).map(([symbol, points]) => [symbol, (points ?? []).map(point => ({ ts: point.ts, value: point.unrealizedPnlUsdt }))]))
   const statusTone: BotTone = data?.halted ? 'deprecated' : 'live'
@@ -569,8 +583,8 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
       : '코인 선물 상대모멘텀 롱숏 로테이션 백테스트(페이퍼) 현황입니다. 실주문 없음 — 가상자본 시뮬레이션.'}</p>
     <div className="trading-status-card">
       <BotStatusPill tone={statusTone} label={statusLabel}/>
-      {data && sessionStartTs && <p className="trading-headline-stat">이번 세션 수익률({fmt(sessionStartTs)}부터) <b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}% ({sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)})</b> — 자동/수동 리밸런스가 일어날 때마다 0으로 다시 시작합니다.</p>}
-      <p>지갑잔고(실현, 바이낸스 앱 Asset Value) <b>{data?.walletBalance == null ? '-' : `$${data.walletBalance.toFixed(2)}`}</b> · 마진잔고(equity, 미실현 포함) <b>{data?.marginBalance == null ? '-' : `$${data.marginBalance.toFixed(2)}`}</b> · 미실현손익 {data ? `$${unrealized.toFixed(2)}` : '-'}</p>
+      {data && <p className="trading-headline-stat">이번 세션 수익률 (equity − 미실현 PnL 기준금액 대비) <b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}% ({sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)})</b></p>}
+      <p>지갑잔고 <b>{data?.marginBalance == null ? '-' : `$${data.marginBalance.toFixed(2)}`}</b> <small>(미실현 포함)</small> · 바이낸스 앱 Asset Value(미실현 제외) <b>{data?.walletBalance == null ? '-' : `$${data.walletBalance.toFixed(2)}`}</b> · 미실현손익 {data ? `$${unrealized.toFixed(2)}` : '-'}</p>
       <p>전체 누적손익 {data ? <b className={totalPnl >= 0 ? 'positive' : 'negative'}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b> : '-'} · 실현 누적손익(수수료·펀딩 포함) <span title="실현 누적손익 = 바이낸스 앱 PNL 정의(실현+수수료+펀딩, 미실현 제외)">ⓘ</span> 3개월 {data?.realizedIncome?.realized3m == null ? '-' : `$${data.realizedIncome.realized3m.toFixed(2)}`} / 30일 {data?.realizedIncome?.realized30d == null ? '-' : `$${data.realizedIncome.realized30d.toFixed(2)}`} / 7일 {data?.realizedIncome?.realized7d == null ? '-' : `$${data.realizedIncome.realized7d.toFixed(2)}`}</p>
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (킬 35%, 디레버 없음)</p>}
@@ -583,16 +597,16 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
       <div className="trading-metrics">
         {/* 2열 그리드라 인접 두 칸이 한 행 — 서로 짝이 되는 지표끼리 붙여야 시각적으로 헷갈리지 않는다
             (전엔 세션수익률/세션손익이 다른 행에 떨어져 표시됐음). */}
-        <div><b>${startingCapital.toFixed(2)}</b><span>진입금액(시작 자본)</span></div>
-        <div><b>{data?.walletBalance == null ? '-' : `$${data.walletBalance.toFixed(2)}`}</b><span>지갑잔고(실현)</span></div>
-        <div><b>{data?.marginBalance == null ? '-' : `$${data.marginBalance.toFixed(2)}`}</b><span>마진잔고(equity, 미실현 포함)</span></div>
-        <div><b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}%</b><span>이번 세션 수익률(마지막 리밸런스 이후)</span></div>
+        <div><b>${startingCapital.toFixed(2)}</b><span title="바이낸스 income TRANSFER 순합계. 조회 실패 시 마지막 성공값, 최초 실패 시 봇 inception 자본">진입금액(순입금 합계) ⓘ</span></div>
+        <div><b>{data?.marginBalance == null ? '-' : `$${data.marginBalance.toFixed(2)}`}</b><span>지갑잔고 <small>(미실현 포함)</small></span></div>
+        <div><b><small>{data?.walletBalance == null ? '-' : `$${data.walletBalance.toFixed(2)}`}</small></b><span><small>바이낸스 앱 Asset Value(미실현 제외)</small></span></div>
+        <div><b className={sessionReturnPct >= 0 ? 'positive' : 'negative'}>{sessionReturnPct >= 0 ? '+' : ''}{sessionReturnPct.toFixed(2)}%</b><span title="분모 = totalMarginBalance(equity) − 포지션 미실현 PnL">이번 세션 수익률 (equity − 미실현 기준금액 대비)</span></div>
         <div><b className={sessionPnl >= 0 ? 'positive' : 'negative'}>{sessionPnl >= 0 ? '+' : ''}${sessionPnl.toFixed(2)}</b><span>이번 세션 손익</span></div>
-        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span title="inception 대비, 미실현 포함. 바이낸스 앱 Cum%는 평균자본 등 다른 정의입니다.">전체 수익률 ⓘ (inception 대비, 미실현 포함)</span></div>
+        <div><b className={overallReturnPct >= 0 ? 'positive' : 'negative'}>{overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%</b><span title="(현재 equity − 바이낸스 income TRANSFER 순합계) ÷ 순입금 합계">전체 수익률 (순입금 대비)</span></div>
         <div><b>{data?.marginUtilization == null ? '-' : `${(data.marginUtilization * 100).toFixed(1)}%`}{data?.marginUtilization != null && data.marginUtilization >= .95 && <small className="negative"> 경고</small>}</b><span>마진 사용률(초기증거금/마진잔고)</span></div>
         <div><b>${grossNotional.toFixed(2)}</b><span>명목 노출(롱+숏)</span></div>
-        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span title="기간 수익률/손익은 equity(마진잔고) 변화 기준이며 미실현 포함. 바이낸스 앱 PNL(실현+수수료+펀딩)과 정의가 다릅니다.">{TRADING_PERIOD_LABEL[period]} 수익률 (equity 변화 기준, 미실현 포함){periodShort ? ' *' : ''}</span></div>
-        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span title="기간 수익률/손익은 equity(마진잔고) 변화 기준이며 미실현 포함. 바이낸스 앱 PNL(실현+수수료+펀딩)과 정의가 다릅니다.">{TRADING_PERIOD_LABEL[period]} 손익 (equity 변화 기준, 미실현 포함){periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodReturnPct >= 0 ? 'positive' : 'negative'}>{periodReturnPct >= 0 ? '+' : ''}{periodReturnPct.toFixed(2)}%</b><span title={`equity 변화에서 기간 내 Binance TRANSFER 순입출금을 제거한 수익률. 기준 시점: ${rolling?.basisTs ? fmt(rolling.basisTs) : '기록 없음'}`}>{period === 'all' ? '전체' : `롤링 ${period === 'day' ? '1일' : period === 'week' ? '7일' : '30일'} 대비`} 수익률{periodShort ? ' *' : ''}</span></div>
+        <div><b className={periodPnl >= 0 ? 'positive' : 'negative'}>{periodPnl >= 0 ? '+' : ''}${periodPnl.toFixed(2)}</b><span title={`equity 변화에서 기간 내 Binance TRANSFER 순입출금을 제거. 기준 시점: ${rolling?.basisTs ? fmt(rolling.basisTs) : '기록 없음'}`}>{period === 'all' ? '전체' : `롤링 ${period === 'day' ? '1일' : period === 'week' ? '7일' : '30일'} 대비`} 손익{periodShort ? ' *' : ''}</span></div>
         <div><b className={drawdown > 0.15 ? 'negative' : ''}>{(drawdown * 100).toFixed(1)}%</b><span>현재 낙폭</span></div>
         <div><RebalanceCountdown target={data.nextRebalanceTs}/><span>다음 리밸런스까지{data.rebalanceEveryDays ? ` (${data.rebalanceEveryDays}일 주기)` : ''}</span></div>
         <div><b>{longs.length}</b><span>롱 포지션</span></div>
@@ -600,7 +614,7 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
       </div>
       {periodShort && <p className="usage-note">* 보유 equity 히스토리가 선택 기간보다 짧아, 기록이 시작된 시점부터의 값으로 표시됩니다(전체와 동일).</p>}
       <EquityLineChart points={chartPoints} formatValue={value => `$${value.toFixed(2)}`} resetKey={period}/>
-      <PositionBook positions={positions}/>
+      <PositionBook positions={positions} fallbackLeverage={data?.broker?.leverage || 4}/>
       <b className="chart-section-title">종목별 미실현손익 추이</b>
       <PositionHistorySection symbolSeries={symbolSeries} formatValue={value => `$${value.toFixed(2)}`}/>
       <div className="usage-table">

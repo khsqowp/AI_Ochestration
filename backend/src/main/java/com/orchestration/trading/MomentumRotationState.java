@@ -42,7 +42,8 @@ public record MomentumRotationState(
       @JsonAlias("entry_price") double entryPrice,
       @JsonAlias("mark_price") double markPrice,
       @JsonAlias("notional_usdt") double notionalUsdt,
-      @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt) {}
+      @JsonAlias("unrealized_pnl_usdt") double unrealizedPnlUsdt,
+      double leverage) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record Broker(

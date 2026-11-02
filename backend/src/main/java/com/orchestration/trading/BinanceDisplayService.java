@@ -20,12 +20,12 @@ class BinanceDisplayService {
   synchronized JsonNode account() {
     if (accountCache != null && accountCache.at.plusSeconds(20).isAfter(Instant.now())) return accountCache.value;
     try { JsonNode n = request("/fapi/v2/account", Map.of()); JsonNode v = mapper.createObjectNode().put("walletBalance", n.path("totalWalletBalance").asDouble()).put("marginBalance", n.path("totalMarginBalance").asDouble()).put("initialMargin", n.path("totalInitialMargin").asDouble()); accountCache = new Cached(Instant.now(), v); return v; }
-    catch (Exception e) { return mapper.createObjectNode(); }
+    catch (Exception e) { return accountCache == null ? mapper.createObjectNode() : accountCache.value; }
   }
-  synchronized JsonNode realized() {
-    if (incomeCache != null && incomeCache.at.plusSeconds(600).isAfter(Instant.now())) return incomeCache.value;
+  synchronized JsonNode realized(long inceptionMillis) {
+    if (incomeCache != null && incomeCache.at.plusSeconds(3600).isAfter(Instant.now())) return incomeCache.value;
     try {
-      long now = System.currentTimeMillis(), start = now - 90L * 86400000;
+      long now = System.currentTimeMillis(), start = inceptionMillis > 0 ? inceptionMillis : now - 90L * 86400000;
       List<MomentumDisplayCalculations.Income> all = new ArrayList<>();
       for (long a = start; a < now; a += 7L * 86400000) {
         long b = Math.min(now, a + 7L * 86400000 - 1);
@@ -42,9 +42,12 @@ class BinanceDisplayService {
       double d7 = sumSince(days, now - 7L*86400000), d30 = sumSince(days, now - 30L*86400000);
       var value = mapper.createObjectNode().put("realized7d", d7).put("realized30d", d30).put("realized3m", days.values().stream().mapToDouble(Double::doubleValue).sum());
       value.set("daily", mapper.valueToTree(days));
+      value.put("entryCapitalUsdt", MomentumDisplayCalculations.entryCapital(all, 0));
+      value.put("querySucceeded", true);
+      value.set("transfers", mapper.valueToTree(all.stream().filter(i -> "TRANSFER".equals(i.type())).map(i -> Map.of("time", i.time(), "income", i.income())).toList()));
       JsonNode v = value;
       incomeCache = new Cached(Instant.now(), v); return v;
-    } catch (Exception e) { return mapper.createObjectNode(); }
+    } catch (Exception e) { return incomeCache == null ? mapper.createObjectNode() : incomeCache.value; }
   }
   private double sumSince(Map<String,Double> days, long since) { String day = Instant.ofEpochMilli(since).toString().substring(0,10); return days.entrySet().stream().filter(e -> e.getKey().compareTo(day)>=0).mapToDouble(Map.Entry::getValue).sum(); }
   private JsonNode request(String path, Map<String, ?> params) throws Exception {

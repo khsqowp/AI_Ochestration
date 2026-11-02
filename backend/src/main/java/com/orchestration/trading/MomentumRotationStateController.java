@@ -5,6 +5,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,18 +44,42 @@ public class MomentumRotationStateController {
       state = objectMapper.readValue(Files.readString(statePath), MomentumRotationState.class);
     }
     ObjectNode result = objectMapper.valueToTree(state);
+    var account = binance.account();
+    double equity = account.has("marginBalance") ? account.path("marginBalance").asDouble()
+        : state.broker() == null ? state.equityUsdt() : state.broker().equityUsdt();
+    double unrealized = state.broker() == null ? state.unrealizedPnlUsdt() : state.broker().unrealizedPnlUsdt();
     if (state.broker() != null) {
       ObjectNode broker = (ObjectNode) result.path("broker");
-      double equity = state.broker().equityUsdt(), start = state.broker().sessionStartEquityUsdt();
-      double pnl = MomentumDisplayCalculations.sessionPnl(equity, start);
-      broker.put("sessionPnlUsdt", pnl).put("sessionReturnPct", MomentumDisplayCalculations.sessionReturnPct(pnl, start));
+      double pnl = MomentumDisplayCalculations.sessionPnl(unrealized);
+      broker.put("sessionPnlUsdt", pnl).put("sessionReturnPct", MomentumDisplayCalculations.sessionReturnPct(pnl, equity));
     }
-    var account = binance.account();
     result.set("walletBalance", account.has("walletBalance") ? account.get("walletBalance") : null);
     result.set("marginBalance", account.has("marginBalance") ? account.get("marginBalance") : null);
     double utilization = MomentumDisplayCalculations.marginUtilization(account.has("initialMargin") ? account.get("initialMargin").asDouble() : null, account.has("marginBalance") ? account.get("marginBalance").asDouble() : null);
     if (Double.isFinite(utilization)) result.put("marginUtilization", utilization); else result.putNull("marginUtilization");
-    result.set("realizedIncome", binance.realized());
+    long inceptionMillis = parseMillis(state.inceptionTs());
+    ObjectNode income = (ObjectNode) binance.realized(inceptionMillis);
+    result.set("realizedIncome", income);
+    double entryCapital = income.path("querySucceeded").asBoolean(false)
+        ? income.path("entryCapitalUsdt").asDouble(0) : state.inceptionEquityUsdt();
+    income.put("entryCapitalUsdt", entryCapital);
+    result.put("entryCapitalUsdt", entryCapital);
+    List<MomentumDisplayCalculations.Income> transfers = new ArrayList<>();
+    if (income.path("transfers").isArray()) for (var row : income.path("transfers")) transfers.add(new MomentumDisplayCalculations.Income("TRANSFER", row.path("income").asDouble(), row.path("time").asLong()));
+    List<MomentumRotationState.EquityPoint> history = new ArrayList<>(state.equityHistory() == null ? List.of() : state.equityHistory());
+    if (state.equityHistoryDaily() != null) for (var point : state.equityHistoryDaily()) {
+      double corrected = MomentumDisplayCalculations.correctedDailyPnl(point.ts(), point.value(), state.inceptionEquityUsdt(), correctionInception);
+      history.add(new MomentumRotationState.EquityPoint(point.ts(), corrected, state.inceptionEquityUsdt() + corrected, 0));
+    }
+    ObjectNode periods = objectMapper.createObjectNode();
+    long now = System.currentTimeMillis();
+    for (Map.Entry<String, Long> item : List.of(Map.entry("day", 86400000L), Map.entry("week", 7L * 86400000), Map.entry("month", 30L * 86400000))) {
+      String key = item.getKey(); long duration = item.getValue();
+      var p = MomentumDisplayCalculations.rollingPeriod(history, equity, state.inceptionEquityUsdt(), now, duration, transfers);
+      ObjectNode point = periods.putObject(key).put("pnl", p.pnl()).put("returnPct", p.returnPct()).put("shortHistory", p.shortHistory());
+      if (p.basisTs() == null) point.putNull("basisTs"); else point.put("basisTs", p.basisTs());
+    }
+    result.set("rollingPeriods", periods);
     if (state.equityHistory() != null && result.path("equityHistory").isArray()) {
       var points = (com.fasterxml.jackson.databind.node.ArrayNode) result.path("equityHistory");
       for (int i=0; i<state.equityHistory().size(); i++) { var p=state.equityHistory().get(i); ((ObjectNode) points.get(i)).put("totalPnlUsdt", MomentumDisplayCalculations.correctedPnl(p.ts(), p.totalPnlUsdt(), p.equityUsdt(), state.inceptionEquityUsdt(), correctionInception)); }
@@ -60,5 +89,12 @@ public class MomentumRotationStateController {
       for (int i=0; i<state.equityHistoryDaily().size(); i++) { var p=state.equityHistoryDaily().get(i); ((ObjectNode) points.get(i)).put("value", MomentumDisplayCalculations.correctedDailyPnl(p.ts(), p.value(), state.inceptionEquityUsdt(), correctionInception)); }
     }
     return result;
+  }
+
+  private long parseMillis(String value) {
+    if (value == null || value.isBlank()) return 0;
+    try { return Instant.parse(value).toEpochMilli(); } catch (Exception ignored) {
+      try { return OffsetDateTime.parse(value).toInstant().toEpochMilli(); } catch (Exception invalid) { return 0; }
+    }
   }
 }
