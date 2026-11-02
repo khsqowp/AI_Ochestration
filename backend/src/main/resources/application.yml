@@ -69,7 +69,7 @@ app:
     daily-cron: ${DIGEST_DAILY_CRON:0 0 7 * * *}
     weekly-cron: ${DIGEST_WEEKLY_CRON:0 0 9 * * MON}
   sources:
-    # 매일 자정에 등록된 수집 사이트 중 주기가 도래한 것을 크롤링하고, Gemini Batch API(정가의 50%)로
+    # 매일 새벽 1시에 등록된 수집 사이트 중 주기가 도래한 것을 크롤링하고, Gemini Batch API(정가의 50%)로
     # 제출한다 — 결과는 pollGeminiBatches가 도착하는 대로 받아 검토·팀장·PM 단계로 넘긴다.
     daily-cron: ${SOURCE_DAILY_CRON:0 0 1 * * *}
     # 새 출처 후보를 자동 제안하는 주기(기본 7일). 등록하지 않고 승인 대기열에만 넣는다.
