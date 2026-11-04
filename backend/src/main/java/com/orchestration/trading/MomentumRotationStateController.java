@@ -45,9 +45,17 @@ public class MomentumRotationStateController {
     }
     ObjectNode result = objectMapper.valueToTree(state);
     var account = binance.account();
-    double equity = account.has("marginBalance") ? account.path("marginBalance").asDouble()
+    result.put("accountStale", account.path("accountStale").asBoolean(true));
+    if (account.has("accountAsOf")) {
+      result.set("accountAsOf", account.get("accountAsOf"));
+    } else {
+      result.putNull("accountAsOf");
+    }
+    double equity = account.has("marginBalance")
+        ? account.path("marginBalance").asDouble()
         : state.broker() == null ? state.equityUsdt() : state.broker().equityUsdt();
-    double unrealized = state.broker() == null ? state.unrealizedPnlUsdt() : state.broker().unrealizedPnlUsdt();
+    double unrealized = state.broker() == null
+        ? state.unrealizedPnlUsdt() : state.broker().unrealizedPnlUsdt();
     if (state.broker() != null) {
       ObjectNode broker = (ObjectNode) result.path("broker");
       double pnl = MomentumDisplayCalculations.sessionPnl(unrealized);
@@ -55,13 +63,31 @@ public class MomentumRotationStateController {
     }
     result.set("walletBalance", account.has("walletBalance") ? account.get("walletBalance") : null);
     result.set("marginBalance", account.has("marginBalance") ? account.get("marginBalance") : null);
-    double utilization = MomentumDisplayCalculations.marginUtilization(account.has("initialMargin") ? account.get("initialMargin").asDouble() : null, account.has("marginBalance") ? account.get("marginBalance").asDouble() : null);
-    if (Double.isFinite(utilization)) result.put("marginUtilization", utilization); else result.putNull("marginUtilization");
+    Double initialMargin = account.has("initialMargin")
+        ? account.get("initialMargin").asDouble() : null;
+    Double marginBalance = account.has("marginBalance")
+        ? account.get("marginBalance").asDouble() : null;
+    double utilization = MomentumDisplayCalculations.marginUtilization(initialMargin, marginBalance);
+    if (Double.isFinite(utilization)) {
+      result.put("marginUtilization", utilization);
+    } else {
+      result.putNull("marginUtilization");
+    }
     ObjectNode income = (ObjectNode) binance.realized();
+    income.put("realizedStale", income.path("realizedStale").asBoolean(true));
+    if (!income.has("realizedAsOf")) {
+      income.putNull("realizedAsOf");
+    }
     result.set("realizedIncome", income);
     List<MomentumDisplayCalculations.Income> transfers = new ArrayList<>();
-    if (income.path("transfers").isArray()) for (var row : income.path("transfers")) transfers.add(new MomentumDisplayCalculations.Income("TRANSFER", row.path("income").asDouble(), row.path("time").asLong()));
-    double entryCapital = MomentumDisplayCalculations.entryCapitalFromBaseline(ENTRY_CAPITAL_BASELINE_USDT, ENTRY_CAPITAL_BASELINE_MS, transfers);
+    if (income.path("transfers").isArray()) {
+      for (var row : income.path("transfers")) {
+        transfers.add(new MomentumDisplayCalculations.Income(
+            "TRANSFER", row.path("income").asDouble(), row.path("time").asLong()));
+      }
+    }
+    double entryCapital = MomentumDisplayCalculations.entryCapitalFromBaseline(
+        ENTRY_CAPITAL_BASELINE_USDT, ENTRY_CAPITAL_BASELINE_MS, transfers);
     income.put("entryCapitalUsdt", entryCapital);
     result.put("entryCapitalUsdt", entryCapital);
     List<MomentumRotationState.EquityPoint> history = new ArrayList<>(state.equityHistory() == null ? List.of() : state.equityHistory());
@@ -71,20 +97,43 @@ public class MomentumRotationStateController {
     }
     ObjectNode periods = objectMapper.createObjectNode();
     long now = System.currentTimeMillis();
-    for (Map.Entry<String, Long> item : List.of(Map.entry("day", 86400000L), Map.entry("week", 7L * 86400000), Map.entry("month", 30L * 86400000))) {
-      String key = item.getKey(); long duration = item.getValue();
-      var p = MomentumDisplayCalculations.rollingPeriod(history, equity, state.inceptionEquityUsdt(), now, duration, transfers);
-      ObjectNode point = periods.putObject(key).put("pnl", p.pnl()).put("returnPct", p.returnPct()).put("shortHistory", p.shortHistory());
-      if (p.basisTs() == null) point.putNull("basisTs"); else point.put("basisTs", p.basisTs());
+    for (Map.Entry<String, Long> item : List.of(
+        Map.entry("day", 86_400_000L),
+        Map.entry("week", 7L * 86_400_000),
+        Map.entry("month", 30L * 86_400_000))) {
+      String key = item.getKey();
+      long duration = item.getValue();
+      var p = MomentumDisplayCalculations.rollingPeriod(
+          history, equity, state.inceptionEquityUsdt(), now, duration, transfers);
+      ObjectNode point = periods.putObject(key)
+          .put("pnl", p.pnl())
+          .put("returnPct", p.returnPct())
+          .put("shortHistory", p.shortHistory());
+      if (p.basisTs() == null) {
+        point.putNull("basisTs");
+      } else {
+        point.put("basisTs", p.basisTs());
+      }
     }
     result.set("rollingPeriods", periods);
     if (state.equityHistory() != null && result.path("equityHistory").isArray()) {
       var points = (com.fasterxml.jackson.databind.node.ArrayNode) result.path("equityHistory");
-      for (int i=0; i<state.equityHistory().size(); i++) { var p=state.equityHistory().get(i); ((ObjectNode) points.get(i)).put("totalPnlUsdt", MomentumDisplayCalculations.correctedPnl(p.ts(), p.totalPnlUsdt(), p.equityUsdt(), state.inceptionEquityUsdt(), correctionInception)); }
+      for (int i = 0; i < state.equityHistory().size(); i++) {
+        var point = state.equityHistory().get(i);
+        double corrected = MomentumDisplayCalculations.correctedPnl(point.ts(),
+            point.totalPnlUsdt(), point.equityUsdt(), state.inceptionEquityUsdt(),
+            correctionInception);
+        ((ObjectNode) points.get(i)).put("totalPnlUsdt", corrected);
+      }
     }
     if (state.equityHistoryDaily() != null && result.path("equityHistoryDaily").isArray()) {
       var points = (com.fasterxml.jackson.databind.node.ArrayNode) result.path("equityHistoryDaily");
-      for (int i=0; i<state.equityHistoryDaily().size(); i++) { var p=state.equityHistoryDaily().get(i); ((ObjectNode) points.get(i)).put("value", MomentumDisplayCalculations.correctedDailyPnl(p.ts(), p.value(), state.inceptionEquityUsdt(), correctionInception)); }
+      for (int i = 0; i < state.equityHistoryDaily().size(); i++) {
+        var point = state.equityHistoryDaily().get(i);
+        double corrected = MomentumDisplayCalculations.correctedDailyPnl(point.ts(),
+            point.value(), state.inceptionEquityUsdt(), correctionInception);
+        ((ObjectNode) points.get(i)).put("value", corrected);
+      }
     }
     return result;
   }
