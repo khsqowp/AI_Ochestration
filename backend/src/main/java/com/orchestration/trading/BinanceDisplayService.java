@@ -58,6 +58,7 @@ class BinanceDisplayService {
   private Flight accountFlight;
   private Flight incomeFlight;
 
+  @org.springframework.beans.factory.annotation.Autowired
   BinanceDisplayService(ObjectMapper mapper) {
     this(mapper, null, TimeUnit.SECONDS.toMillis(10), TimeUnit.SECONDS.toMillis(60));
   }
