@@ -13,17 +13,24 @@ set -euo pipefail
 # 떠있음"으로 오해하기 쉬운 로그만 남기고 조용히 넘어가서 한동안 못 알아챘다.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-SMB_SERVER="${SMB_SERVER:-noroot}"
+SMB_SERVER="${SMB_SERVER:-noroot.local}"
+SMB_FALLBACK_HOST="${SMB_FALLBACK_HOST:-192.168.0.12}"
 SMB_SHARE="${SMB_SHARE:-HDD2TB}"
-SMB_USER="${SMB_USER:-guest}"
-MOUNT_POINT="/Volumes/${SMB_SHARE}"
+SMB_USER="${SMB_USER:-88motorcycle}"
+MOUNT_POINT="${MOUNT_POINT:-/Volumes/${SMB_SHARE}}"
 DEST_ROOT="${MOUNT_POINT}/Trade"
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SRC_TICK_DIR="$PROJECT_ROOT/trading-tick-archive"
 SRC_CRYPTO_PAPER_DIR="$PROJECT_ROOT/trading-crypto-paper-state"
 SRC_DB_DIR="$PROJECT_ROOT/backups"
 LOG_FILE="${BACKUP_LOG_FILE:-$HOME/Library/Logs/tick-archive-backup.log}"
-BACKUP_MODE="${1:-all}"
+if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt 5242880 ]; then mv -f "$LOG_FILE" "${LOG_FILE}.1"; fi
+BACKUP_MODE="${1:-}"
+OPEN_BIN="${OPEN_BIN:-open}"
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+RSYNC_BIN="${RSYNC_BIN:-rsync}"
+PERL_BIN="${PERL_BIN:-/usr/bin/perl}"
+MOUNT_BIN="${MOUNT_BIN:-/sbin/mount}"
 # 컨테이너:NAS폴더명 — 로테이션 봇 3개의 상태(JSON, trade_log/entry_log 포함)를 백업한다.
 # docker volume 자체는 Docker Desktop VM 안이라 macOS에서 경로로 못 읽어서 docker cp 로 꺼낸다.
 ROTATION_CONTAINERS=(
@@ -36,77 +43,25 @@ log() {
   echo "[$(date -Iseconds)] $*" | tee -a "$LOG_FILE"
 }
 
-ensure_mounted() {
-  if mount | grep -q " on ${MOUNT_POINT} "; then
-    return 0
-  fi
-  log "NAS 마운트 안 됨 — 연결 시도: smb://${SMB_USER}@${SMB_SERVER}/${SMB_SHARE}"
-  mkdir -p "$MOUNT_POINT"
-  if ! mount_smbfs "//${SMB_USER}@${SMB_SERVER}/${SMB_SHARE}" "$MOUNT_POINT" 2>>"$LOG_FILE"; then
-    log "NAS 마운트 실패 — 백업 건너뜀(로컬에 잘못 쓰는 사고 방지)"
-    return 1
-  fi
-  log "NAS 마운트 성공"
-}
+# Perl alarm remains available on stock macOS and bounds the child across exec.
+with_timeout() { local seconds="$1" rc; shift; "$PERL_BIN" -MPOSIX -e 'setpgrp(0,0); my $limit=shift; my $pid=fork(); die "fork failed" unless defined $pid; if (!$pid) { exec @ARGV; POSIX::_exit(127) } $SIG{ALRM}=sub { $SIG{TERM}="IGNORE"; kill "TERM", -getpgrp(); sleep 2; kill "KILL", -getpgrp(); POSIX::_exit(124) }; alarm $limit; waitpid($pid,0); alarm 0; exit(($? & 127) ? 128+($? & 127) : ($? >> 8))' "$seconds" "$@"; rc=$?; (( rc == 137 )) && return 124; return "$rc"; }
 
-backup_tick_archive() {
-  local dest="$DEST_ROOT/tick-archive"
-  if [ ! -d "$SRC_TICK_DIR" ]; then
-    log "[tick] 원본 디렉토리 없음: $SRC_TICK_DIR — 건너뜀"
+ensure_mounted() {
+  if with_timeout 30 "$MOUNT_BIN" | grep -F " on ${MOUNT_POINT} " >/dev/null; then
     return 0
   fi
-  mkdir -p "$dest"
-  log "[tick] 압축 백업 시작: $SRC_TICK_DIR -> $dest"
-  # 현재 UTC 날짜 폴더는 계속 append 중일 수 있으므로 로컬에 남긴다. 닫힌 날짜만 파일별
-  # gzip으로 NAS에 원자적으로 저장하고, 압축 해제 SHA-256이 원본과 일치할 때 로컬을 지운다.
-  local today_utc deleted=0 verify_failed=0
-  today_utc=$(date -u +%Y-%m-%d)
-  while IFS= read -r day_dir; do
-    local day_date yyyy mm dd relative dest_day source_file dest_file source_hash dest_hash day_ok
-    dd="$(basename "$day_dir")"; mm="$(basename "$(dirname "$day_dir")")"; yyyy="$(basename "$(dirname "$(dirname "$day_dir")")")"
-    day_date="${yyyy}-${mm}-${dd}"
-    date -j -f "%Y-%m-%d" "$day_date" +%Y-%m-%d >/dev/null 2>&1 || continue
-    if [[ "$day_date" < "$today_utc" ]]; then
-      relative="${day_dir#"$SRC_TICK_DIR"/}"
-      dest_day="$dest/$relative"
-      day_ok=1
-      mkdir -p "$dest_day"
-      if [ ! -d "$dest_day" ]; then
-        day_ok=0
-      else
-        while IFS= read -r -d '' source_file; do
-          relative="${source_file#"$day_dir"/}"
-          dest_file="$dest_day/$relative.gz"
-          mkdir -p "$(dirname "$dest_file")"
-          source_hash=$(shasum -a 256 "$source_file" | awk '{print $1}')
-          if [ ! -f "$dest_file" ] || ! gzip -t "$dest_file" >/dev/null 2>&1; then
-            local tmp_file="${dest_file}.tmp.$$"
-            if ! gzip -c "$source_file" > "$tmp_file" || ! mv -f "$tmp_file" "$dest_file"; then
-              rm -f "$tmp_file"
-              day_ok=0
-              break
-            fi
-          fi
-          dest_hash=$(gzip -dc "$dest_file" | shasum -a 256 | awk '{print $1}') || dest_hash=""
-          if [ -z "$source_hash" ] || [ "$source_hash" != "$dest_hash" ]; then
-            day_ok=0
-            break
-          fi
-        done < <(find "$day_dir" -type f -print0)
-      fi
-      if [ "$day_ok" -eq 1 ]; then
-        rm -rf "$day_dir"
-        deleted=$((deleted + 1))
-        log "[tick] 압축 해제 SHA-256 일치 — 로컬 날짜폴더 삭제: ${yyyy}/${mm}/${dd}"
-      else
-        verify_failed=1
-        log "[tick] NAS 검증 실패 — 로컬 원본 유지: ${yyyy}/${mm}/${dd}"
-      fi
-    fi
-  done < <(find "$SRC_TICK_DIR" -mindepth 3 -maxdepth 3 -type d)
-  find "$SRC_TICK_DIR" -mindepth 1 -type d -empty -delete
-  log "[tick] 로컬 정리: NAS 압축본 SHA-256 검증을 통과한 닫힌 UTC 날짜폴더 ${deleted}개 삭제"
-  [ "$verify_failed" -eq 0 ]
+  local host
+  for host in "$SMB_SERVER" "$SMB_FALLBACK_HOST"; do
+    log "NAS 연결 요청: smb://${SMB_USER}@${host}/${SMB_SHARE}"
+    with_timeout 90 "$OPEN_BIN" -g -j "smb://${SMB_USER}@${host}/${SMB_SHARE}" >>"$LOG_FILE" 2>&1 || true
+    local attempt
+    for attempt in {1..30}; do
+      if with_timeout 30 "$MOUNT_BIN" | grep -F " on ${MOUNT_POINT} " >/dev/null; then log "NAS 마운트 성공"; return 0; fi
+      sleep 2
+    done
+  done
+  log "NAS 마운트 실패 — 백업 건너뜀(로컬에 잘못 쓰는 사고 방지)"
+  return 1
 }
 
 backup_db_dumps() {
@@ -115,9 +70,9 @@ backup_db_dumps() {
     log "[db] 원본 디렉토리 없음: $SRC_DB_DIR — 건너뜀"
     return 0
   fi
-  mkdir -p "$dest"
+  with_timeout 30 mkdir -p "$dest" || return 1
   log "[db] 백업 시작: $SRC_DB_DIR -> $dest"
-  if ! rsync -a --stats "$SRC_DB_DIR"/ "$dest"/ >>"$LOG_FILE" 2>&1; then
+  if ! with_timeout 1800 "$RSYNC_BIN" -a --stats "$SRC_DB_DIR"/ "$dest"/ >>"$LOG_FILE" 2>&1; then
     log "[db] 백업 실패(rsync 오류)"
     return 1
   fi
@@ -130,9 +85,9 @@ backup_crypto_paper_state() {
     log "[crypto-paper] 상태 디렉토리 없음: $SRC_CRYPTO_PAPER_DIR — 건너뜀"
     return 0
   fi
-  mkdir -p "$dest"
+  with_timeout 30 mkdir -p "$dest" || return 1
   log "[crypto-paper] 상태 백업 시작: $SRC_CRYPTO_PAPER_DIR -> $dest"
-  if ! rsync -a --checksum "$SRC_CRYPTO_PAPER_DIR"/ "$dest"/ >>"$LOG_FILE" 2>&1; then
+  if ! with_timeout 1800 "$RSYNC_BIN" -a --checksum "$SRC_CRYPTO_PAPER_DIR"/ "$dest"/ >>"$LOG_FILE" 2>&1; then
     log "[crypto-paper] 백업 실패 — 로컬 상태 유지"
     return 1
   fi
@@ -142,23 +97,42 @@ backup_crypto_paper_state() {
 backup_trading_state() {
   local dest_root="$DEST_ROOT/trading-state"
   local staging
+  with_timeout 30 mkdir -p "$dest_root" || return 1
   staging="$(mktemp -d)"
   local ok=0
   for entry in "${ROTATION_CONTAINERS[@]}"; do
     local container="${entry%%:*}"
     local name="${entry##*:}"
-    if ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
-      log "[trading-state] $name 컨테이너 안 떠있음 — 건너뜀"
+    local container_list
+    if ! container_list=$(with_timeout 60 "$DOCKER_BIN" ps --format '{{.Names}}'); then
+      log "[trading-state] docker ps 실패 또는 타임아웃 — $name 상태를 확인할 수 없음"
+      ok=1
+      continue
+    fi
+    if ! printf '%s\n' "$container_list" | grep -Fqx "$container"; then
+      log "[trading-state] $name 컨테이너 없음 — 백업 실패"
+      ok=1
       continue
     fi
     local out="$staging/$name"
     mkdir -p "$out"
-    if docker cp "$container:/app/data/." "$out/" >>"$LOG_FILE" 2>&1; then
-      mkdir -p "$dest_root/$name"
-      if rsync -a "$out"/ "$dest_root/$name"/ >>"$LOG_FILE" 2>&1; then
+    if with_timeout 300 "$DOCKER_BIN" cp "$container:/app/data/." "$out/" >>"$LOG_FILE" 2>&1 && [ -n "$(find "$out" -type f -print -quit)" ]; then
+      local staged="$dest_root/.${name}.staged.$$" previous="$dest_root/.${name}.previous.$$"
+      with_timeout 30 mkdir -p "$staged" || { ok=1; continue; }
+      if ! with_timeout 1800 "$RSYNC_BIN" -a "$out"/ "$staged"/ >>"$LOG_FILE" 2>&1; then
+        log "[trading-state] $name staging rsync 실패"
+        ok=1
+        continue
+      fi
+      if [ -d "$dest_root/$name" ]; then
+        if ! with_timeout 30 mv "$dest_root/$name" "$previous"; then log "[trading-state] $name 기존 snapshot 이동 실패"; ok=1; continue; fi
+      fi
+      if with_timeout 30 mv "$staged" "$dest_root/$name"; then
+        with_timeout 30 rm -rf "$previous" || log "[trading-state] 이전 snapshot 정리는 다음 실행에서 재시도"
         log "[trading-state] $name 백업 완료"
       else
-        log "[trading-state] $name rsync 실패"
+        [ ! -d "$previous" ] || with_timeout 30 mv "$previous" "$dest_root/$name"
+        log "[trading-state] $name atomic stage swap 실패"
         ok=1
       fi
     else
@@ -176,22 +150,13 @@ fi
 
 status=0
 case "$BACKUP_MODE" in
-  all)
-    backup_tick_archive || status=1
-    backup_crypto_paper_state || status=1
-    backup_db_dumps || status=1
-    backup_trading_state || status=1
-    ;;
-  tick-only)
-    backup_tick_archive || status=1
-    backup_crypto_paper_state || status=1
-    ;;
   state-db-only)
+    backup_crypto_paper_state || status=1
     backup_db_dumps || status=1
     backup_trading_state || status=1
     ;;
   *)
-    log "알 수 없는 백업 모드: $BACKUP_MODE (all|tick-only|state-db-only)"
+    log "모드 인수 필수: state-db-only (state/DB 백업은 매일 03:00 실행; tick은 archive_to_nas.py 전용)"
     exit 2
     ;;
 esac

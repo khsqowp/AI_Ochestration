@@ -34,6 +34,10 @@ services:
     logging: *default-logging
 
   trading-paper-funding-arb:
+    mem_limit: 768m
+    memswap_limit: 768m
+    pids_limit: 32
+    oom_score_adj: -300
     build: ./trading
     entrypoint: ["python", "-m", "app.paper_trade_loop"]
     env_file:
@@ -84,6 +88,10 @@ services:
   # 국장/미장 top-N 모멘텀 로테이션 페이퍼봇 (KIS 모의) — EMA 크로스 스윙 대체 테스트.
   # 같은 모의계좌를 쓰므로 kr-swing/us-swing 과 동시 기동 금지.
   trading-kr-rotation:
+    mem_limit: 640m
+    memswap_limit: 640m
+    pids_limit: 32
+    oom_score_adj: -300
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.stock_rotation_loop"]
     env_file:
@@ -110,6 +118,10 @@ services:
     logging: *default-logging
 
   trading-us-rotation:
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 32
+    oom_score_adj: -300
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.stock_rotation_loop"]
     env_file:
@@ -151,6 +163,10 @@ services:
   # 자체가 필요없다(env_file 없음, 의도적). funding-arb가 신규진입 중단으로 사실상 유휴
   # 상태라 그 자리에 새 전략 검증용으로 추가.
   trading-coin-swing6:
+    mem_limit: 768m
+    memswap_limit: 768m
+    pids_limit: 32
+    oom_score_adj: -300
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.coin_swing6_loop"]
     volumes:
@@ -161,6 +177,10 @@ services:
     logging: *default-logging
 
   trading-momentum-rotation:
+    mem_limit: 1024m
+    memswap_limit: 1024m
+    pids_limit: 64
+    oom_score_adj: -500
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.momentum_rotation_loop"]
     env_file:
@@ -206,6 +226,10 @@ services:
   # 장 시작 갭업/급등주 전략을 백테스트하려고 개장 직후 등락률순위 스냅샷을 떠서 쌓아두기만
   # 하는 캡처 전용 컨테이너 — 계좌 조회/주문 없음, kr-rotation과 계좌를 같이 써도 무관.
   trading-kr-opening-scan:
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 32
+    oom_score_adj: -300
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.opening_scan_capture"]
     env_file:
@@ -223,6 +247,10 @@ services:
     logging: *default-logging
 
   trading-tick-stream:
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 32
+    oom_score_adj: -300
     build: ./trading
     entrypoint: ["python", "-u", "-m", "app.tick_stream"]
     env_file:

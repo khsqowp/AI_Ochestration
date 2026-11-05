@@ -1,5 +1,9 @@
 services:
   mysql:
+    mem_limit: 1280m
+    memswap_limit: 1280m
+    pids_limit: 192
+    oom_score_adj: -300
     image: mysql:8.4.4
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-orchestration}
@@ -10,13 +14,18 @@ services:
       - mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks: [private]
     restart: unless-stopped
 
   db-backup:
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    oom_score_adj: 500
     image: mysql:8.4.4
     environment:
       TZ: Asia/Seoul
@@ -35,12 +44,17 @@ services:
     restart: unless-stopped
 
   api:
+    mem_limit: 2560m
+    memswap_limit: 2560m
+    pids_limit: 256
+    oom_score_adj: -300
     build: ./backend
     env_file:
       - path: .env
         required: false
     environment:
       TZ: Asia/Seoul
+      JAVA_TOOL_OPTIONS: "-Xmx1536m"
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-orchestration}?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-orchestrator}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
@@ -86,6 +100,10 @@ services:
   #   api 는 아래 external 볼륨을 :ro 로 읽어 대시보드에 트레이딩 상태를 표시한다.
 
   games:
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    oom_score_adj: 500
     build: ./game-server
     environment:
       HOST: 0.0.0.0
@@ -96,6 +114,10 @@ services:
     restart: unless-stopped
 
   web:
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    oom_score_adj: -300
     build: ./frontend
     depends_on: [api, games]
     ports:
@@ -104,6 +126,10 @@ services:
     restart: unless-stopped
 
   cloudflared:
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    oom_score_adj: -300
     # #20 -- pinned to the version actually running (was :latest); bump deliberately, not silently on
     # every pull.
     image: cloudflare/cloudflared:2026.7.2
@@ -115,6 +141,10 @@ services:
     restart: unless-stopped
 
   n8n:
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    pids_limit: 96
+    oom_score_adj: 500
     image: docker.n8n.io/n8nio/n8n:2.26.8
     env_file:
       - path: .env

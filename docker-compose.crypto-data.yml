@@ -1,5 +1,9 @@
 services:
   crypto-tick-stream:
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 32
+    oom_score_adj: -300
     build:
       context: ./trading
       dockerfile: Dockerfile
