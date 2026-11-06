@@ -33,6 +33,8 @@ public class WorkTask {
   /** Set when this task's COLLECT stage is deferred to a nightly Gemini batch job instead of running
    * immediately; null for every task that collects in real time. */
   @Column(length = 200) private String batchJobName;
+  @Column(nullable = false) private int batchSubmissionAttempts;
+  private Instant lastBatchSubmissionAttemptAt;
   /** Set only for COLLECTION-origin tasks created from a research source; null for chat/upload tasks.
    * Lets TaskWorkflowRunner report a collection cycle's outcome (content found vs. NO_NEW_CONTENT) back
    * to that specific source, e.g. to track how often it's producing nothing worth archiving. */
@@ -55,6 +57,8 @@ public class WorkTask {
   public String getFinalReport() { return finalReport; }
   public String getFailureReason() { return failureReason; }
   public String getBatchJobName() { return batchJobName; }
+  public int getBatchSubmissionAttempts() { return batchSubmissionAttempts; }
+  public Instant getLastBatchSubmissionAttemptAt() { return lastBatchSubmissionAttemptAt; }
   public java.util.UUID getSourceId() { return sourceId; }
   void start() { status = TaskStatus.RUNNING; }
   void complete(String report, String path) { status = TaskStatus.COMPLETED; finalReport = report; archivePath = path; completedAt = Instant.now(); }
@@ -62,4 +66,5 @@ public class WorkTask {
   void cancel() { status = TaskStatus.CANCELLED; completedAt = Instant.now(); }
   void markAwaitingBatch() { status = TaskStatus.AWAITING_BATCH; }
   void attachBatchJob(String jobName) { this.batchJobName = jobName; }
+  void recordBatchSubmissionAttempt() { batchSubmissionAttempts++; lastBatchSubmissionAttemptAt = Instant.now(); }
 }

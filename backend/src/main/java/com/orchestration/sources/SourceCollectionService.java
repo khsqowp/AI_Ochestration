@@ -71,6 +71,12 @@ public class SourceCollectionService {
   // Attempt 1 retries after 2h, attempt 2 after 6h, attempt 3 after 24h; beyond that it just waits for
   // the source's normal intervalHours cycle rather than retrying forever.
   private static final long[] RETRY_BACKOFF_HOURS = {2, 6, 24};
+  // Same bounded-retry philosophy as RETRY_BACKOFF_HOURS above, but for a different failure: the crawl
+  // itself succeeded (so the source's own retry/backoff fields above don't apply) and only the Gemini
+  // batch submission call in submitBatchForSources failed. Attempt 1 retries after 2h, attempt 2 after
+  // 6h; a 3rd failure gives up and fails the task for good via retryUnsubmittedBatches.
+  private static final int MAX_BATCH_SUBMISSION_ATTEMPTS = 3;
+  private static final int[] BATCH_SUBMISSION_BACKOFF_HOURS = {2, 6};
   private final ResearchSourceService sources;
   private final FileProperties files;
   private final TaskService tasks;
@@ -261,7 +267,7 @@ public class SourceCollectionService {
     return new PendingBatchItem(task, llm.collectPrompt(domain, instruction));
   }
 
-  private void submitBatchForSources(List<ResearchSource> targets) {
+  void submitBatchForSources(List<ResearchSource> targets) {
     if (targets.isEmpty()) return;
     List<CompletableFuture<PendingBatchItem>> futures = targets.stream()
         .map(source -> CompletableFuture.supplyAsync(() -> crawlAndEnqueue(source), collectionExecutor))
@@ -280,7 +286,7 @@ public class SourceCollectionService {
       log.info("gemini_collection_batch_submitted jobName={} tasks={}", submission.jobName(), promptsByKey.size());
     } catch (Exception exception) {
       log.warn("gemini_collection_batch_submit_failed taskCount={}", promptsByKey.size(), exception);
-      failAwaitingTasks(promptsByKey.keySet(), "야간 배치 제출 실패: " + exception.getMessage());
+      recordBatchSubmissionFailures(promptsByKey.keySet());
     }
   }
 
@@ -289,6 +295,7 @@ public class SourceCollectionService {
    * since batch jobs typically finish well under Gemini's 24h target turnaround. */
   @Scheduled(fixedDelayString = "${app.sources.batch-poll-delay-ms:1800000}")
   public void pollGeminiBatches() {
+    retryUnsubmittedBatches();
     for (GeminiCollectionBatch batch : batches.findByProcessedFalse()) {
       try {
         LlmGateway.BatchPoll poll = llm.pollCollectBatch(batch.getProviderBatchName());
@@ -301,6 +308,45 @@ public class SourceCollectionService {
     }
   }
 
+  /** Resubmits WorkTasks left AWAITING_BATCH with no batchJobName — i.e. the crawl succeeded but the
+   * batch submission call itself failed (see {@link #recordBatchSubmissionFailures}) — on the same
+   * "retry N times with growing backoff, then give up" philosophy as {@link #RETRY_BACKOFF_HOURS}.
+   * Riding along on {@link #pollGeminiBatches}'s existing schedule rather than a separate one, since both
+   * are cheap, infrequent housekeeping over the same AWAITING_BATCH tasks. */
+  private void retryUnsubmittedBatches() {
+    for (WorkTask task : tasks.findAwaitingBatchWithoutJob()) {
+      int attempts = task.getBatchSubmissionAttempts();
+      if (attempts >= MAX_BATCH_SUBMISSION_ATTEMPTS) {
+        tasks.failCollection(task.getId(), "야간 배치 제출 재시도 한도 초과");
+        continue;
+      }
+      int backoffHours = BATCH_SUBMISSION_BACKOFF_HOURS[Math.max(0, Math.min(attempts - 1, BATCH_SUBMISSION_BACKOFF_HOURS.length - 1))];
+      if (task.getLastBatchSubmissionAttemptAt() != null && task.getLastBatchSubmissionAttemptAt().plusSeconds(backoffHours * 3600L).isAfter(java.time.Instant.now())) continue;
+      try {
+        Map<String, String> prompt = Map.of(task.getId().toString(), llm.collectPrompt(task.getDomain(), task.getInstruction()));
+        tasks.recordBatchSubmissionAttempt(task.getId());
+        LlmGateway.BatchSubmission submission = llm.submitCollectBatch(prompt);
+        batches.save(new GeminiCollectionBatch(submission.jobName()));
+        tasks.attachBatchJob(task.getId(), submission.jobName());
+        log.info("gemini_collection_batch_retry_submitted jobName={} taskId={}", submission.jobName(), task.getId());
+      } catch (Exception exception) {
+        log.warn("gemini_collection_batch_retry_failed taskId={}", task.getId(), exception);
+        if (task.getBatchSubmissionAttempts() >= MAX_BATCH_SUBMISSION_ATTEMPTS)
+          tasks.failCollection(task.getId(), "야간 배치 제출 재시도 한도 초과: " + exception.getMessage());
+      }
+    }
+  }
+
+  /** The whole-batch submission in {@link #submitBatchForSources} failed (network issue, Gemini outage,
+   * a 402 from a payment/quota problem — all indistinguishable here and none of them our code's to fix),
+   * so every task that was about to be submitted is left in AWAITING_BATCH (batchJobName stays null)
+   * instead of being marked FAILED outright; only the attempt counter/timestamp advance, so
+   * {@link #retryUnsubmittedBatches} can resubmit it later on backoff and only gives up once that bounded
+   * retry budget (see {@link #MAX_BATCH_SUBMISSION_ATTEMPTS}) is actually exhausted. */
+  private void recordBatchSubmissionFailures(Set<String> taskIds) {
+    for (String taskId : taskIds) tasks.recordBatchSubmissionAttempt(UUID.fromString(taskId));
+  }
+
   private void distributeResults(GeminiCollectionBatch batch, LlmGateway.BatchPoll poll) {
     for (WorkTask task : tasks.findAwaitingBatch(batch.getProviderBatchName())) {
       String key = task.getId().toString();
@@ -311,10 +357,6 @@ public class SourceCollectionService {
     batch.markProcessed();
     batches.save(batch);
     log.info("gemini_collection_batch_processed jobName={} state={}", batch.getProviderBatchName(), poll.state());
-  }
-
-  private void failAwaitingTasks(Set<String> taskIds, String reason) {
-    for (String taskId : taskIds) tasks.failCollection(UUID.fromString(taskId), reason);
   }
 
   private static final int EXCERPT_BUDGET_CHARS = 6000;

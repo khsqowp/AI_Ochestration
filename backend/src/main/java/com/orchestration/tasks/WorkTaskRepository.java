@@ -14,6 +14,7 @@ interface WorkTaskRepository extends JpaRepository<WorkTask, UUID> {
   List<WorkTask> findByStatusIn(List<TaskStatus> statuses);
   List<WorkTask> findByCreatedAtGreaterThanEqualOrderByCreatedAtDesc(Instant from);
   List<WorkTask> findByBatchJobNameAndStatus(String batchJobName, TaskStatus status);
+  List<WorkTask> findByStatusAndBatchJobNameIsNull(TaskStatus status);
   @Modifying
   @Query("update WorkTask t set t.status = :queued where t.id = :id and t.status = :expected")
   int claimRetry(@Param("id") UUID id, @Param("queued") TaskStatus queued, @Param("expected") TaskStatus expected);

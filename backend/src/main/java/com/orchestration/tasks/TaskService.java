@@ -60,6 +60,11 @@ public class TaskService {
   @Transactional
   public void attachBatchJob(UUID id, String batchJobName) { get(id).attachBatchJob(batchJobName); }
 
+  @Transactional public void recordBatchSubmissionAttempt(UUID id) { get(id).recordBatchSubmissionAttempt(); }
+
+  @Transactional(readOnly = true)
+  public List<WorkTask> findAwaitingBatchWithoutJob() { return tasks.findByStatusAndBatchJobNameIsNull(TaskStatus.AWAITING_BATCH); }
+
   @Transactional(readOnly = true)
   public List<WorkTask> findAwaitingBatch(String batchJobName) { return tasks.findByBatchJobNameAndStatus(batchJobName, TaskStatus.AWAITING_BATCH); }
 

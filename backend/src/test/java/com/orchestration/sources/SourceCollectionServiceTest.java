@@ -5,25 +5,36 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.orchestration.calendar.SecurityCalendarService;
 import com.orchestration.files.FileProperties;
 import com.orchestration.tasks.LlmGateway;
+import com.orchestration.tasks.TaskDomain;
 import com.orchestration.tasks.TaskService;
 import com.orchestration.tasks.TaskWorkflowRunner;
+import com.orchestration.tasks.WorkTask;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -261,5 +272,119 @@ class SourceCollectionServiceTest {
     } finally {
       server.stop(0);
     }
+  }
+
+  // Gemini request failed with HTTP 402 / network blip during the nightly batch submit: the crawl
+  // already succeeded (source.markCollected() already ran), so losing that work outright by marking the
+  // WorkTask FAILED on the spot would silently drop a night's collection until the source's next full
+  // intervalHours cycle. These three tests cover submitBatchForSources leaving the task retryable instead
+  // of failing it immediately, a later retry succeeding, and a retry that keeps failing past the bounded
+  // retry budget eventually failing for good.
+
+  @Test
+  void submitBatchForSources_submissionItselfFails_leavesTaskAwaitingBatchInsteadOfFailingItImmediately() throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/", exchange -> {
+      byte[] body = "hello page".getBytes(StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders(200, body.length);
+      try (var output = exchange.getResponseBody()) { output.write(body); }
+    });
+    server.start();
+    try {
+      TaskService taskService = mock(TaskService.class);
+      LlmGateway llm = mock(LlmGateway.class);
+      GeminiCollectionBatchRepository batchRepository = mock(GeminiCollectionBatchRepository.class);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty()); // first fetch of a URL always counts as changed
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+      UUID taskId = UUID.randomUUID();
+      WorkTask task = mock(WorkTask.class);
+      when(task.getId()).thenReturn(taskId);
+      when(taskService.createAwaitingBatch(any(), any(), any(), any(), any(UUID.class))).thenReturn(task);
+      when(llm.collectPrompt(any(), any())).thenReturn("prompt");
+      when(llm.submitCollectBatch(any())).thenThrow(new RuntimeException("Gemini request failed with HTTP 402"));
+
+      ResearchSource source = new ResearchSource("테스트 소스", "http://127.0.0.1:" + server.getAddress().getPort() + "/",
+          ResearchDomain.SECURITY, 24, 0, 1, null);
+      org.springframework.test.util.ReflectionTestUtils.setField(source, "id", UUID.randomUUID());
+
+      SourceCollectionService target = new SourceCollectionService(mock(ResearchSourceService.class),
+          new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), taskService, mock(SecurityCalendarService.class),
+          llm, batchRepository, snapshots, mock(TaskWorkflowRunner.class), Runnable::run, mock(CollectionSettingService.class)) {
+        @Override InetAddress resolveAndValidate(URI uri) { return InetAddress.getLoopbackAddress(); }
+      };
+
+      target.submitBatchForSources(List.of(source));
+
+      verify(taskService, never()).failCollection(any(), any());
+      verify(taskService).recordBatchSubmissionAttempt(taskId);
+      verify(batchRepository, never()).save(any());
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  void pollGeminiBatches_resubmitsAnUnsubmittedTask_andAttachesTheJobOnceItSucceeds() throws Exception {
+    TaskService taskService = mock(TaskService.class);
+    LlmGateway llm = mock(LlmGateway.class);
+    GeminiCollectionBatchRepository batchRepository = mock(GeminiCollectionBatchRepository.class);
+    when(batchRepository.findByProcessedFalse()).thenReturn(List.of());
+
+    UUID taskId = UUID.randomUUID();
+    AtomicInteger attempts = new AtomicInteger(1); // the initial submission already failed once
+    WorkTask task = mock(WorkTask.class);
+    when(task.getId()).thenReturn(taskId);
+    when(task.getDomain()).thenReturn(TaskDomain.SECURITY);
+    when(task.getInstruction()).thenReturn("지시문");
+    when(task.getBatchSubmissionAttempts()).thenAnswer(invocation -> attempts.get());
+    when(task.getLastBatchSubmissionAttemptAt()).thenReturn(Instant.now().minus(Duration.ofHours(3))); // past the 2h backoff for attempt 1
+    doAnswer(invocation -> { attempts.incrementAndGet(); return null; }).when(taskService).recordBatchSubmissionAttempt(taskId);
+    when(taskService.findAwaitingBatchWithoutJob()).thenReturn(List.of(task));
+    when(llm.collectPrompt(TaskDomain.SECURITY, "지시문")).thenReturn("prompt");
+    when(llm.submitCollectBatch(any())).thenReturn(new LlmGateway.BatchSubmission("job-retried-ok"));
+
+    SourceCollectionService target = new SourceCollectionService(mock(ResearchSourceService.class),
+        new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), taskService, mock(SecurityCalendarService.class),
+        llm, batchRepository, mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class), mock(Executor.class),
+        mock(CollectionSettingService.class));
+
+    target.pollGeminiBatches();
+
+    verify(taskService).attachBatchJob(taskId, "job-retried-ok");
+    verify(batchRepository).save(argThat(batch -> batch.getProviderBatchName().equals("job-retried-ok")));
+    verify(taskService, never()).failCollection(any(), any());
+  }
+
+  @Test
+  void pollGeminiBatches_givesUpAndFailsTheTask_onceRetriesExceedTheBoundedBudget() throws Exception {
+    TaskService taskService = mock(TaskService.class);
+    LlmGateway llm = mock(LlmGateway.class);
+    GeminiCollectionBatchRepository batchRepository = mock(GeminiCollectionBatchRepository.class);
+    when(batchRepository.findByProcessedFalse()).thenReturn(List.of());
+
+    UUID taskId = UUID.randomUUID();
+    AtomicInteger attempts = new AtomicInteger(2); // one more failure will cross the retry budget
+    WorkTask task = mock(WorkTask.class);
+    when(task.getId()).thenReturn(taskId);
+    when(task.getDomain()).thenReturn(TaskDomain.SECURITY);
+    when(task.getInstruction()).thenReturn("지시문");
+    when(task.getBatchSubmissionAttempts()).thenAnswer(invocation -> attempts.get());
+    when(task.getLastBatchSubmissionAttemptAt()).thenReturn(Instant.now().minus(Duration.ofHours(7))); // past the 6h backoff for attempt 2
+    doAnswer(invocation -> { attempts.incrementAndGet(); return null; }).when(taskService).recordBatchSubmissionAttempt(taskId);
+    when(taskService.findAwaitingBatchWithoutJob()).thenReturn(List.of(task));
+    when(llm.collectPrompt(TaskDomain.SECURITY, "지시문")).thenReturn("prompt");
+    when(llm.submitCollectBatch(any())).thenThrow(new RuntimeException("Gemini request failed with HTTP 402"));
+
+    SourceCollectionService target = new SourceCollectionService(mock(ResearchSourceService.class),
+        new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), taskService, mock(SecurityCalendarService.class),
+        llm, batchRepository, mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class), mock(Executor.class),
+        mock(CollectionSettingService.class));
+
+    target.pollGeminiBatches();
+
+    verify(taskService).failCollection(eq(taskId), argThat(reason -> reason.contains("한도")));
+    verify(batchRepository, never()).save(any());
   }
 }
