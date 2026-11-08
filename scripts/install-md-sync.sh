@@ -3,10 +3,10 @@
 #
 # 사전 준비 (1회):
 #   1) brew install fswatch
-#   2) 시스템 설정 > 개인정보 보호 및 보안 > 전체 디스크 접근 권한 에서
-#      /opt/homebrew/bin/fswatch 를 추가하고 체크한다.
-#      (프로젝트가 ~/Desktop 하위에 있으면 이 권한 없이는 launchd가 소스를 못 읽는다.)
-#   3) 이 스크립트 실행: bash scripts/install-md-sync.sh
+#   2) 이 스크립트 실행: bash scripts/install-md-sync.sh
+#   3) 접근 거부가 기록되면 로그에서 프로세스와 대상 경로를 먼저 확인한다.
+#      CODE 아래 저장소는 Desktop 폴더 권한 대상이 아니다. iCloud vault 목적지는
+#      별도 보호 대상일 수 있으므로 Full Disk Access를 선제적으로 부여하지 않는다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,5 +29,5 @@ launchctl kickstart -k "gui/$(id -u)/$LABEL"
 echo "설치 완료: $PLIST"
 echo "로그: tail -f ~/Library/Logs/orchestration-md-sync.log"
 echo
-echo "로그에 'Operation not permitted' 가 보이면 fswatch 에 전체 디스크 접근 권한이 없는 것."
-echo "위 사전 준비 2) 를 확인하고 다시 'bash scripts/install-md-sync.sh' 실행."
+echo "로그에 'Operation not permitted' 가 보이면 프로세스와 거부된 경로를 확인한다."
+echo "Desktop 접근과 iCloud vault 접근은 서로 다른 권한 대상이며, Full Disk Access를 선제적으로 부여하지 않는다."

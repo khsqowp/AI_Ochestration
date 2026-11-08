@@ -2,10 +2,9 @@
 # fswatch로 마크다운 소스 디렉터리를 감시하다 변경이 생기면 sync-md-to-obsidian.sh 를 실행한다.
 # launchd(com.orchestration.md-sync)가 이 스크립트를 데몬으로 상시 띄운다.
 #
-# 왜 launchd WatchPaths 를 안 쓰나:
-#   프로젝트가 ~/Desktop 하위에 있으면 macOS TCC가 launchd 자식 프로세스의
-#   Desktop 접근을 막는다. fswatch(Homebrew 바이너리)에 '전체 디스크 접근 권한'을
-#   부여하면 이 우회가 가능하다. install-md-sync.sh 참고.
+# 저장소 경로는 이 스크립트 위치에서 계산한다. ~/CODE 아래 저장소는 Desktop 폴더
+# 보호 범위와 구분된다. Obsidian vault가 iCloud에 있으면 동기화 목적지 권한은 별도로
+# 확인해야 하며, 이 watcher에 Full Disk Access를 기본 요구하지 않는다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
