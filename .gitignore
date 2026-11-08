@@ -25,3 +25,15 @@ backup-obsidian-migration/
 /trading-crypto-paper-state/
 # trading/ 봇이 받아둔 시세/온체인 캐시 데이터 — 소스 아님, 재생성 가능
 /trading/.rs_cache/
+# Large source-of-truth market data snapshots are kept local and never committed.
+/trading/docs/research/kr_us_loop_v1/data_mirror/
+# Heavy research artifacts (pkl/npz/outputs/data) — local only, GitHub 100MB limit
+/logs/
+/trading/docs/research/**/*.pkl
+/trading/docs/research/**/*.npz
+/trading/docs/research/lev_loop/B/out/
+/trading/docs/research/lev_loop/R2A/out/
+/trading/docs/research/lev_loop/R2B/data/
+/trading/docs/research/lev_loop/R2C/data/
+/trading/docs/research/lev_loop/C/results.json
+/trading/docs/research/rebal_loop/B/.nbc/
