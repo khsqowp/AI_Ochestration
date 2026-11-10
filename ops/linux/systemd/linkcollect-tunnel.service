@@ -1,0 +1,16 @@
+[Unit]
+Description=LinkCollect SSH tunnel
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=noroot
+EnvironmentFile=/home/noroot/.config/ochestration/linkcollect.env
+Environment=LINKCOLLECT_BIND=172.17.0.1
+ExecStart=/bin/sh -c 'exec /usr/bin/autossh -M 0 -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -i "$LINKCOLLECT_KEY" -L "${LINKCOLLECT_BIND}:18787:127.0.0.1:18787" "$LINKCOLLECT_USER_HOST"'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

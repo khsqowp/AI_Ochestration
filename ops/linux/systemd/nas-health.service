@@ -1,0 +1,16 @@
+[Unit]
+Description=Ochestration NAS health check
+After=network-online.target mnt-nas.automount
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=HOME=/home/noroot
+Environment=STATE_DIR=/var/lib/ochestration/nas-health
+Environment=NOTIFY_STATE_DIR=/var/lib/ochestration/alerts
+Environment=NOTIFY_LOG=/home/noroot/logs/host/nas-health-alerts.log
+Environment=NAS_HEALTH_LOG=/home/noroot/logs/host/nas-health.log
+StateDirectory=ochestration/alerts
+StateDirectory=ochestration/nas-health
+ExecStart=/home/noroot/CODE/Ochestration/scripts/linux/nas_health.sh

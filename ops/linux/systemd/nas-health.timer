@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Ochestration NAS health check every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=nas-health.service
+
+[Install]
+WantedBy=timers.target

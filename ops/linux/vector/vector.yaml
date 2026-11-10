@@ -1,0 +1,20 @@
+data_dir: /var/lib/vector
+sources:
+  docker:
+    type: docker_logs
+    docker_host: unix:///var/run/docker.sock
+    exclude_containers: ["ochestration-logging"]
+sinks:
+  site_files:
+    type: file
+    inputs: [docker]
+    path: /home/noroot/logs/site/{{ container_name }}/%Y-%m-%d.log
+    encoding:
+      codec: json
+    compression: none
+    acknowledgements:
+      enabled: true
+    buffer:
+      type: disk
+      max_size: 1073741824
+      when_full: block
