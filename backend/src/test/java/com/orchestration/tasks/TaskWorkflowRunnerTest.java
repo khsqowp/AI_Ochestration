@@ -53,6 +53,16 @@ class TaskWorkflowRunnerTest {
   }
 
   @Test
+  void execute_withBlankTextInstruction_failsWithoutCallingGemini() throws Exception {
+    when(tasks.get(taskId)).thenReturn(new WorkTask("제목", " \n\t ", TaskDomain.SECURITY, TaskOrigin.COLLECTION));
+
+    runner(1).execute(taskId);
+
+    verify(llm, never()).collectWithGemini(any(TaskDomain.class), anyString());
+    verify(tasks).failCollection(taskId, "수집된 본문이 없어 분석을 건너뜁니다.");
+  }
+
+  @Test
   void nonSecurityDomain_fallsBackToDeepSeekWhenOpenAiFails() throws Exception {
     when(tasks.get(taskId)).thenReturn(task(TaskDomain.GENERAL));
     when(archive.archive(any(WorkTask.class), anyString())).thenReturn("obsidian/note.md");

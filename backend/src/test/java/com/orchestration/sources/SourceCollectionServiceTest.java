@@ -26,6 +26,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -271,6 +273,103 @@ class SourceCollectionServiceTest {
       assertThat(result.savedPages()).isEqualTo(0);
     } finally {
       server.stop(0);
+    }
+  }
+
+  @Test
+  void collectNow_doesNotCreateTask_whenNoPageWasSaved() throws Exception {
+    assertCollectionDoesNotCreateTask("", 500, false);
+  }
+
+  @Test
+  void collectNow_doesNotCreateTask_whenSavedPageHasBlankExcerpt() throws Exception {
+    assertCollectionDoesNotCreateTask("<html><body>   </body></html>", 200, true);
+  }
+
+  @Test
+  void submitBatchForSources_doesNotCallLlm_whenNoPageWasSaved() throws Exception {
+    assertBatchDoesNotSubmit("", 500, false);
+  }
+
+  @Test
+  void submitBatchForSources_doesNotCallLlm_whenSavedPageHasBlankExcerpt() throws Exception {
+    assertBatchDoesNotSubmit("<html><body>   </body></html>", 200, true);
+  }
+
+  private void assertCollectionDoesNotCreateTask(String responseBody, int status, boolean saved) throws Exception {
+    HttpServer server = sourceServer(responseBody, status);
+    server.start();
+    Path originals = Files.createTempDirectory("source-collection-test-");
+    try {
+      ResearchSource source = testSource(server);
+      ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
+      when(sourceLookup.get(source.getId())).thenReturn(source);
+      TaskService tasks = mock(TaskService.class);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+      SourceCollectionService target = loopbackService(sourceLookup, new FileProperties(originals.toString(), "/tmp/obsidian", 30000L),
+          tasks, mock(LlmGateway.class), mock(GeminiCollectionBatchRepository.class), snapshots);
+
+      SourceCollectionService.CollectionResult result = target.collectNow(source.getId());
+
+      assertThat(result.savedPages()).isEqualTo(saved ? 1 : 0);
+      verify(tasks, never()).create(anyString(), anyString(), any(), any(), any(UUID.class));
+    } finally { server.stop(0); deleteTree(originals); }
+  }
+
+  private void assertBatchDoesNotSubmit(String responseBody, int status, boolean saved) throws Exception {
+    HttpServer server = sourceServer(responseBody, status);
+    server.start();
+    Path originals = Files.createTempDirectory("source-batch-test-");
+    try {
+      ResearchSource source = testSource(server);
+      TaskService tasks = mock(TaskService.class);
+      LlmGateway llm = mock(LlmGateway.class);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+      SourceCollectionService target = loopbackService(mock(ResearchSourceService.class),
+          new FileProperties(originals.toString(), "/tmp/obsidian", 30000L), tasks, llm,
+          mock(GeminiCollectionBatchRepository.class), snapshots);
+
+      target.submitBatchForSources(List.of(source));
+
+      verify(tasks, never()).createAwaitingBatch(anyString(), anyString(), any(), any(), any());
+      verify(llm, never()).collectPrompt(any(), anyString());
+      verify(llm, never()).submitCollectBatch(any());
+    } finally { server.stop(0); deleteTree(originals); }
+  }
+
+  private static HttpServer sourceServer(String responseBody, int status) throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/", exchange -> {
+      byte[] body = responseBody.getBytes(StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+      exchange.sendResponseHeaders(status, body.length);
+      try (var output = exchange.getResponseBody()) { output.write(body); }
+    });
+    return server;
+  }
+
+  private static ResearchSource testSource(HttpServer server) {
+    ResearchSource source = new ResearchSource("테스트 소스", "http://127.0.0.1:" + server.getAddress().getPort() + "/",
+        ResearchDomain.SECURITY, 24, 0, 1, null);
+    org.springframework.test.util.ReflectionTestUtils.setField(source, "id", UUID.randomUUID());
+    return source;
+  }
+
+  private static SourceCollectionService loopbackService(ResearchSourceService sources, FileProperties files,
+      TaskService tasks, LlmGateway llm, GeminiCollectionBatchRepository batches, PageSnapshotRepository snapshots) {
+    return new SourceCollectionService(sources, files, tasks, mock(SecurityCalendarService.class), llm, batches,
+        snapshots, mock(TaskWorkflowRunner.class), Runnable::run, mock(CollectionSettingService.class)) {
+      @Override InetAddress resolveAndValidate(URI uri) { return InetAddress.getLoopbackAddress(); }
+    };
+  }
+
+  private static void deleteTree(Path root) throws Exception {
+    if (Files.exists(root)) try (var paths = Files.walk(root)) {
+      paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> { try { Files.deleteIfExists(path); } catch (java.io.IOException ignored) { } });
     }
   }
 

@@ -213,6 +213,21 @@ class KnowledgeArchiveServiceTest {
   }
 
   @Test
+  void collectionOrigin_blankItemBodiesAndEmptyLegacySections_areNotRendered(@TempDir Path obsidian) throws Exception {
+    Path dailyNote = obsidian.resolve("security/뉴스/" + LocalDate.now() + ".md");
+    Files.createDirectories(dailyNote.getParent());
+    Files.writeString(dailyNote, "---\ntitle: \\\"보안 뉴스\\\"\ndate: " + LocalDate.now()
+        + "\ndomain: security\n---\n\n# 보안 뉴스 (" + LocalDate.now() + ")\n\n## 빈 레거시 유형\n\n   \n\n## 유지 유형\n\n기존 내용\n");
+    WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
+
+    String path = service(obsidian).archive(task, "   ");
+
+    String content = Files.readString(obsidian.resolve(path));
+    assertThat(content).doesNotContain("## 빈 레거시 유형").doesNotContain("Krebs on Security ·");
+    assertThat(content).contains("## 유지 유형").contains("기존 내용");
+  }
+
+  @Test
   void collectionOrigin_nonSecurityDomain_keepsThePerSourceFolderScheme(@TempDir Path obsidian) throws Exception {
     WorkTask task = new WorkTask("[경제] Financial Times 파일 아카이브", "지시 내용", TaskDomain.ECONOMY, TaskOrigin.COLLECTION);
 

@@ -47,6 +47,10 @@ public class TaskWorkflowRunner {
       task = tasks.get(id);
       instruction = limit(task.getInstruction());
       String imageExtension = imageExtensionOf(task.getAttachmentPath());
+      if (imageExtension == null && instruction.isBlank()) {
+        tasks.failCollection(id, "수집된 본문이 없어 분석을 건너뜁니다.");
+        return;
+      }
       tasks.event(id, "COLLECT", imageExtension != null ? "Gemini 수집 담당이 첨부 이미지를 분석하고 있습니다." : "Gemini 수집 담당이 공개 웹 근거를 찾고 있습니다.", properties.geminiModel());
       collection = imageExtension != null
           ? llm.describeImageWithGemini("""

@@ -161,12 +161,13 @@ public class SourceCollectionService {
 
   private CollectionResult collect(ResearchSource source, boolean manual) {
     CrawlOutcome outcome = crawl(source, manual);
-    String excerpt = outcome.changed() > 0 ? excerptFrom(outcome.changedPaths()) : "";
-    WorkTask analysisTask = outcome.changed() > 0 ? tasks.create(
+    String excerpt = outcome.changed() > 0 && outcome.saved() > 0 ? excerptFrom(outcome.changedPaths()) : "";
+    boolean hasUsableContent = outcome.changed() > 0 && outcome.saved() > 0 && !excerpt.isBlank();
+    WorkTask analysisTask = hasUsableContent ? tasks.create(
         "[%s] %s 파일 아카이브".formatted(source.getDomain() == ResearchDomain.SECURITY ? "보안" : "경제", source.getName()),
         buildInstruction(source, outcome.changed(), excerpt),
         source.getDomain() == ResearchDomain.SECURITY ? TaskDomain.SECURITY : TaskDomain.ECONOMY, TaskOrigin.COLLECTION, source.getId()) : null;
-    if (outcome.changed() > 0 && source.getDomain() == ResearchDomain.SECURITY) calendar.extractFromCollection(source, excerpt);
+    if (hasUsableContent && source.getDomain() == ResearchDomain.SECURITY) calendar.extractFromCollection(source, excerpt);
     return new CollectionResult(outcome.saved(), outcome.changed(), outcome.failed(), outcome.visited(), source.getCrawlDepth(), source.getMaxPages(), outcome.warning(), analysisTask == null ? null : analysisTask.getId());
   }
 
@@ -257,7 +258,9 @@ public class SourceCollectionService {
   private PendingBatchItem crawlAndEnqueue(ResearchSource source) {
     CrawlOutcome outcome = crawl(source, false);
     if (outcome.changed() == 0) return null;
+    if (outcome.saved() == 0) return null;
     String excerpt = excerptFrom(outcome.changedPaths());
+    if (excerpt.isBlank()) return null;
     TaskDomain domain = source.getDomain() == ResearchDomain.SECURITY ? TaskDomain.SECURITY : TaskDomain.ECONOMY;
     String instruction = buildInstruction(source, outcome.changed(), excerpt);
     WorkTask task = tasks.createAwaitingBatch(

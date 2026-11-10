@@ -174,13 +174,17 @@ public class KnowledgeArchiveService {
           + headingLine + "\n\n";
     }
     for (SecurityNewsItemClassifier.NewsItem item : items) {
+      String itemBody = item.body().strip();
+      if (itemBody.isBlank()) continue;
       String type = normalizeNewsType(item.type());
-      String block = "**출처: " + sourceTitle + " · " + item.title() + "**\n\n" + item.body().strip();
+      String block = "**출처: " + sourceTitle + " · " + item.title() + "**\n\n" + itemBody;
       sections.merge(type, block, (existingContent, newBlock) -> existingContent.stripTrailing() + "\n\n---\n\n" + newBlock);
     }
     StringBuilder body = new StringBuilder();
     for (var entry : sections.entrySet()) {
-      body.append("## ").append(entry.getKey()).append("\n\n").append(entry.getValue().strip()).append("\n\n");
+      String content = entry.getValue().strip();
+      if (content.isBlank()) continue;
+      body.append("## ").append(entry.getKey()).append("\n\n").append(content).append("\n\n");
     }
     Files.writeString(note, head + body, StandardCharsets.UTF_8);
   }
