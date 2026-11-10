@@ -422,3 +422,24 @@ sudo systemctl daemon-reload && sudo systemctl restart mnt-nas.automount
 | 마이그레이션 종료 후 | Mac에 이 사이트용으로 설정한 항목(LaunchAgent, cron, 동기화 상태 디렉터리 등)을 제거. 못 하는 것은 마지막에 명령으로 일괄 제시 |
 
 3장의 cron 동기화는 **이전 기간에만** 쓰는 Mac→리눅스 전송 수단이다. 컷오버가 끝나면 cron 항목을 지운다.
+
+---
+
+## 11. Phase 0 진행 기록 (2026-11-11 06시 기준)
+
+완료
+- Mac: 삭제형 NAS 백업 에이전트 unload(plist는 `.disabled`), rsync 3.5.2 설치, 임시 cron 2줄 등록(`sync_to_linux.sh`).
+- 리눅스: repo clone, `.env` 전달(sha256 일치·600), amd64 이미지 전체 빌드, trading external 볼륨 10개 생성, Oracle 키·Slack 설정 파일(600), Vector 로그 수집기 기동.
+- 초기 전송 40.1G 완료(52분, 실패 0). 이후 15분 주기 증분 정상.
+- sudo 1차: autossh, 절전 mask, docker 패키지 hold, fstab 옵션 교체, UFW 18787.
+
+리허설에서 확인한 것
+- 볼륨 스냅샷→복원→매니페스트 대조 통과(소유권 100:101 유지). 비어 있지 않은 볼륨에는 복원을 거부함.
+- **실행 중에 뜬 arm64 MySQL 볼륨 tar가 amd64에서 crash recovery 후 정상 기동**, 테이블 45개, 앱 계정 접속 정상. 리허설 볼륨·컨테이너는 삭제함.
+- trading 이미지 amd64에서 봇 모듈 전부 import 정상. 이미지에 pytest가 없어 테스트 스위트는 돌리지 못함.
+
+계획 수정
+- **MySQL root 비밀번호가 `.env`의 `MYSQL_ROOT_PASSWORD`와 다르다**(Mac 현행 DB에서 Access denied). 헬스체크의 `mysqladmin ping`은 인증 실패에도 성공으로 끝나 드러나지 않았다. 따라서 논리 백업은 `--all-databases`(root) 대신 기존 db-backup과 같은 **앱 계정으로 `orchestration` DB 덤프**를 쓴다. 사용자·권한 테이블은 물리 볼륨 복사로 넘어간다. 6.4 B2도 이 방식으로 한다.
+- **rsync가 대상 디렉터리 권한을 다시 써서 ACL mask가 `r-x`로 돌아간다.** 컷오버의 최종 rsync 직후, 컨테이너 기동 전에 아래를 반드시 실행한다(리허설에서 uid 100·1000 쓰기 확인):
+  `for d in .kis-cache trading-tick-archive inbox/archive_ochestration inbox/notebook-images obsidian; do setfacl -R -m u:100:rwX,u:1000:rwX,m::rwX "$d"; find "$d" -type d -exec setfacl -m d:u:100:rwX,d:u:1000:rwX,d:m::rwX {} +; done`
+- `docker_watchdog.sh` cron과 `nas_backup.sh` cron은 컷오버 후에 등록한다(지금은 대상 컨테이너가 없어 오탐 알림이 난다).
