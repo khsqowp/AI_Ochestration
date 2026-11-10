@@ -48,6 +48,9 @@ export function hexDecode(raw: string): string {
   for (let i = 0; i < b.length; i++) b[i] = parseInt(t.substr(i * 2, 2), 16)
   return td.decode(b)
 }
+export function euckrDecode(raw: string): string {
+  return new TextDecoder('euc-kr', { fatal: false }).decode(binaryToBytes(raw))
+}
 const hexEncode = (s: string) => Array.from(te.encode(s)).map(x => x.toString(16).padStart(2, '0')).join('')
 
 export function htmlDecode(s: string): string {
@@ -237,6 +240,7 @@ export const ALL_DECODERS: [string, (s: string) => string][] = [
   ['URL 디코딩 (EUC-KR)', s => urlDecodeWithCharset(s, 'euc-kr')],
   ['HTML 엔티티', htmlDecode],
   ['Hex', hexDecode],
+  ['EUC-KR', euckrDecode],
   ['Unicode escape', unicodeUnescape],
   ['ROT13', rot13],
 ]
