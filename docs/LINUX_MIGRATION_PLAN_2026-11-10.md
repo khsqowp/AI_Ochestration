@@ -460,3 +460,11 @@ sudo systemctl daemon-reload && sudo systemctl restart mnt-nas.automount
 - 리눅스 cron: watchdog(2분), NAS 백업(03:00), md 동기화(5분). systemd: nas-health.timer, linkcollect-tunnel.
 - 재부팅 사고: 11-11 12:15 `sudo reboot` 후 서버가 7시간 복귀하지 않았다(종료 로그는 정상, 이후 단계에서 멈춤). 같은 날 깨끗한 상태에서 2회 재부팅은 각 22초에 복귀. NAS 테스트의 지연 언마운트(`umount -l`) 잔여물이 유력하나 확정하지 못했다. 헬스체크의 강제 재마운트는 기본 꺼짐으로 변경.
 - 미결: 서버 자체가 죽었을 때 알리는 외부 감시 없음. MySQL root 비밀번호가 `.env`와 다름. Mac 봇·MySQL이 정지 시 SIGKILL(exit 137)로 끝남(데이터는 검증으로 온전함 확인).
+
+## 13. 자동 배포 (2026-11-11 추가)
+
+- 방식: 서버가 당겨오는 pull 방식. linuxserver cron이 5분마다 `scripts/linux/auto_deploy.sh` 실행.
+- self-hosted GitHub Actions runner는 쓰지 않는다. 저장소가 공개라 fork PR이 운영 호스트에서 코드를 실행할 수 있기 때문.
+- 배포 대상: `docker-compose.yml` + `docker-compose.crypto-data.yml`. `docker-compose.trading.yml`(실거래 봇 포함)은 영구 수동 배포.
+- `trading/**`, `docker-compose.trading.yml`만 바뀐 커밋은 소스만 받고 배포하지 않는다.
+- 일시정지: `~/.local/state/ochestration/deploy/PAUSE`. 로그: `~/logs/host/auto-deploy.log`.
