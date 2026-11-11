@@ -443,3 +443,20 @@ sudo systemctl daemon-reload && sudo systemctl restart mnt-nas.automount
 - **rsync가 대상 디렉터리 권한을 다시 써서 ACL mask가 `r-x`로 돌아간다.** 컷오버의 최종 rsync 직후, 컨테이너 기동 전에 아래를 반드시 실행한다(리허설에서 uid 100·1000 쓰기 확인):
   `for d in .kis-cache trading-tick-archive inbox/archive_ochestration inbox/notebook-images obsidian; do setfacl -R -m u:100:rwX,u:1000:rwX,m::rwX "$d"; find "$d" -type d -exec setfacl -m d:u:100:rwX,d:u:1000:rwX,d:m::rwX {} +; done`
 - `docker_watchdog.sh` cron과 `nas_backup.sh` cron은 컷오버 후에 등록한다(지금은 대상 컨테이너가 없어 오탐 알림이 난다).
+
+---
+
+## 12. 컷오버 결과 (2026-11-11 저녁)
+
+| 구간 | 시각 (KST) | 결과 |
+|------|-----------|------|
+| 실거래 봇 Mac 정지 → 리눅스 기동 | 20:05:59 → 20:06:22 | 공백 23초. 상태 sha256·매니페스트 일치, 포지션 16개 동일, 기동 후 신규 주문 없음 |
+| 나머지 봇·수집기 | 20:09:41 → 20:13:12 | 볼륨 8개 일치, 틱 37G·kis-cache·페이퍼 상태 체크섬 차이 0, 틱 공백 약 3.5분 |
+| 사이트 중단 | 20:15:42 → 20:26:20 | 약 10.5분. MySQL 45개 테이블 행 수·CHECKSUM 일치, inbox/obsidian/backups 차이 0(알려진 NFC 파일명 1건 제외) |
+| Cloudflare Tunnel | 20:26:20 | 리눅스 연결 4개, 공개 URL 200 |
+
+- 최종 스냅샷(볼륨 tar 12개 + DB 덤프): 리눅스 `~/migrate-staging/final`, NAS `Trade/mac-final-snapshot/2026-11-11/`.
+- Mac: 대상 컨테이너 전부 stopped + restart=no, LaunchAgent 4개 unload(plist는 `.disabled`), 임시 cron 제거. 볼륨·데이터·이미지는 롤백 사본으로 보존.
+- 리눅스 cron: watchdog(2분), NAS 백업(03:00), md 동기화(5분). systemd: nas-health.timer, linkcollect-tunnel.
+- 재부팅 사고: 11-11 12:15 `sudo reboot` 후 서버가 7시간 복귀하지 않았다(종료 로그는 정상, 이후 단계에서 멈춤). 같은 날 깨끗한 상태에서 2회 재부팅은 각 22초에 복귀. NAS 테스트의 지연 언마운트(`umount -l`) 잔여물이 유력하나 확정하지 못했다. 헬스체크의 강제 재마운트는 기본 꺼짐으로 변경.
+- 미결: 서버 자체가 죽었을 때 알리는 외부 감시 없음. MySQL root 비밀번호가 `.env`와 다름. Mac 봇·MySQL이 정지 시 SIGKILL(exit 137)로 끝남(데이터는 검증으로 온전함 확인).
