@@ -105,7 +105,7 @@ KR 장중(09:00~15:30)·opening-scan(09:00~11:00) 밖이어야 하고, 사용자
 [M] for d in inbox obsidian backups; do bash scripts/migrate/verify_tree.sh "$d" "linuxserver:CODE/Ochestration/$d/" && echo "$d DIFF0"; done
 [M] /opt/homebrew/bin/rsync -a "$SNAP_M/" linuxserver:migrate-staging/final/
 [L] bash scripts/migrate/volume_restore.sh $SNAP_L ochestration_mysql_data ochestration_n8n_data
-[L] D=/mnt/nas/Trade/mac-final-snapshot/$(date +%F); mkdir -p $D && rsync -rlt $SNAP_L/ ~/migrate-staging/db/ $D/ && (cd $SNAP_L && sha256sum *.tar | sort) | diff - <(cd $D && sha256sum *.tar | sort) && echo NAS_COPY_OK
+[L] D=/mnt/nas/Ochestration/snapshots/mac-final-$(date +%F); mkdir -p $D && rsync -rlt $SNAP_L/ ~/migrate-staging/db/ $D/ && (cd $SNAP_L && sha256sum *.tar | sort) | diff - <(cd $D && sha256sum *.tar | sort) && echo NAS_COPY_OK
 [L] for d in inbox/archive_ochestration inbox/notebook-images obsidian; do setfacl -R -m u:100:rwX,u:1000:rwX,m::rwX "$d"; find "$d" -type d -exec setfacl -m d:u:100:rwX,d:u:1000:rwX,d:m::rwX {} +; done
 [L] docker compose up -d mysql; until [ "$(docker inspect ochestration-mysql-1 --format '{{.State.Health.Status}}')" = healthy ]; do sleep 3; done
 [L] (Mac과 같은 while 루프로) > ~/migrate-staging/final/mysql-verify.linux.txt; diff ~/migrate-staging/final/mysql-verify.mac.txt ~/migrate-staging/final/mysql-verify.linux.txt && echo DB_MATCH

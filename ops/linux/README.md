@@ -26,7 +26,7 @@ Run the LinkCollect enable command only after the local EnvironmentFile and key 
 - `bash -n scripts/migrate/*.sh scripts/linux/*.sh`; run `tests/migrate/run_all.sh` on a development machine with PATH stubs.
 - `scripts/migrate/verify_tree.sh SRC DEST` reports any content or metadata-independent checksum differences.
 - Run `volume_snapshot.sh` only against stopped-container volumes; use `volume_restore.sh` only in a rehearsal environment with intentionally empty volumes.
-- Run `nas_health.sh` with temporary `NAS_MOUNT`, `NAS_TRADE`, `STATE_DIR`, and stub `findmnt`/`timeout` commands; verify alert and recovery records.
+- Run `nas_health.sh` with temporary `NAS_MOUNT`, `NAS_BASE`, `STATE_DIR`, and stub `findmnt`/`timeout` commands; verify alert and recovery records.
 - Run `docker_watchdog.sh` with stub `docker` and a temporary HOME; check engine, container, heartbeat, PAUSE, and disk alerts.
 - Validate Vector using `docker run --rm -v "$PWD/ops/linux/vector/vector.yaml:/etc/vector/vector.yaml:ro" timberio/vector:0.61.0-debian validate /etc/vector/vector.yaml`, then `docker compose -f ops/linux/docker-compose.logging.yml config` before deployment.
 - `nas_backup.sh` requires the real NFS mount, sentinel, and service sources; use a dedicated rehearsal NAS path before scheduling it.

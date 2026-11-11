@@ -468,3 +468,22 @@ sudo systemctl daemon-reload && sudo systemctl restart mnt-nas.automount
 - 배포 대상: `docker-compose.yml` + `docker-compose.crypto-data.yml`. `docker-compose.trading.yml`(실거래 봇 포함)은 영구 수동 배포.
 - `trading/**`, `docker-compose.trading.yml`만 바뀐 커밋은 소스만 받고 배포하지 않는다.
 - 일시정지: `~/.local/state/ochestration/deploy/PAUSE`. 로그: `~/logs/host/auto-deploy.log`.
+
+## 14. NAS 디렉터리 구조 (2026-11-12 변경)
+
+`/mnt/nas/Trade/*`, `/mnt/nas/Logs/ochestration`에 흩어져 있던 백업을 `/mnt/nas/Ochestration` 한 곳으로 모으고 시장별로 나눴다. 이 절이 앞 절들의 NAS 경로 표기를 대체한다.
+
+```
+/mnt/nas/Ochestration/
+  .nas-mounted, .health/        마운트 센티널, 헬스 프로브
+  coin/   state/{momentum-rotation,paper}  shadow-predictor/  logs/
+  kr/     state/kr-rotation                logs/
+  us/     state/us-rotation                logs/
+  market-data/  tick-archive/  tick-archive-manual/  logs/
+  site/   db/  logs/{host,migrate,<컨테이너>}
+  snapshots/mac-final-2026-11-11/
+```
+
+- 틱 아카이브는 하루 폴더 안에 국장·코인 파일이 같이 있고 manifest를 공유하므로 시장별로 나누지 않고 `market-data`에 둔다.
+- `tick-archive-manual`은 옛 수동 백업. 표본 40개 파일이 `tick-archive`의 gz와 체크섬 일치. 삭제 여부 미정.
+- 로그는 컨테이너 이름으로 분류한다(`scripts/linux/nas_backup.sh`의 `log_bucket`).
