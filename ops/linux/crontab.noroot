@@ -1,3 +1,4 @@
 */2 * * * * /bin/bash /home/noroot/CODE/Ochestration/scripts/linux/docker_watchdog.sh >> /home/noroot/logs/host/docker-watchdog-cron.log 2>&1
 0 3 * * * /bin/bash /home/noroot/CODE/Ochestration/scripts/linux/nas_backup.sh >> /home/noroot/logs/host/nas-backup-cron.log 2>&1
 */5 * * * * OBSIDIAN_SYNC_DEST=$HOME/obsidian-vault/Ochestration /bin/bash /home/noroot/CODE/Ochestration/scripts/sync-md-to-obsidian.sh >> /home/noroot/logs/host/md-sync.log 2>&1
+*/5 * * * * /bin/bash /home/noroot/CODE/Ochestration/scripts/linux/auto_deploy.sh >> /home/noroot/logs/host/auto-deploy-cron.log 2>&1

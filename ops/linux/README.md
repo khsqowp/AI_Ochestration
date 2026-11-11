@@ -30,3 +30,7 @@ Run the LinkCollect enable command only after the local EnvironmentFile and key 
 - Run `docker_watchdog.sh` with stub `docker` and a temporary HOME; check engine, container, heartbeat, PAUSE, and disk alerts.
 - Validate Vector using `docker run --rm -v "$PWD/ops/linux/vector/vector.yaml:/etc/vector/vector.yaml:ro" timberio/vector:0.61.0-debian validate /etc/vector/vector.yaml`, then `docker compose -f ops/linux/docker-compose.logging.yml config` before deployment.
 - `nas_backup.sh` requires the real NFS mount, sentinel, and service sources; use a dedicated rehearsal NAS path before scheduling it.
+
+## Pull-based auto-deploy
+
+The five-minute cron job fetches `origin/main` and deploys when it finds new commits that change files outside `trading/*` and `docker-compose.trading.yml`. The trading compose file is excluded on purpose; live real-money bots are deployed manually. Create `$HOME/.local/state/ochestration/deploy/PAUSE` (on the host, `/home/noroot/.local/state/ochestration/deploy/PAUSE`) to pause checks. A failed deployment records its commit in `failed-sha` and will not retry that commit until `origin/main` advances. Logs are written to `/home/noroot/logs/host/auto-deploy.log`.
