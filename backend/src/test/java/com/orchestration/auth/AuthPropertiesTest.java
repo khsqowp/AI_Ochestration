@@ -11,13 +11,13 @@ import org.junit.jupiter.api.Test;
 class AuthPropertiesTest {
   @Test
   void construction_failsFast_whenAuthIsEnabledWithAnInsecureCookie() {
-    assertThatThrownBy(() -> new AuthProperties(true, false, "a@b.com", "A", "admin", "pw", "secret", ""))
+    assertThatThrownBy(() -> new AuthProperties(true, false, "a@b.com", "A", "admin", "pw", "secret", "", ""))
         .isInstanceOf(IllegalStateException.class);
   }
 
   @Test
   void construction_succeeds_whenAuthIsEnabledWithASecureCookie() {
-    assertThatCode(() -> new AuthProperties(true, true, "a@b.com", "A", "admin", "pw", "secret", ""))
+    assertThatCode(() -> new AuthProperties(true, true, "a@b.com", "A", "admin", "pw", "secret", "", ""))
         .doesNotThrowAnyException();
   }
 
@@ -25,7 +25,7 @@ class AuthPropertiesTest {
   void construction_succeeds_whenAuthIsDisabled_regardlessOfCookieSecure() {
     // Local dev default: auth is off entirely, so no cookie is ever issued -- the insecure-cookie
     // combination is meaningless (and shouldn't block running the app locally over plain http).
-    assertThatCode(() -> new AuthProperties(false, false, "a@b.com", "A", "admin", "pw", "secret", ""))
+    assertThatCode(() -> new AuthProperties(false, false, "a@b.com", "A", "admin", "pw", "secret", "", ""))
         .doesNotThrowAnyException();
   }
 }

@@ -49,6 +49,9 @@ app:
     admin-password: ${ADMIN_PW:}
     jwt-secret: ${JWT_SECRET:}
     allowed-origins: ${ALLOWED_ORIGINS:}
+    # 비워두면 쿠키가 발급한 정확한 호스트에만 스코프됨(로컬 개발 기본값). finance.khsqowp1.my 등
+    # 서브도메인과 로그인을 공유하려면 운영 .env에서 ".khsqowp1.my"로 설정한다.
+    cookie-domain: ${AUTH_COOKIE_DOMAIN:}
   files:
     originals-path: ${ORIGINALS_PATH:../inbox/archive_ochestration}
     obsidian-path: ${OBSIDIAN_PATH:../obsidian}

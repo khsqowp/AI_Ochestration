@@ -49,7 +49,9 @@ public class AuthController {
   }
 
   private ResponseCookie cookie(String value, long maxAge) {
-    return ResponseCookie.from(COOKIE, value).httpOnly(true).secure(properties.cookieSecure()).sameSite("Lax").path("/").maxAge(maxAge).build();
+    var builder = ResponseCookie.from(COOKIE, value).httpOnly(true).secure(properties.cookieSecure()).sameSite("Lax").path("/").maxAge(maxAge);
+    if (properties.cookieDomain() != null && !properties.cookieDomain().isBlank()) builder.domain(properties.cookieDomain());
+    return builder.build();
   }
   record AuthStatus(boolean authenticationEnabled, AuthService.UserProfile user) {}
   record LoginRequest(@NotBlank @Size(max = 320) String id, @NotBlank @Size(max = 200) String password) {}

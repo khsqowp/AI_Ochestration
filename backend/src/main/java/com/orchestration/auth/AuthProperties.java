@@ -11,7 +11,8 @@ public record AuthProperties(
     String adminId,
     String adminPassword,
     String jwtSecret,
-    String allowedOrigins) {
+    String allowedOrigins,
+    String cookieDomain) {
   // High #3 -- with auth enabled, the session cookie carries a JWT; without Secure it would be sent over
   // plain HTTP too, letting it leak to any on-path observer. Fail application boot outright rather than
   // silently deploy that combination (auth disabled never issues a cookie, so it's exempt).

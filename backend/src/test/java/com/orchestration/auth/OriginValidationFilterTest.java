@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
  * SameSite=Lax cookie that's already the primary defense. */
 class OriginValidationFilterTest {
   private OriginValidationFilter filter(String allowedOrigins) {
-    return new OriginValidationFilter(new AuthProperties(true, true, "a@b.com", "A", "admin", "pw", "secret", allowedOrigins));
+    return new OriginValidationFilter(new AuthProperties(true, true, "a@b.com", "A", "admin", "pw", "secret", allowedOrigins, ""));
   }
 
   @Test
