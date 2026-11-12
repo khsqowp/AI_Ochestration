@@ -479,11 +479,11 @@ sudo systemctl daemon-reload && sudo systemctl restart mnt-nas.automount
   coin/   state/{momentum-rotation,paper}  shadow-predictor/  logs/
   kr/     state/kr-rotation                logs/
   us/     state/us-rotation                logs/
-  market-data/  tick-archive/  tick-archive-manual/  logs/
+  market-data/  tick-archive/  logs/
   site/   db/  logs/{host,migrate,<컨테이너>}
   snapshots/mac-final-2026-11-11/
 ```
 
 - 틱 아카이브는 하루 폴더 안에 국장·코인 파일이 같이 있고 manifest를 공유하므로 시장별로 나누지 않고 `market-data`에 둔다.
-- `tick-archive-manual`은 옛 수동 백업. 표본 40개 파일이 `tick-archive`의 gz와 체크섬 일치. 삭제 여부 미정.
+- `tick-archive-manual`(옛 수동 백업, 38G)은 1,228개 파일 전수 체크섬이 `tick-archive`와 일치해 2026-11-12 삭제했다.
 - 로그는 컨테이너 이름으로 분류한다(`scripts/linux/nas_backup.sh`의 `log_bucket`).
