@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -234,5 +235,53 @@ class KnowledgeArchiveServiceTest {
     String path = service(obsidian).archive(task, "# 제목\n\n본문");
 
     assertThat(path).startsWith("economy/").contains("financial-times");
+  }
+
+  // latestArchivedExcerpt() is SourceCollectionService's cheap pre-filter lookup -- these verify it finds
+  // the right file for both of archive()'s two collection layouts (shared security/뉴스 daily file vs. a
+  // per-source economy folder), falls back to yesterday's file when today's doesn't exist yet, and
+  // returns empty when there is genuinely nothing archived yet for that source.
+
+  @Test
+  void latestArchivedExcerpt_returnsTodaysSecurityNote_whenItExists(@TempDir Path obsidian) throws Exception {
+    WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
+    KnowledgeArchiveService service = service(obsidian);
+    service.archive(task, "# 랜섬웨어 동향\n\n오늘자 본문 내용입니다.");
+
+    Optional<String> content = service.latestArchivedExcerpt(TaskDomain.SECURITY, "[보안] Krebs on Security 파일 아카이브");
+
+    assertThat(content).isPresent();
+    assertThat(content.get()).contains("오늘자 본문 내용입니다.");
+  }
+
+  @Test
+  void latestArchivedExcerpt_fallsBackToYesterdaysNote_whenTodaysDoesNotExistYet(@TempDir Path obsidian) throws IOException {
+    Path yesterdayNote = obsidian.resolve("security/뉴스/" + LocalDate.now().minusDays(1) + ".md");
+    Files.createDirectories(yesterdayNote.getParent());
+    Files.writeString(yesterdayNote, "어제자 본문 내용입니다.");
+
+    Optional<String> content = service(obsidian).latestArchivedExcerpt(TaskDomain.SECURITY, "[보안] Krebs on Security 파일 아카이브");
+
+    assertThat(content).isPresent();
+    assertThat(content.get()).contains("어제자 본문 내용입니다.");
+  }
+
+  @Test
+  void latestArchivedExcerpt_returnsEmpty_whenNothingArchivedYet(@TempDir Path obsidian) {
+    Optional<String> content = service(obsidian).latestArchivedExcerpt(TaskDomain.SECURITY, "[보안] 존재하지 않는 소스 파일 아카이브");
+
+    assertThat(content).isEmpty();
+  }
+
+  @Test
+  void latestArchivedExcerpt_nonSecurityDomain_usesPerSourceFolderScheme(@TempDir Path obsidian) throws Exception {
+    WorkTask task = new WorkTask("[경제] Financial Times 파일 아카이브", "지시 내용", TaskDomain.ECONOMY, TaskOrigin.COLLECTION);
+    KnowledgeArchiveService service = service(obsidian);
+    service.archive(task, "# 제목\n\n경제 본문 내용입니다.");
+
+    Optional<String> content = service.latestArchivedExcerpt(TaskDomain.ECONOMY, "[경제] Financial Times 파일 아카이브");
+
+    assertThat(content).isPresent();
+    assertThat(content.get()).contains("경제 본문 내용입니다.");
   }
 }

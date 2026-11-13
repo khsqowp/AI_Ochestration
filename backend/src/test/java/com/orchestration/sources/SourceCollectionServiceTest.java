@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 
 import com.orchestration.calendar.SecurityCalendarService;
 import com.orchestration.files.FileProperties;
+import com.orchestration.tasks.KnowledgeArchiveService;
 import com.orchestration.tasks.LlmGateway;
 import com.orchestration.tasks.TaskDomain;
 import com.orchestration.tasks.TaskService;
@@ -49,11 +50,23 @@ class SourceCollectionServiceTest {
   private final Map<String, PageSnapshot> store = new HashMap<>();
   private SourceCollectionService service;
 
+  /** A bare {@code mock(KnowledgeArchiveService.class)} returns {@code null} (not {@code Optional.empty()})
+   * for an unstubbed {@code latestArchivedExcerpt} call, which would NPE inside
+   * {@code isNearDuplicateOfArchive}'s {@code .map(...)} chain. This gives every test that doesn't care
+   * about the near-duplicate behavior a safe default of "nothing archived yet" (never a duplicate),
+   * matching this suite's existing happy-path assumptions. Tests that specifically exercise the
+   * near-duplicate skip build and stub their own instance instead. */
+  private static KnowledgeArchiveService noPriorArchive() {
+    KnowledgeArchiveService archive = mock(KnowledgeArchiveService.class);
+    when(archive.latestArchivedExcerpt(any(), anyString())).thenReturn(Optional.empty());
+    return archive;
+  }
+
   private SourceCollectionService serviceAllowingLoopbackForLocalServer() {
     return new SourceCollectionService(mock(ResearchSourceService.class), new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L),
         mock(TaskService.class), mock(SecurityCalendarService.class), mock(LlmGateway.class),
         mock(GeminiCollectionBatchRepository.class), mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class),
-        mock(Executor.class), mock(CollectionSettingService.class)) {
+        mock(Executor.class), mock(CollectionSettingService.class), noPriorArchive()) {
       @Override InetAddress resolveAndValidate(URI uri) throws Exception { return InetAddress.getLoopbackAddress(); }
     };
   }
@@ -71,7 +84,7 @@ class SourceCollectionServiceTest {
         mock(ResearchSourceService.class), new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L),
         mock(TaskService.class), mock(SecurityCalendarService.class), mock(LlmGateway.class),
         mock(GeminiCollectionBatchRepository.class), snapshots, mock(TaskWorkflowRunner.class), mock(Executor.class),
-        mock(CollectionSettingService.class));
+        mock(CollectionSettingService.class), noPriorArchive());
   }
 
   @Test
@@ -265,7 +278,8 @@ class SourceCollectionServiceTest {
       SourceCollectionService target = new SourceCollectionService(sourceLookup,
           new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), mock(TaskService.class),
           mock(SecurityCalendarService.class), mock(LlmGateway.class), mock(GeminiCollectionBatchRepository.class),
-          mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class), mock(Executor.class), mock(CollectionSettingService.class));
+          mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class), mock(Executor.class), mock(CollectionSettingService.class),
+          noPriorArchive());
 
       SourceCollectionService.CollectionResult result = target.collectNow(source.getId());
 
@@ -294,6 +308,106 @@ class SourceCollectionServiceTest {
   @Test
   void submitBatchForSources_doesNotCallLlm_whenSavedPageHasBlankExcerpt() throws Exception {
     assertBatchDoesNotSubmit("<html><body>   </body></html>", 200, true);
+  }
+
+  // A page can hash-differ from its last crawl (ad rotation, listing reorder, a couple of genuinely-new
+  // snippets) yet still contain nothing substantively new relative to what's already archived for this
+  // source. These two verify that case is caught by the overlap-ratio pre-filter -- *before* a WorkTask
+  // (and the Gemini call behind it) is ever created -- the same way a zero-page/blank-excerpt crawl
+  // already short-circuits above.
+
+  private static final String NEW_LOOKING_PAGE_BODY =
+      "<html><body>Completely fresh-looking page body, long enough to produce a real non-blank excerpt "
+      + "with plenty of distinct terms for the overlap check to compare against the archived note below.</body></html>";
+
+  @Test
+  void collectNow_doesNotCreateTask_whenExcerptIsNearDuplicateOfArchive() throws Exception {
+    HttpServer server = sourceServer(NEW_LOOKING_PAGE_BODY, 200);
+    server.start();
+    Path originals = Files.createTempDirectory("source-collection-dup-test-");
+    try {
+      ResearchSource source = testSource(server);
+      ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
+      when(sourceLookup.get(source.getId())).thenReturn(source);
+      TaskService tasks = mock(TaskService.class);
+      SecurityCalendarService calendar = mock(SecurityCalendarService.class);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+      KnowledgeArchiveService archive = nearDuplicateArchive();
+      SourceCollectionService target = loopbackService(sourceLookup, new FileProperties(originals.toString(), "/tmp/obsidian", 30000L),
+          tasks, calendar, mock(LlmGateway.class), mock(GeminiCollectionBatchRepository.class), snapshots, archive);
+
+      SourceCollectionService.CollectionResult result = target.collectNow(source.getId());
+
+      assertThat(result.savedPages()).isEqualTo(1);
+      assertThat(result.analysisTaskId()).isNull();
+      verify(tasks, never()).create(anyString(), anyString(), any(), any(), any(UUID.class));
+      verify(calendar, never()).extractFromCollection(any(), anyString());
+    } finally { server.stop(0); deleteTree(originals); }
+  }
+
+  @Test
+  void submitBatchForSources_doesNotCallLlm_whenExcerptIsNearDuplicateOfArchive() throws Exception {
+    HttpServer server = sourceServer(NEW_LOOKING_PAGE_BODY, 200);
+    server.start();
+    Path originals = Files.createTempDirectory("source-batch-dup-test-");
+    try {
+      ResearchSource source = testSource(server);
+      TaskService tasks = mock(TaskService.class);
+      LlmGateway llm = mock(LlmGateway.class);
+      SecurityCalendarService calendar = mock(SecurityCalendarService.class);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+      KnowledgeArchiveService archive = nearDuplicateArchive();
+      SourceCollectionService target = loopbackService(mock(ResearchSourceService.class),
+          new FileProperties(originals.toString(), "/tmp/obsidian", 30000L), tasks, calendar, llm,
+          mock(GeminiCollectionBatchRepository.class), snapshots, archive);
+
+      target.submitBatchForSources(List.of(source));
+
+      verify(tasks, never()).createAwaitingBatch(anyString(), anyString(), any(), any(), any());
+      verify(llm, never()).collectPrompt(any(), anyString());
+      verify(llm, never()).submitCollectBatch(any());
+      verify(calendar, never()).extractFromCollection(any(), anyString());
+    } finally { server.stop(0); deleteTree(originals); }
+  }
+
+  @Test
+  void collectNow_stillCreatesTask_whenArchiveExistsButOverlapIsBelowThreshold() throws Exception {
+    HttpServer server = sourceServer(NEW_LOOKING_PAGE_BODY, 200);
+    server.start();
+    Path originals = Files.createTempDirectory("source-collection-lowoverlap-test-");
+    try {
+      ResearchSource source = testSource(server);
+      ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
+      when(sourceLookup.get(source.getId())).thenReturn(source);
+      TaskService tasks = mock(TaskService.class);
+      WorkTask created = mock(WorkTask.class);
+      when(created.getId()).thenReturn(UUID.randomUUID());
+      when(tasks.create(anyString(), anyString(), any(), any(), any(UUID.class))).thenReturn(created);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+      KnowledgeArchiveService archive = mock(KnowledgeArchiveService.class);
+      when(archive.latestArchivedExcerpt(any(), anyString())).thenReturn(Optional.of("완전히 무관한 과거 기사 내용"));
+      when(archive.overlapRatio(anyString(), anyString())).thenReturn(0.1);
+      SourceCollectionService target = loopbackService(sourceLookup, new FileProperties(originals.toString(), "/tmp/obsidian", 30000L),
+          tasks, mock(SecurityCalendarService.class), mock(LlmGateway.class), mock(GeminiCollectionBatchRepository.class), snapshots, archive);
+
+      SourceCollectionService.CollectionResult result = target.collectNow(source.getId());
+
+      assertThat(result.analysisTaskId()).isNotNull();
+      verify(tasks).create(anyString(), anyString(), any(), any(), any(UUID.class));
+    } finally { server.stop(0); deleteTree(originals); }
+  }
+
+  private static KnowledgeArchiveService nearDuplicateArchive() {
+    KnowledgeArchiveService archive = mock(KnowledgeArchiveService.class);
+    when(archive.latestArchivedExcerpt(any(), anyString())).thenReturn(Optional.of("이전에 이미 아카이브된 내용과 거의 동일한 발췌문입니다"));
+    when(archive.overlapRatio(anyString(), anyString())).thenReturn(0.95);
+    return archive;
   }
 
   private void assertCollectionDoesNotCreateTask(String responseBody, int status, boolean saved) throws Exception {
@@ -361,8 +475,14 @@ class SourceCollectionServiceTest {
 
   private static SourceCollectionService loopbackService(ResearchSourceService sources, FileProperties files,
       TaskService tasks, LlmGateway llm, GeminiCollectionBatchRepository batches, PageSnapshotRepository snapshots) {
-    return new SourceCollectionService(sources, files, tasks, mock(SecurityCalendarService.class), llm, batches,
-        snapshots, mock(TaskWorkflowRunner.class), Runnable::run, mock(CollectionSettingService.class)) {
+    return loopbackService(sources, files, tasks, mock(SecurityCalendarService.class), llm, batches, snapshots, noPriorArchive());
+  }
+
+  private static SourceCollectionService loopbackService(ResearchSourceService sources, FileProperties files,
+      TaskService tasks, SecurityCalendarService calendar, LlmGateway llm, GeminiCollectionBatchRepository batches,
+      PageSnapshotRepository snapshots, KnowledgeArchiveService archive) {
+    return new SourceCollectionService(sources, files, tasks, calendar, llm, batches,
+        snapshots, mock(TaskWorkflowRunner.class), Runnable::run, mock(CollectionSettingService.class), archive) {
       @Override InetAddress resolveAndValidate(URI uri) { return InetAddress.getLoopbackAddress(); }
     };
   }
@@ -410,7 +530,8 @@ class SourceCollectionServiceTest {
 
       SourceCollectionService target = new SourceCollectionService(mock(ResearchSourceService.class),
           new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), taskService, mock(SecurityCalendarService.class),
-          llm, batchRepository, snapshots, mock(TaskWorkflowRunner.class), Runnable::run, mock(CollectionSettingService.class)) {
+          llm, batchRepository, snapshots, mock(TaskWorkflowRunner.class), Runnable::run, mock(CollectionSettingService.class),
+          noPriorArchive()) {
         @Override InetAddress resolveAndValidate(URI uri) { return InetAddress.getLoopbackAddress(); }
       };
 
@@ -447,7 +568,7 @@ class SourceCollectionServiceTest {
     SourceCollectionService target = new SourceCollectionService(mock(ResearchSourceService.class),
         new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), taskService, mock(SecurityCalendarService.class),
         llm, batchRepository, mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class), mock(Executor.class),
-        mock(CollectionSettingService.class));
+        mock(CollectionSettingService.class), noPriorArchive());
 
     target.pollGeminiBatches();
 
@@ -479,7 +600,7 @@ class SourceCollectionServiceTest {
     SourceCollectionService target = new SourceCollectionService(mock(ResearchSourceService.class),
         new FileProperties("/tmp/originals", "/tmp/obsidian", 30000L), taskService, mock(SecurityCalendarService.class),
         llm, batchRepository, mock(PageSnapshotRepository.class), mock(TaskWorkflowRunner.class), mock(Executor.class),
-        mock(CollectionSettingService.class));
+        mock(CollectionSettingService.class), noPriorArchive());
 
     target.pollGeminiBatches();
 

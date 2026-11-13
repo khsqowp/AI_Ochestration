@@ -2,6 +2,7 @@ package com.orchestration.sources;
 
 import com.orchestration.calendar.SecurityCalendarService;
 import com.orchestration.files.FileProperties;
+import com.orchestration.tasks.KnowledgeArchiveService;
 import com.orchestration.tasks.LlmGateway;
 import com.orchestration.tasks.TaskDomain;
 import com.orchestration.tasks.TaskOrigin;
@@ -87,6 +88,9 @@ public class SourceCollectionService {
   private final TaskWorkflowRunner runner;
   private final Executor collectionExecutor;
   private final CollectionSettingService collectionSettings;
+  private final KnowledgeArchiveService archive;
+  // Same threshold KnowledgeArchiveService.sameMaterial() already uses for its own near-duplicate check.
+  private static final double NEAR_DUPLICATE_OVERLAP_THRESHOLD = 0.82;
   // Critical #1 -- Redirect.NEVER + manual hop-by-hop following in sendValidated() below is deliberate:
   // the JDK client would otherwise resolve and connect to every redirect hop (including the terminal one)
   // before this code ever gets a chance to inspect where it landed, so validating only the final
@@ -105,10 +109,11 @@ public class SourceCollectionService {
 
   SourceCollectionService(ResearchSourceService sources, FileProperties files, TaskService tasks, SecurityCalendarService calendar,
       LlmGateway llm, GeminiCollectionBatchRepository batches, PageSnapshotRepository snapshots, TaskWorkflowRunner runner,
-      @Qualifier("sourceCollectionExecutor") Executor collectionExecutor, CollectionSettingService collectionSettings) {
+      @Qualifier("sourceCollectionExecutor") Executor collectionExecutor, CollectionSettingService collectionSettings,
+      KnowledgeArchiveService archive) {
     this.sources = sources; this.files = files; this.tasks = tasks; this.calendar = calendar;
     this.llm = llm; this.batches = batches; this.snapshots = snapshots; this.runner = runner; this.collectionExecutor = collectionExecutor;
-    this.collectionSettings = collectionSettings;
+    this.collectionSettings = collectionSettings; this.archive = archive;
   }
 
   /** Nightly routine collection: submitted to Gemini's Batch API (50% cost) rather than run in real
@@ -162,13 +167,43 @@ public class SourceCollectionService {
   private CollectionResult collect(ResearchSource source, boolean manual) {
     CrawlOutcome outcome = crawl(source, manual);
     String excerpt = outcome.changed() > 0 && outcome.saved() > 0 ? excerptFrom(outcome.changedPaths()) : "";
-    boolean hasUsableContent = outcome.changed() > 0 && outcome.saved() > 0 && !excerpt.isBlank();
+    boolean hasUsableContent = outcome.changed() > 0 && outcome.saved() > 0 && !excerpt.isBlank() && !isNearDuplicateOfArchive(source, excerpt);
     WorkTask analysisTask = hasUsableContent ? tasks.create(
-        "[%s] %s 파일 아카이브".formatted(source.getDomain() == ResearchDomain.SECURITY ? "보안" : "경제", source.getName()),
+        taskTitle(source),
         buildInstruction(source, outcome.changed(), excerpt),
         source.getDomain() == ResearchDomain.SECURITY ? TaskDomain.SECURITY : TaskDomain.ECONOMY, TaskOrigin.COLLECTION, source.getId()) : null;
     if (hasUsableContent && source.getDomain() == ResearchDomain.SECURITY) calendar.extractFromCollection(source, excerpt);
     return new CollectionResult(outcome.saved(), outcome.changed(), outcome.failed(), outcome.visited(), source.getCrawlDepth(), source.getMaxPages(), outcome.warning(), analysisTask == null ? null : analysisTask.getId());
+  }
+
+  /** The crafted WorkTask title both {@link #collect} and {@link #crawlAndEnqueue} use for a source's
+   * analysis task — factored out since {@link #isNearDuplicateOfArchive} also needs it, to look up where
+   * {@code KnowledgeArchiveService} would have filed this source's most recently archived note (that
+   * lookup is keyed off this exact title string, see {@code KnowledgeArchiveService.archive()}'s
+   * title-based slug). */
+  private String taskTitle(ResearchSource source) {
+    return "[%s] %s 파일 아카이브".formatted(source.getDomain() == ResearchDomain.SECURITY ? "보안" : "경제", source.getName());
+  }
+
+  /** Cheap, non-AI pre-filter layered in front of the byte-hash {@link #contentChanged} gate: that gate
+   * only catches a page that is literally unchanged, but a page can hash-differ (ad rotation, a visit
+   * counter, listing reordering, a couple of genuinely-new snippets on a listing page) without containing
+   * anything substantively new relative to what's already archived for this source. Reuses
+   * {@code KnowledgeArchiveService}'s existing Jaccard-overlap heuristic (same 0.82 threshold its own
+   * {@code sameMaterial()} uses) one layer earlier, before a WorkTask — and the Gemini call behind it —
+   * is ever created. This does not replace {@code TaskWorkflowRunner}'s {@code NO_NEW_CONTENT} LLM
+   * fallback, which stays as a safety net for near-duplicates this cheaper check doesn't catch (e.g. a
+   * genuinely new article URL whose content happens to only partially overlap). */
+  private boolean isNearDuplicateOfArchive(ResearchSource source, String excerpt) {
+    TaskDomain domain = source.getDomain() == ResearchDomain.SECURITY ? TaskDomain.SECURITY : TaskDomain.ECONOMY;
+    return archive.latestArchivedExcerpt(domain, taskTitle(source))
+        .map(previous -> {
+          double ratio = archive.overlapRatio(previous, excerpt);
+          boolean duplicate = ratio >= NEAR_DUPLICATE_OVERLAP_THRESHOLD;
+          if (duplicate) log.info("research_source_near_duplicate_skipped sourceId={} overlapRatio={}", source.getId(), ratio);
+          return duplicate;
+        })
+        .orElse(false);
   }
 
   /** Package-visible so tests can exercise the lock primitive directly (racing real threads through the
@@ -261,10 +296,11 @@ public class SourceCollectionService {
     if (outcome.saved() == 0) return null;
     String excerpt = excerptFrom(outcome.changedPaths());
     if (excerpt.isBlank()) return null;
+    if (isNearDuplicateOfArchive(source, excerpt)) return null;
     TaskDomain domain = source.getDomain() == ResearchDomain.SECURITY ? TaskDomain.SECURITY : TaskDomain.ECONOMY;
     String instruction = buildInstruction(source, outcome.changed(), excerpt);
     WorkTask task = tasks.createAwaitingBatch(
-        "[%s] %s 파일 아카이브".formatted(source.getDomain() == ResearchDomain.SECURITY ? "보안" : "경제", source.getName()),
+        taskTitle(source),
         instruction, domain, TaskOrigin.COLLECTION, source.getId());
     if (source.getDomain() == ResearchDomain.SECURITY) calendar.extractFromCollection(source, excerpt);
     return new PendingBatchItem(task, llm.collectPrompt(domain, instruction));

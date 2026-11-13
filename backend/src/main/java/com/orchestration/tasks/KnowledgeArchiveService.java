@@ -36,9 +36,8 @@ public class KnowledgeArchiveService {
     String domain = task.getDomain() == TaskDomain.GENERAL ? "ideas" : task.getDomain().name().toLowerCase(Locale.ROOT);
     Path root = Path.of(files.obsidianPath()).toAbsolutePath().normalize();
     String title = archiveTitle(task.getTitle(), report);
-    String slug = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9가-힣]+", "-").replaceAll("(^-|-$)", "");
-    if (slug.isBlank()) slug = "task";
-    String topic = slug.length() > 48 ? slug.substring(0, 48).replaceAll("-$", "") : slug;
+    String slug = slugify(title);
+    String topic = topicFromSlug(slug);
 
     if (task.getOrigin() == TaskOrigin.COLLECTION) return archiveDaily(root, domain, topic, title, task, report);
 
@@ -69,13 +68,68 @@ public class KnowledgeArchiveService {
     if (SecurityCategoryClassifier.SECURITY_DOMAIN.equals(domain)) {
       return archiveDailyByCategory(root, domain, sourceTitle, task, report);
     }
-    String sourceStem = topic.replaceFirst("-파일-아카이브$", "");
-    Path directory = root.resolve(domain).resolve(sourceStem);
-    Files.createDirectories(directory);
     LocalDate today = LocalDate.now();
-    Path note = directory.resolve(today + "-" + sourceStem + ".md");
+    Path note = collectionNotePath(root, domain, topic, today);
+    Files.createDirectories(note.getParent());
     String dailyTitle = sourceTitle + " (" + today + ")";
     return writeOrAppend(root, note, domain, dailyTitle, task, report);
+  }
+
+  /** Where a given collection source's daily note lives for (domain, topic, date) — shared by
+   * {@link #archiveDaily}/{@link #archiveDailyByCategory} when writing, and by
+   * {@link #latestArchivedExcerpt} when reading, so both sides of this path layout can never drift apart.
+   * {@code topic} is ignored for the SECURITY branch (that file is shared across all security sources, not
+   * per-source) — callers that only need the SECURITY case may pass any string, including blank. */
+  private Path collectionNotePath(Path root, String domain, String topic, LocalDate date) {
+    if (SecurityCategoryClassifier.SECURITY_DOMAIN.equals(domain)) {
+      return root.resolve(domain).resolve(SecurityCategoryClassifier.NEWS_SEGMENT).resolve(date + ".md");
+    }
+    String sourceStem = topic.replaceFirst("-파일-아카이브$", "");
+    return root.resolve(domain).resolve(sourceStem).resolve(date + "-" + sourceStem + ".md");
+  }
+
+  /**
+   * Best-effort lookup of the most recently archived note content for a collection source, so callers
+   * (currently {@code SourceCollectionService}) can cheaply pre-filter near-duplicate crawls — comparing
+   * against this via {@link #overlapRatio} — before a WorkTask/LLM call is even created. Falls back to
+   * the previous day's file when today's hasn't been written yet (e.g. the very first crawl of the day
+   * for that source), so that case isn't compared against nothing. Returns empty when neither exists
+   * (nothing archived yet for this source — treat as "not a duplicate", there's nothing to be a duplicate
+   * of). {@code craftedTitle} must be the same "[도메인] 소스명 파일 아카이브"-style title the collection
+   * pipeline always uses as the WorkTask title, since that's what the archived note's path is derived from.
+   */
+  public Optional<String> latestArchivedExcerpt(TaskDomain taskDomain, String craftedTitle) {
+    String domain = taskDomain == TaskDomain.GENERAL ? "ideas" : taskDomain.name().toLowerCase(Locale.ROOT);
+    Path root = Path.of(files.obsidianPath()).toAbsolutePath().normalize();
+    String topic = topicFromSlug(slugify(craftedTitle));
+    LocalDate today = LocalDate.now();
+    Optional<String> todayContent = readNoteIfExists(collectionNotePath(root, domain, topic, today));
+    if (todayContent.isPresent()) return todayContent;
+    return readNoteIfExists(collectionNotePath(root, domain, topic, today.minusDays(1)));
+  }
+
+  private Optional<String> readNoteIfExists(Path note) {
+    if (!Files.exists(note)) return Optional.empty();
+    try {
+      return Optional.of(Files.readString(note, StandardCharsets.UTF_8));
+    } catch (IOException exception) {
+      log.warn("archived_note_read_failed path={}", note, exception);
+      return Optional.empty();
+    }
+  }
+
+  /** Slugifies a title the same way {@link #archive} always has: lowercase, non-alnum/non-한글 runs
+   * collapsed to a single hyphen, leading/trailing hyphens trimmed. Falls back to {@code "task"} so an
+   * all-punctuation title never produces a blank path segment. */
+  private String slugify(String title) {
+    String slug = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9가-힣]+", "-").replaceAll("(^-|-$)", "");
+    return slug.isBlank() ? "task" : slug;
+  }
+
+  /** {@link #archive} has always capped the directory-topic segment derived from a slug at 48 chars
+   * (full titles can run long; the slug itself is kept unbounded for callers that need the whole thing). */
+  private String topicFromSlug(String slug) {
+    return slug.length() > 48 ? slug.substring(0, 48).replaceAll("-$", "") : slug;
   }
 
   /**
@@ -92,7 +146,7 @@ public class KnowledgeArchiveService {
   private String archiveDailyByCategory(Path root, String domain, String sourceTitle, WorkTask task, String report) throws IOException {
     LocalDate today = LocalDate.now();
     Path newsRoot = root.resolve(domain).resolve(SecurityCategoryClassifier.NEWS_SEGMENT);
-    Path note = newsRoot.resolve(today + ".md");
+    Path note = collectionNotePath(root, domain, "", today);
     List<String> knownTypes = readNewsTypeRegistry(newsRoot);
     List<SecurityNewsItemClassifier.NewsItem> items = newsItemClassifier.split(sourceTitle, report, knownTypes);
     growNewsTypeRegistry(newsRoot, knownTypes, items);
@@ -304,9 +358,10 @@ public class KnowledgeArchiveService {
     return overlapRatio(existing, incoming) >= 0.82;
   }
 
-  /** Package-visible so {@link ArchiveMaintenanceService} can cheaply pre-filter cross-topic duplicate
-   * candidates locally, before spending an LLM call confirming and merging any of them. */
-  double overlapRatio(String left, String right) {
+  /** Public so {@link ArchiveMaintenanceService} and {@code SourceCollectionService} (a different
+   * package) can cheaply pre-filter duplicate candidates locally, before spending an LLM call confirming
+   * and merging any of them. */
+  public double overlapRatio(String left, String right) {
     Set<String> a = terms(left);
     Set<String> b = terms(right);
     if (a.isEmpty() || b.isEmpty()) return 0;
