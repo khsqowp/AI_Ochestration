@@ -241,7 +241,7 @@ public class SourceCollectionService {
     try {
       URI root = URI.create(source.getUrl());
       String allowedHost = root.getHost().toLowerCase(Locale.ROOT);
-      List<String> allowedPathPrefix = pathSegments(root.getPath());
+      List<String> allowedPathPrefix = allowedPathPrefixFor(root);
       RobotsRules robots = fetchRobotsRules(root);
       long delayMs = Math.min(Math.max(robots.crawlDelayMs(), MIN_DELAY_MS), MAX_DELAY_MS);
       boolean firstFetch = true;
@@ -612,6 +612,26 @@ public class SourceCollectionService {
     for (int i = 0; i < rootSegments.size(); i++) if (!linkSegments.get(i).equals(rootSegments.get(i))) return false;
     return true;
   }
+
+  /** The registered source URL's path often ends in a listing-page filename (e.g.
+   * "/news/articleList.html") rather than a bare directory. Using that filename itself as the last
+   * required prefix segment meant a sibling detail page in the very same directory but under a
+   * different filename (e.g. "/news/articleView.html" -- the extremely common listing/detail split on
+   * news and blog sites) failed {@link #withinRootPath} and never got crawled at depth&gt;0, even though
+   * it is clearly within the intended site section. Stripping a filename-shaped last segment narrows the
+   * boundary check down to "same host + same directory (or deeper)", which keeps the original
+   * out-of-section scoping intent while allowing same-directory siblings through. A root path with no
+   * filename (e.g. "/news/" or "/blog") has nothing filename-shaped to strip and is left untouched, and a
+   * blank/"/" root still falls through {@link #pathSegments} to the universal-match empty list. */
+  List<String> allowedPathPrefixFor(URI root) {
+    List<String> segments = pathSegments(root.getPath());
+    if (segments.isEmpty()) return segments;
+    String last = segments.get(segments.size() - 1);
+    if (!looksLikeFilename(last)) return segments;
+    return segments.subList(0, segments.size() - 1);
+  }
+
+  private boolean looksLikeFilename(String pathSegment) { return pathSegment.contains("."); }
 
   private Path destinationFor(ResearchSource source, URI page, String contentType) {
     String host = page.getHost().replaceAll("[^a-zA-Z0-9.-]", "_");

@@ -191,6 +191,50 @@ class SourceCollectionServiceTest {
     assertThat(service.pathSegments("/deeplinks/")).isEqualTo(service.pathSegments("/deeplinks"));
   }
 
+  @Test
+  void filenameEndedRootPath_allowsASiblingFilenameLinkInTheSameDirectory() {
+    // Registered as a listing page (e.g. boannews.com/news/articleList.html); the real article links
+    // discovered on that page share the directory but use a different filename (articleView.html).
+    List<String> root = service.allowedPathPrefixFor(URI.create("https://www.boannews.com/news/articleList.html?view_type=sm"));
+
+    assertThat(service.withinRootPath(root, URI.create("https://www.boannews.com/news/articleView.html?idxno=12345"))).isTrue();
+  }
+
+  @Test
+  void filenameEndedRootPath_stillRejectsASiblingDirectory() {
+    List<String> root = service.allowedPathPrefixFor(URI.create("https://www.boannews.com/news/articleList.html?view_type=sm"));
+
+    assertThat(service.withinRootPath(root, URI.create("https://www.boannews.com/opinion/articleView.html?idxno=1"))).isFalse();
+  }
+
+  @Test
+  void filenameEndedRootPath_doesNotItselfCheckHost_thatIsSameHostsJob() {
+    // withinRootPath only ever looks at the link's path; doCrawl() separately requires the private
+    // sameHost() check to also pass, so a different host sharing the same path shape is rejected by that
+    // check, not this one -- confirmed here only indirectly, by this method staying permissive about host.
+    List<String> root = service.allowedPathPrefixFor(URI.create("https://www.boannews.com/news/articleList.html?view_type=sm"));
+
+    assertThat(service.withinRootPath(root, URI.create("https://www.other.com/news/articleView.html?idxno=1"))).isTrue();
+  }
+
+  @Test
+  void directoryEndedRootPath_isUnaffectedByTheFilenameStrippingRule() {
+    List<String> withTrailingSlash = service.allowedPathPrefixFor(URI.create("https://www.eff.org/deeplinks/"));
+    List<String> withoutTrailingSlash = service.allowedPathPrefixFor(URI.create("https://www.eff.org/deeplinks"));
+
+    assertThat(withTrailingSlash).isEqualTo(service.pathSegments("/deeplinks"));
+    assertThat(withoutTrailingSlash).isEqualTo(service.pathSegments("/deeplinks"));
+    assertThat(service.withinRootPath(withTrailingSlash, URI.create("https://www.eff.org/deeplinks/2026/07/21/some-post"))).isTrue();
+    assertThat(service.withinRootPath(withTrailingSlash, URI.create("https://www.eff.org/donate"))).isFalse();
+  }
+
+  @Test
+  void rootOrBlankPath_stillMatchesEverythingAfterPrefixComputation() {
+    assertThat(service.allowedPathPrefixFor(URI.create("https://www.eff.org/"))).isEmpty();
+    assertThat(service.allowedPathPrefixFor(URI.create("https://www.eff.org"))).isEmpty();
+    assertThat(service.withinRootPath(service.allowedPathPrefixFor(URI.create("https://www.eff.org/")), URI.create("https://www.eff.org/donate"))).isTrue();
+  }
+
   // Medium #10 -- collectNow() (manual button) and the scheduled retry/nightly sweeps can all reach crawl()
   // for the same source concurrently. contentChanged()'s read-then-write on PageSnapshot isn't atomic across
   // two such calls, so both can see "changed" for the same page and each spin up its own duplicate analysis
