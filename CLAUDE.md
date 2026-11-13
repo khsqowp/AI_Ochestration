@@ -33,6 +33,18 @@
 - 내용물은 HS256 JWT(`JwtService.java`), 서명 키는 env var `JWT_SECRET`. Claims: `sub`(userId), `email`, `role`, `jti`, 7일 만료.
 - 서브도메인 간 SSO가 필요하면: (1) `AuthController.cookie()`의 `ResponseCookie.from(...)`에 `.domain(".khsqowp1.my")` 추가, (2) 연동할 서비스가 같은 `JWT_SECRET`으로 HS256 서명을 검증. 아직 안 돼 있음 — `ochestration_finance/CLAUDE.md`에 상태 적어둠.
 
+## 자동 배포 (`scripts/linux/auto_deploy.sh`, 2026-11-12 fable-claude-session 구현)
+
+GitHub Actions 셀프호스트 러너 대신 **pull 방식 cron 배포**로 감(fork PR이 셀프호스트 러너에서 임의 코드 실행하는 보안 리스크 회피 — 원래 러너 제안을 fable이 이 이유로 반대해서 교체됨).
+
+- linuxserver crontab에 `*/5 * * * * auto_deploy.sh` 등록됨. `origin main` fetch → `local_sha == remote_sha`면 아무것도 안 함.
+- 체크아웃이 `main` 브랜치가 아니거나 tracked 파일에 수정사항 있으면(dirty) **머지 안 하고 Slack 알림만 내고 중단**. `merge --ff-only`만 씀 — fast-forward 안 되면(diverged) 역시 알림 내고 중단, 강제 머지 없음.
+- **`trading/*`, `docker-compose.trading.yml`만 바뀐 커밋은 배포 자체를 스킵**한다(trading-only 변경 감지는 `git diff --name-only`로 판단). 빌드/업 대상은 `-f docker-compose.yml -f docker-compose.crypto-data.yml`뿐이고 `docker-compose.trading.yml`은 **절대 compose args에 안 들어감** — 실거래 코인 봇(현재 `trading-momentum-rotation`, [[project-live-bot-status-correction]])은 항상 SSH 수동 배포만, 자동배포 경로에서 의도적으로 제외됨.
+- 실패하면 해당 `remote_sha`를 `failed-sha` 파일에 적어서 다음 실행에서 같은 실패를 반복 재시도하지 않음(새 커밋 와야 재시도). fetch가 3회 연속 실패하면 Slack 알림. 빌드/업 실패, 복구, 배포 성공 시에도 각각 Slack 알림(`scripts/linux/notify.sh`, env `SLACK_WEBHOOK_URL`, 중복 알림은 기본 6시간 억제).
+- `~/.local/state/ochestration/deploy/PAUSE` 파일을 만들어두면 자동배포 전체가 통째로 스킵됨(수동 비상정지용, 파일 지우면 재개). 같은 디렉터리의 `lock/`으로 중복 실행 방지(1시간 넘은 lock은 stale로 보고 자동 해제).
+- 로그: `~/logs/host/auto-deploy.log`(1MB 넘으면 `.1`로 롤오버), cron 실행 자체 로그는 `~/logs/host/auto-deploy-cron.log`.
+- **결과적으로: Mac에서 `git push origin main`만 하면 5분 안에 linuxserver에 반영됨** (trading 전용 변경은 제외). `ochestration_finance`는 이 자동배포 대상이 아님(별도 디렉터리, git repo 아님) — 그쪽은 여전히 수동 rsync+`docker compose up -d --build`로 배포(`ochestration_finance/CLAUDE.md` 참고).
+
 ## 관련 디렉터리
 
 - `/Users/user/CODE/ochestration_finance` — 새로 만든 개인 금융 관리 페이지. 별도 repo, `finance.khsqowp1.my` 라우트 연결됨, 포트 5555. 자세한 건 그쪽 `CLAUDE.md` 참고.
