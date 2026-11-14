@@ -6,7 +6,8 @@ import { DISCLAIMER, Note, Readout, TextInput } from '../payloads/shared'
 
 type MethodProbe = { id: string; method: string; checkpoint: string }
 type PathProbe = { id: string; title: string; checkpoint: string; suffix: string }
-type HeaderProbe = { id: string; title: string; checkpoint: string; method?: string; usesRedirectTarget?: boolean; redirectNote?: string; extraHeaderLines: (redirectTarget: string) => string[] }
+type HeaderProbe = { id: string; title: string; checkpoint: string; method?: string; body?: string; usesRedirectTarget?: boolean; redirectNote?: string; extraHeaderLines: (redirectTarget: string) => string[] }
+type ProtocolProbe = { id: string; title: string; option: string; checkpoint: string }
 
 const METHODS: MethodProbe[] = [
   { id: 'options', method: 'OPTIONS', checkpoint: '가장 직접적인 1차 지표. 응답 `Allow:` 헤더에 서버가 실제로 매핑한 메서드가 그대로 나열됨 — PUT/DELETE 등 숨은 위험 메서드 존재 여부를 추측 없이 바로 확인.' },
@@ -38,6 +39,10 @@ const PATHS: PathProbe[] = [
   { id: 'rails-routing-error', title: 'Rails 라우팅 에러 유도 (존재하지 않는 세그먼트)', suffix: '/__nonexistent_route_zz__', checkpoint: 'RAILS_ENV를 명시적으로 지정하지 않으면 Rails 기본값은 development — 매칭되는 라우트가 없으면 `ActionController::RoutingError (No route matches [GET] "...")` 전체 백트레이스가 HTML로 그대로 노출되며 Rails/Ruby 버전, gem 설치 경로까지 드러남. RAILS_ENV=production(표준 배포 관행)이면 대신 일반 404 페이지로 대체되어 노출 안 됨.' },
   { id: 'werkzeug-debugger-probe', title: 'Werkzeug 디버거 콘솔 활성 여부 핑거프린트', suffix: '?__debugger__=yes&cmd=resource&f=style.css', checkpoint: 'Flask/Werkzeug가 debug=True(use_debugger 활성)로 뜬 상태면 DebuggedApplication 미들웨어가 이 특정 쿼리스트링을 가로채 디버거 정적 리소스를 조건 없이 그대로 반환 — 응답 Content-Type이 text/css이고 본문에 디버거 전용 CSS가 보이면 디버그 모드 활성 확정. 이 상태면 추가로 cmd=resource&f=debugger.js, 혹은 PIN 추정을 통해 콘솔 직접 접근(임의 코드 실행)까지 이어질 수 있는 매우 높은 심각도 — 본 도구는 탐지용 페이로드만 제공.' },
   { id: 'iis-handler-mapping-404', title: 'IIS 핸들러 매핑 실패 유도 (.aspx 미존재 파일)', suffix: '/__nonexistent__.aspx', checkpoint: 'IIS httpErrors 기본 errorMode는 DetailedLocalOnly — 원칙적으로 원격 요청에는 상세 에러 대신 친화적 페이지만 노출되어야 함. 하지만 운영 중 디버깅 목적으로 errorMode="Detailed"로 바꾼 뒤 되돌리지 않은 서버가 드물지 않음. 그 경우 `HTTP Error 404.0 - Not Found` 화면에 물리 경로(C:\\inetpub\\wwwroot\\...), 요청 URL, 처리 모듈/핸들러명까지 그대로 노출됨 — errorMode가 기본값 그대로라면 이 항목은 신호 없음에 유의.' },
+  { id: 'iis-backslash-traversal', title: 'IIS 백슬래시 경로 정규화', suffix: '\\..\\..\\__error_probe__', checkpoint: 'Windows/IIS 경로 처리에서 백슬래시가 경로 구분자로 취급되는 구성이 있어 프록시의 슬래시 정규화와 IIS의 경로 해석 결과가 달라지는지 비교한다. 최신 IIS 요청 필터링과 URL Rewrite 설정은 비정상 경로를 거부할 수 있으며, 이 입력만으로 취약성을 단정할 수 없다.' },
+  { id: 'unicode-fullwidth-path', title: '전각 점·슬래시 정규화', suffix: '/%EF%BC%8E%EF%BC%8E%EF%BC%8F__error_probe__', checkpoint: 'U+FF0E 전각 점과 U+FF0F 전각 슬래시를 중간 프록시나 애플리케이션이 ASCII로 호환 정규화(NFKC 등)하는지 확인하는 차등 입력이다. HTTP 서버가 기본적으로 이 문자를 `../`로 바꾸지는 않으며, 변환 계층이 없으면 보통 일반 404로 끝난다.' },
+  { id: 'trailing-dot', title: '경로 끝 점 (/admin.)', suffix: '/admin.', checkpoint: 'Windows 파일시스템은 파일 경로 구성요소 끝의 점/공백을 정규화하는 경우가 있지만 IIS URL 라우팅에서 이를 항상 제거하는 것은 아니다. `/admin`과 상태·리다이렉트·본문이 달라지는지 비교하고, IIS Request Filtering 및 앱 라우팅의 정규화 설정에 따라 신호가 없을 수 있다.' },
+  { id: 'integer-overflow-query', title: '정수 범위 초과 쿼리 (?id=매우 큰 정수)', suffix: '?id=99999999999999999999999999999999999999', checkpoint: 'Java `Long.parseLong`은 범위를 넘는 값을 `NumberFormatException`으로 거부한다. 이를 처리하지 못한 구형/커스텀 핸들러에서 500 기본 오류 페이지나 개발 모드 스택이 나타나는지 확인한다. Spring Boot 운영 오류 처리와 유효성 검사가 적용되면 상세 정보는 숨겨지는 것이 정상이다.' },
 ]
 
 const HEADERS: HeaderProbe[] = [
@@ -46,8 +51,8 @@ const HEADERS: HeaderProbe[] = [
   { id: 'forwarded-server', title: 'X-Forwarded-Server', usesRedirectTarget: true, extraHeaderLines: target => [`X-Forwarded-Server: ${target}`], checkpoint: '프록시 서버명 신뢰 여부 확인용. Apache mod_proxy 일부 구성에서 이 값을 그대로 로그/헤더에 반영 — 반영되면 로그 인젝션 벡터로도 활용 가능.' },
   { id: 'original-url', title: 'X-Original-URL', extraHeaderLines: () => ['X-Original-URL: /admin'], checkpoint: '일부 프레임워크(과거 Rails, 일부 WAF 뒤 구성)가 실제 라우팅 경로로 이 헤더를 덮어씀 — 원래 경로로는 막혔던 /admin이 200으로 열리면 접근 제어 우회 확정.' },
   { id: 'rewrite-url', title: 'X-Rewrite-URL', extraHeaderLines: () => ['X-Rewrite-URL: /admin'], checkpoint: 'X-Original-URL과 동일 계열의 다른 헤더명. 둘 다 시도해 어느 쪽이 실제로 라우팅에 영향을 주는지 비교.' },
-  { id: 'empty-json-body', title: 'Content-Type: application/json + 빈 본문 (POST)', method: 'POST', extraHeaderLines: () => ['Content-Type: application/json'], checkpoint: 'Spring Boot(Jackson)에서 자주 재현되는 실제 결함 — 본문이 완전히 비어 있으면 `JsonMappingException: No content to map due to end-of-input` 스택이 Whitelabel Error Page trace 필드에 그대로 노출.' },
-  { id: 'empty-boundary', title: '빈 multipart boundary (POST)', method: 'POST', extraHeaderLines: () => ['Content-Type: multipart/form-data; boundary='], checkpoint: 'multipart 파서가 빈 boundary를 못 찾으면 예외 발생 — Spring/Commons-FileUpload 계열은 스택 트레이스에 라이브러리 버전(클래스 패키지 경로)까지 노출되는 경우가 많음.' },
+  { id: 'empty-json-body', title: 'Content-Type: application/json + 빈 본문 (POST)', method: 'POST', body: '', extraHeaderLines: () => ['Content-Type: application/json'], checkpoint: 'Spring Boot(Jackson)에서 자주 재현되는 실제 결함 — 본문이 완전히 비어 있으면 `JsonMappingException: No content to map due to end-of-input` 스택이 Whitelabel Error Page trace 필드에 그대로 노출.' },
+  { id: 'empty-boundary', title: '빈 multipart boundary (POST)', method: 'POST', body: '', extraHeaderLines: () => ['Content-Type: multipart/form-data; boundary='], checkpoint: 'multipart 파서가 빈 boundary를 못 찾으면 예외 발생 — Spring/Commons-FileUpload 계열은 스택 트레이스에 라이브러리 버전(클래스 패키지 경로)까지 노출되는 경우가 많음.' },
   { id: 'negative-length', title: '음수 Content-Length', extraHeaderLines: () => ['Content-Length: -1'], checkpoint: '대부분 400으로 조용히 처리돼 신호가 약함 — 그래도 응답 바디가 서버 기본 400 화면이면 Server 헤더와 함께 1차 지표로는 활용.' },
   { id: 'expect', title: 'Expect: 100-continue', extraHeaderLines: () => ['Expect: 100-continue'], checkpoint: '최신 서버는 대부분 정상 처리해 신호가 약함. 다만 리버스 프록시 체인에서 100-continue 처리 방식이 레이어마다 다르면 응답 지연 차이로 프록시/WAS 구성 단수·다단 여부를 추정 가능.' },
   { id: 'range', title: '과도한 Range (bytes=0-99999999999999)', extraHeaderLines: () => ['Range: bytes=0-99999999999999'], checkpoint: '정적 파일 응답 시 416 Range Not Satisfiable — Apache/nginx 기본 바디는 정확히 `<title>416 Requested Range Not Satisfiable</title>` 형태로 떨어지며 서버명이 함께 노출.' },
@@ -58,6 +63,19 @@ const HEADERS: HeaderProbe[] = [
   { id: 'forwarded-for-ip-bypass', title: 'X-Forwarded-For IP 스푸핑 (접근 제어 우회)', usesRedirectTarget: true, redirectNote: '응답이 200으로 바뀌거나 평소 막혀 있던 내부망 전용 콘텐츠가 노출되면, 입력한 IP가 그대로 신뢰됐다는 뜻으로 접근 제어 우회가 확정됩니다. (Location/링크 반영과는 무관한 신호입니다.)', extraHeaderLines: target => [`X-Forwarded-For: ${target}`], checkpoint: '신뢰 가능한 프록시 체인 검증 없이 X-Forwarded-For의 첫 값을 그대로 클라이언트 IP로 신뢰하는 앱이 있음 — 127.0.0.1이나 10.0.0.1 같은 내부 IP를 스푸핑 대상 입력란에 넣고 보내면, IP 기반 allowlist로 막혀 있던 관리자 전용/내부망 전용 엔드포인트가 열리는지 확인. 동일 계열로 X-Real-IP, X-Client-IP, True-Client-IP 헤더명도 앱에 따라 대신 신뢰될 수 있어 함께 시도할 가치가 있음.' },
   { id: 'transfer-encoding-cl-conflict', title: 'Transfer-Encoding: chunked + Content-Length 동시 전송 (요청 스머글링 지표)', method: 'POST', extraHeaderLines: () => ['Transfer-Encoding: chunked', 'Content-Length: 4'], checkpoint: 'RFC 7230 §3.3.3은 두 헤더가 동시에 있으면 Transfer-Encoding을 우선하고 메시지를 거부하거나 Content-Length를 무시하도록 요구 — 프록시와 백엔드가 서로 다르게 해석하면 TE.CL/CL.TE 요청 스머글링으로 이어짐. curl/libcurl은 이 조합을 자동으로 정규화해버리므로 반드시 Burp Repeater raw 탭이나 nc/openssl s_client로 직접 전송해야 의미가 있음 — 전송 즉시 400으로 거부되면 스머글링에 대해 보수적인 서버, 200으로 통과되면 추가 조사 대상.' },
   { id: 'accept-unsupported-media', title: '지원하지 않는 Accept 헤더 (콘텐츠 협상 406 유도)', extraHeaderLines: () => ['Accept: application/this-type-does-not-exist'], checkpoint: '엔드포인트가 특정 produces 타입만 지원하도록 선언된 경우(예: Spring MVC @RequestMapping(produces=...)), 클라이언트가 그 타입을 전혀 받아들이지 않겠다고 선언하면 기본적으로 406 Not Acceptable 에러 페이지가 떨어짐 — 커스텀 에러 핸들러가 없으면 Spring Boot는 Whitelabel Error Page(JSON/HTML)로 프레임워크·버전 정보가 노출될 수 있음. 프레임워크별 폴백 동작(406을 내는지, 임의 포맷으터로 폴백하는지)이 달라 비교 포인트로도 활용.' },
+  { id: 'unknown-host', title: '존재하지 않는 Host / 기본 vhost 폴백', extraHeaderLines: () => ['Host: nonexistent-vhost.invalid'], checkpoint: 'Host 기반 가상호스트가 일치하지 않을 때 Apache `default server` 또는 nginx 기본 서버 블록이 응답하는지 확인한다. 서버 설정의 default_server/기본 VirtualHost 구성에 따라 기본 사이트의 배너나 다른 오류 템플릿이 드러날 수 있고, CDN이 Host를 제한하면 400/421로 끝날 수 있다.' },
+  { id: 'host-port-mismatch', title: '포트를 포함한 Host 불일치', extraHeaderLines: () => [`Host: ${targetHost}:9999`], checkpoint: 'Host의 포트가 프록시 라우팅, 앱의 절대 URL 생성, 캐시 키에서 동일하게 처리되는지 비교한다. RFC 9110의 authority 처리와 배포별 프록시 설정 차이로 생기는 탐지용 입력이며, 포트 불일치 자체가 서버 오류나 취약성을 뜻하지 않는다.' },
+  { id: 'rfc-forwarded', title: 'RFC 7239 Forwarded 스푸핑', usesRedirectTarget: true, extraHeaderLines: target => [`Forwarded: for=127.0.0.1;host=${target};proto=http`], checkpoint: '표준 `Forwarded`를 신뢰 프록시 경계 검증 없이 처리하는 앱에서 생성 URL·리다이렉트 또는 클라이언트 주소 판단이 바뀌는지 본다. 프록시는 이 헤더를 제거·덮어쓸 수 있고, 기본적으로 모든 서버가 이를 신뢰하지는 않는다.' },
+  { id: 'method-override', title: 'X-HTTP-Method-Override: DELETE', method: 'POST', extraHeaderLines: () => ['X-HTTP-Method-Override: DELETE'], checkpoint: '일부 Rails 미들웨어/앱과 프록시 구성은 POST의 `X-HTTP-Method-Override`를 실제 동사처럼 해석할 수 있다. 프레임워크 기본 동작만으로 보장되지는 않으며, 라우팅·인증·감사 로그가 원 메서드와 덮어쓴 메서드를 다르게 처리하는지 확인한다.' },
+  { id: 'unkeyed-header', title: '캐시 비키잉 헤더 (X-Forwarded-Host)', usesRedirectTarget: true, extraHeaderLines: target => [`X-Forwarded-Host: ${target}`], checkpoint: '캐시가 X-Forwarded-Host를 키에 넣지 않지만 오리진이 절대 URL이나 오류 본문 생성에 사용하면 캐시된 응답에 입력값이 섞이는지 점검한다. 캐시 적중/키 정책을 확인해야 하며, 응답 반영만으로 포이즈닝을 확정할 수 없다. 테스트는 허가된 비공개 경로에서 수행한다.' },
+  { id: 'json-content-form-body', title: 'JSON Content-Type + form 본문 불일치', method: 'POST', body: 'id=1&name=test', extraHeaderLines: () => ['Content-Type: application/json'], checkpoint: 'JSON으로 선언하고 form-urlencoded 바디를 보내 파서 불일치에 따른 400/415 또는 예외 페이지를 비교한다. Spring/Jackson 등은 보통 JSON 파싱 오류로 거부하며, 커스텀 파서가 관대하게 처리할지는 앱 구현에 달려 있다.' },
+  { id: 'form-content-json-body', title: 'Form Content-Type + JSON 본문 불일치', method: 'POST', body: '{"id":1}', extraHeaderLines: () => ['Content-Type: application/x-www-form-urlencoded'], checkpoint: 'form 파서에 JSON 문법 바디를 보내 프레임워크가 빈 폼으로 처리하는지, 잘못된 입력 오류를 내는지 비교한다. 기본 파서 동작은 프레임워크와 엔드포인트별로 다르며, 상세 예외는 디버그 설정에서만 노출될 수 있다.' },
+  { id: 'unsupported-content-type', title: '지원 불가 Content-Type (415 유도)', method: 'POST', body: 'probe=data', extraHeaderLines: () => ['Content-Type: application/x-not-a-real-format'], checkpoint: 'Spring MVC 등에서 소비 가능한 형식(consumes)을 선언한 엔드포인트에 지원하지 않는 media type과 본문을 보내 415를 유도한다. 라우트의 consumes 설정과 오류 처리기에 따라 415 또는 다른 응답이 올 수 있고, 기본 운영 설정에서는 스택 정보가 숨겨져야 한다.' },
+]
+
+const PROTOCOLS: ProtocolProbe[] = [
+  { id: 'http10', title: 'HTTP/1.0 강제', option: '--http1.0', checkpoint: 'curl `--http1.0`은 요청을 HTTP/1.0으로 보낸다. Host 헤더·keep-alive·프록시 라우팅 차이로 1.1과 오류 페이지가 달라지는지 비교한다. 최신 프록시가 1.0 요청을 정규화하거나 거부할 수 있고, 이 옵션은 HTTPS에서도 HTTP 버전만 지정한다.' },
+  { id: 'http09-response', title: 'HTTP/0.9 응답 수락 여부', option: '--http0.9', checkpoint: 'curl `--http0.9`는 HTTP/0.9 요청 라인을 보내는 옵션이 아니다. 요청은 정상 HTTP 형태로 보내고 헤더 없는 HTTP/0.9 스타일 응답을 수락하도록 허용한다(기본 비활성, curl 7.66.0부터). 서버의 응답 파서를 점검하는 항목이며, 요청 프로토콜 차이를 재현하려면 raw TCP 도구가 필요하다.' },
 ]
 
 export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
@@ -66,6 +84,8 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
   const [path, setPath] = useState('')
   const [spoofTarget, setSpoofTarget] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set())
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [platform, setPlatform] = useState<'linux' | 'windows'>('linux')
   const curlBin = platform === 'windows' ? 'curl.exe' : 'curl'
   const quoteChar = platform === 'windows' ? '"' : "'"
@@ -77,13 +97,50 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
   const selectedPath = PATHS.find(item => `path-${item.id}` === selectedId)
   const selectedHeader = HEADERS.find(item => `header-${item.id}` === selectedId)
   const extraHeaderLines = selectedHeader?.extraHeaderLines(redirectTarget) ?? []
+  const shellQuote = (value: string) => quoteChar === '"'
+    ? `${quoteChar}${value.replaceAll('`', '``').replaceAll('$', '`$').replaceAll('"', '`"')}${quoteChar}`
+    : `'${value.replaceAll("'", `'\\''`)}'`
+  const curlHeader = (line: string) => `-H ${shellQuote(line)}`
+  const echoCommand = (command: string) => platform === 'windows'
+    ? `echo '${command.replaceAll("'", "''")}'`
+    : `echo "${command.replace(/(["$`])/g, '\\$1')}"`
+  const methodCommand = (item: MethodProbe) => `${curlBin} -i -X ${item.method} ${shellQuote(`https://${targetHost}${targetPath}`)}`
+  const pathCommand = (item: PathProbe) => `${curlBin} -i ${shellQuote(`https://${targetHost}${targetPath}${item.suffix}`)}`
+  const headerCommand = (item: HeaderProbe) => {
+    const headers = item.extraHeaderLines(redirectTarget)
+    const hasExplicitHost = headers.some(header => header.toLowerCase().startsWith('host:'))
+    const hostHeaders = item.id === 'missing-host' ? ['Host:'] : item.id === 'duplicate-host' ? [`Host: ${targetHost}`, `Host: ${redirectTarget}`] : hasExplicitHost ? headers : [`Host: ${targetHost}`, ...headers]
+    const body = item.body === undefined ? '' : ` --data ${shellQuote(item.body)}`
+    return `${curlBin} -i -X ${item.method ?? 'GET'} ${hostHeaders.map(curlHeader).join(' ')}${body} ${shellQuote(`https://${targetHost}${targetPath}`)}`
+  }
+  const script = [
+    ...METHODS.filter(x => checkedIds.has(`method-${x.id}`)).flatMap(x => [echoCommand(methodCommand(x)), methodCommand(x)]),
+    ...PATHS.filter(x => checkedIds.has(`path-${x.id}`)).flatMap(x => [echoCommand(pathCommand(x)), pathCommand(x)]),
+    ...HEADERS.filter(x => checkedIds.has(`header-${x.id}`)).flatMap(x => [echoCommand(headerCommand(x)), headerCommand(x)]),
+    ...PROTOCOLS.filter(x => checkedIds.has(`protocol-${x.id}`)).flatMap(x => {
+      const command = `${curlBin} -i ${x.option} ${shellQuote(`https://${targetHost}${targetPath}`)}`
+      return [echoCommand(command), command]
+    }),
+  ].join('\n')
+  const toggleGroup = (ids: string[]) => setCheckedIds(previous => {
+    const next = new Set(previous)
+    if (ids.every(id => next.has(id))) ids.forEach(id => next.delete(id))
+    else ids.forEach(id => next.add(id))
+    return next
+  })
+  const copyScript = async () => {
+    try { await navigator.clipboard.writeText(script); setCopyState('copied') }
+    catch { setCopyState('error') }
+    window.setTimeout(() => setCopyState('idle'), 1500)
+  }
 
   const headerPayload = (item: HeaderProbe) => {
     const method = item.method ?? 'GET'
     const lines = item.extraHeaderLines(redirectTarget)
     if (item.id === 'missing-host') return `${method} ${targetPath} HTTP/1.1\n\n`
     if (item.id === 'duplicate-host') return `${method} ${targetPath} HTTP/1.1\nHost: ${targetHost}\nHost: ${redirectTarget}\n\n`
-    return `${method} ${targetPath} HTTP/1.1\nHost: ${targetHost}\n${lines.join('\n')}\n\n`
+    const hasExplicitHost = lines.some(line => line.toLowerCase().startsWith('host:'))
+    return `${method} ${targetPath} HTTP/1.1\n${hasExplicitHost ? '' : `Host: ${targetHost}\n`}${lines.join('\n')}\n\n`
   }
 
   return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
@@ -104,31 +161,43 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
         <div className="error-fp-layout">
           <div className="error-fp-list-pane">
             <section className="error-fp-group">
-              <h3 className="payload-group-title">메서드로 유발 (Method)</h3>
+              <div className="error-fp-group-heading"><h3 className="payload-group-title">메서드로 유발 (Method)</h3><button onClick={() => toggleGroup(METHODS.map(x => `method-${x.id}`))}>{METHODS.every(x => checkedIds.has(`method-${x.id}`)) ? '전체 해제' : '전체 선택'}</button></div>
               {METHODS.map(item => <div key={item.id} className={`error-fp-item${selectedId === `method-${item.id}` ? ' error-fp-item--selected' : ''}`} onClick={() => setSelectedId(`method-${item.id}`)}>
+                <label className="error-fp-select" onClick={event => event.stopPropagation()}><input type="checkbox" checked={checkedIds.has(`method-${item.id}`)} onClick={event => event.stopPropagation()} onChange={() => setCheckedIds(previous => { const next = new Set(previous); next.has(`method-${item.id}`) ? next.delete(`method-${item.id}`) : next.add(`method-${item.id}`); return next })}/> 스크립트 포함</label>
                 <Readout title={item.method.length > 30 ? '긴 메서드 토큰 (2,000자)' : item.method} value={`${curlBin} -i -X ${item.method} https://${targetHost}${targetPath}`} wrap="anywhere"/>
                 <p className="error-fp-hint">점검 포인트: {item.checkpoint}</p>
               </div>)}
             </section>
             <section className="error-fp-group">
-              <h3 className="payload-group-title">경로로 유발 (Path)</h3>
+              <div className="error-fp-group-heading"><h3 className="payload-group-title">경로로 유발 (Path)</h3><button onClick={() => toggleGroup(PATHS.map(x => `path-${x.id}`))}>{PATHS.every(x => checkedIds.has(`path-${x.id}`)) ? '전체 해제' : '전체 선택'}</button></div>
               {PATHS.map(item => <div key={item.id} className={`error-fp-item${selectedId === `path-${item.id}` ? ' error-fp-item--selected' : ''}`} onClick={() => setSelectedId(`path-${item.id}`)}>
+                <label className="error-fp-select" onClick={event => event.stopPropagation()}><input type="checkbox" checked={checkedIds.has(`path-${item.id}`)} onClick={event => event.stopPropagation()} onChange={() => setCheckedIds(previous => { const next = new Set(previous); next.has(`path-${item.id}`) ? next.delete(`path-${item.id}`) : next.add(`path-${item.id}`); return next })}/> 스크립트 포함</label>
                 <Readout title={item.title} value={`${curlBin} -i "https://${targetHost}${targetPath}${item.suffix}"`} wrap="anywhere"/>
                 <p className="error-fp-hint">점검 포인트: {item.checkpoint}</p>
               </div>)}
             </section>
             <section className="error-fp-group">
-              <h3 className="payload-group-title">헤더로 유발 (Header)</h3>
+              <div className="error-fp-group-heading"><h3 className="payload-group-title">헤더로 유발 (Header)</h3><button onClick={() => toggleGroup(HEADERS.map(x => `header-${x.id}`))}>{HEADERS.every(x => checkedIds.has(`header-${x.id}`)) ? '전체 해제' : '전체 선택'}</button></div>
               {HEADERS.map(item => <div key={item.id} className={`error-fp-item${selectedId === `header-${item.id}` ? ' error-fp-item--selected' : ''}`} onClick={() => setSelectedId(`header-${item.id}`)}>
+                <label className="error-fp-select" onClick={event => event.stopPropagation()}><input type="checkbox" checked={checkedIds.has(`header-${item.id}`)} onClick={event => event.stopPropagation()} onChange={() => setCheckedIds(previous => { const next = new Set(previous); next.has(`header-${item.id}`) ? next.delete(`header-${item.id}`) : next.add(`header-${item.id}`); return next })}/> 스크립트 포함</label>
                 <Readout title={item.title} value={headerPayload(item)} wrap="anywhere"/>
                 <p className="error-fp-hint">점검 포인트: {item.checkpoint}</p>
               </div>)}
               <Note>{curlBin} 사용 시 각 줄을 `-H {quoteChar}...{quoteChar}` 플래그로 변환하세요. 이 블록은 Burp Repeater나 `nc`에 그대로 붙여넣는 용도입니다.</Note>
             </section>
+            <section className="error-fp-group">
+              <div className="error-fp-group-heading"><h3 className="payload-group-title">프로토콜 변형 (Protocol)</h3><button onClick={() => toggleGroup(PROTOCOLS.map(x => `protocol-${x.id}`))}>{PROTOCOLS.every(x => checkedIds.has(`protocol-${x.id}`)) ? '전체 해제' : '전체 선택'}</button></div>
+              {PROTOCOLS.map(item => <div key={item.id} className={`error-fp-item${selectedId === `protocol-${item.id}` ? ' error-fp-item--selected' : ''}`} onClick={() => setSelectedId(`protocol-${item.id}`)}>
+                <label className="error-fp-select" onClick={event => event.stopPropagation()}><input type="checkbox" checked={checkedIds.has(`protocol-${item.id}`)} onClick={event => event.stopPropagation()} onChange={() => setCheckedIds(previous => { const next = new Set(previous); next.has(`protocol-${item.id}`) ? next.delete(`protocol-${item.id}`) : next.add(`protocol-${item.id}`); return next })}/> 스크립트 포함</label>
+                <Readout title={item.title} value={`${curlBin} -i ${item.option} https://${targetHost}${targetPath}`} wrap="anywhere"/>
+                <p className="error-fp-hint">점검 포인트: {item.checkpoint}</p>
+              </div>)}
+            </section>
           </div>
           <div className="error-fp-preview-pane">
             <h3 className="payload-group-title">입력 위치 미리보기</h3>
             {!selectedId && <div className="error-fp-preview-empty">왼쪽에서 항목을 선택하면 입력 위치 예시를 보여줍니다.</div>}
+            {selectedId?.startsWith('protocol-') && <p className="error-fp-hint">점검 포인트: {PROTOCOLS.find(item => `protocol-${item.id}` === selectedId)?.checkpoint}</p>}
             {selectedMethod && <>
               <div className="error-fp-term">
                 <div className="error-fp-term-header"><span className="error-fp-term-dot"/><span className="error-fp-term-dot"/><span className="error-fp-term-dot"/><span>터미널</span></div>
@@ -150,6 +219,11 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
             </>}
           </div>
         </div>
+        <section className="error-fp-script">
+          <div className="error-fp-script-toolbar"><strong>선택된 {checkedIds.size}개</strong><button className="cheatsheet-copy" disabled={!checkedIds.size} onClick={copyScript}>{copyState === 'error' ? '복사 실패' : copyState === 'copied' ? '복사됨' : '스크립트 복사'}</button></div>
+          <pre>{script || '항목을 체크하면 순차 실행 스크립트가 여기에 표시됩니다.'}</pre>
+          <Note>이 모달은 요청을 보내지 않습니다. 생성된 명령은 검토 후 사용자 터미널에서 직접 실행됩니다.</Note>
+        </section>
       </div>
     </div>
   </PanelShell>
