@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Binary, Download, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
@@ -63,22 +63,43 @@ function extractUnique(text: string, regex: RegExp): string[] {
 }
 
 const ENDPOINT_RE = /(?:"|')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|')|https?:\/\/[^\s"'<>]+/g
-const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi
+const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"']{8,}["']|Bearer\s+[A-Za-z0-9._-]{10,}/gi
 const COMMENT_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g
 const CRYPTO_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|\b(?:aes|des(?:-?ede3?)?|rc2|rc4|rc5|blowfish|camellia|aria|seed|idea|cast5|chacha20)-(?:128-|192-|256-)?(?:cbc|ecb|gcm|ctr|cfb\d*|ofb|ccm|xts|poly1305|ede3|ede|wrap)\b|\b(?:RSA|AES|DES|HMAC|crypt|decrypt|encrypt|private[_-]?key)\b|\bprivateKey\b/gi
-const PHONE_RE = /(?<![\d-])\b(?:\d{3}-\d{4}-\d{4}|\d{2}-\d{3,4}-\d{4})\b(?![\d-])/g
+const PHONE_RE = /(?<!\d)(?:\+\d{1,3}[ .-]?)?(?:0?\d{1,3}[ .-]?)?\d{3,4}[ .-]?\d{4}(?!\d)/g
+const RRN_RE = /\b\d{6}-[1-8]\d{6}\b/g
 const VERSION_RE = /(?<![\w.])\d+\.\d+\.\d+(?:-(?:beta|rc)(?:\.\d+)?)?\b(?!\.\d)/gi
 const BASE64_RE = /[A-Za-z0-9+/]{24,}={0,2}/g
-const EMAIL_RE = /[\w.+-]+@[\w-]+\.[A-Za-z]{2,}/g
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/g
+const AWS_RE = /\bAKIA[0-9A-Z]{16}\b/g
+const GOOGLE_RE = /\bAIza[0-9A-Za-z_-]{35}\b/g
+const SLACK_TOKEN_RE = /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g
+const SLACK_WEBHOOK_RE = /https?:\/\/hooks\.slack\.com\/services\/[A-Z0-9]{6,}\/[^\s"']+/g
+const GITHUB_RE = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g
+const JWT_RE = /\beyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]{5,}\b/g
+const STRIPE_RE = /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}\b/g
+const TWILIO_RE = /\bAC[a-f0-9]{32}\b/gi
+const SENDGRID_RE = /\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g
+const MAILGUN_RE = /\bkey-[a-f0-9]{32}\b/gi
+const NPM_RE = /\bnpm_[A-Za-z0-9]{30,}\b/g
+const SQUARE_RE = /\bsq0(?:atp|csp)-[A-Za-z0-9_-]{20,}\b/g
+const BASIC_AUTH_RE = /https?:\/\/[^\s/:@]+:[^\s/@]+@[^\s"']+/g
 
-const HIGHLIGHT_RE = new RegExp(
-  ([
-    ['endpoint', ENDPOINT_RE], ['secret', SECRET_RE], ['comment', COMMENT_RE],
-    ['crypto', CRYPTO_RE], ['phone', PHONE_RE], ['version', VERSION_RE],
-    ['base64', BASE64_RE], ['email', EMAIL_RE],
-  ] as const).map(([category, regex]) => `(?<${category}>${regex.source})`).join('|'),
-  'gi',
-)
+const PATTERNS = [
+  ['secret', SECRET_RE], ['aws', AWS_RE], ['google', GOOGLE_RE],
+  ['slack', SLACK_TOKEN_RE], ['slackWebhook', SLACK_WEBHOOK_RE], ['github', GITHUB_RE],
+  ['jwt', JWT_RE], ['stripe', STRIPE_RE], ['twilio', TWILIO_RE], ['sendgrid', SENDGRID_RE],
+  ['mailgun', MAILGUN_RE], ['npm', NPM_RE], ['square', SQUARE_RE], ['basicAuth', BASIC_AUTH_RE],
+  ['rrn', RRN_RE], ['phone', PHONE_RE], ['email', EMAIL_RE], ['version', VERSION_RE],
+  ['crypto', CRYPTO_RE], ['comment', COMMENT_RE], ['base64', BASE64_RE], ['endpoint', ENDPOINT_RE],
+] as const
+const HIGHLIGHT_RE = new RegExp(PATTERNS.map(([category, regex]) => `(?<${category}>${regex.source})`).join('|'), 'gi')
+
+type ParserResults = { beautified: string; endpoints: string[]; secrets: string[]; comments: string[]; crypto: string[]; phones: string[]; rrns: string[]; versions: string[]; base64: string[]; emails: string[] }
+const EMPTY_RESULTS: ParserResults = { beautified: '', endpoints: [], secrets: [], comments: [], crypto: [], phones: [], rrns: [], versions: [], base64: [], emails: [] }
+function extractResults(text: string): ParserResults {
+  return { beautified: beautifyJs(text), endpoints: extractUnique(text, ENDPOINT_RE), secrets: Array.from(new Set([SECRET_RE, AWS_RE, GOOGLE_RE, SLACK_TOKEN_RE, SLACK_WEBHOOK_RE, GITHUB_RE, JWT_RE, STRIPE_RE, TWILIO_RE, SENDGRID_RE, MAILGUN_RE, NPM_RE, SQUARE_RE, BASIC_AUTH_RE].flatMap(re => extractUnique(text, re)))), comments: extractUnique(text, COMMENT_RE), crypto: extractUnique(text, CRYPTO_RE), phones: extractUnique(text, PHONE_RE), rrns: extractUnique(text, RRN_RE), versions: extractUnique(text, VERSION_RE), base64: extractUnique(text, BASE64_RE), emails: extractUnique(text, EMAIL_RE) }
+}
 
 type SyntaxKind = 'text' | 'keyword' | 'string' | 'number' | 'comment' | 'function'
 type SyntaxToken = { kind: SyntaxKind; text: string }
@@ -214,16 +235,30 @@ function highlightedJs(text: string) {
 export function JsParserModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
   const [input, setInput] = useState('')
+  const [serverMode, setServerMode] = useState(false)
+  const [serverResults, setServerResults] = useState<ParserResults>(EMPTY_RESULTS)
+  const clientResults = serverMode ? EMPTY_RESULTS : extractResults(input)
+  const results = serverMode ? serverResults : clientResults
 
-  const beautified = beautifyJs(input)
-  const endpoints = extractUnique(input, ENDPOINT_RE)
-  const secrets = extractUnique(input, SECRET_RE)
-  const comments = extractUnique(input, COMMENT_RE)
-  const crypto = extractUnique(input, CRYPTO_RE)
-  const phones = extractUnique(input, PHONE_RE)
-  const versions = extractUnique(input, VERSION_RE)
-  const base64 = extractUnique(input, BASE64_RE)
-  const emails = extractUnique(input, EMAIL_RE)
+  useEffect(() => {
+    if (!serverMode) return
+    if (!input) { setServerResults(EMPTY_RESULTS); return }
+    let active = true
+    const timer = window.setTimeout(() => {
+      void fetch('/api/diag/js-parser', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: input }) })
+        .then(response => { if (!response.ok) throw new Error('Parser request failed'); return response.json() })
+        .then(data => { if (active) setServerResults(data) })
+        .catch(() => { if (active) setServerResults(EMPTY_RESULTS) })
+    }, 250)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [input, serverMode])
+
+  const recordEvidence = (content: string) => {
+    try { void fetch('/api/diag/evidence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, toolType: 'js-parser' }) }).catch(() => {}) } catch {}
+  }
+  const handleInput = (content: string) => { setInput(content); recordEvidence(content) }
+  const handleFile = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => handleInput(String(reader.result ?? '')); reader.readAsText(file) }
+  const { beautified, endpoints, secrets, comments, crypto, phones, rrns, versions, base64, emails } = results
 
   return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">진단 · 정찰</p><h2><Binary size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>JS Beautifier & 정규식 추출기</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
@@ -241,8 +276,10 @@ export function JsParserModal({ onClose, embedded }: { onClose?: () => void; emb
         <div className="js-parser-layout">
           <div className="js-parser-input-section">
             <div className="js-parser-field">
+              <label className="js-parser-mode"><input type="checkbox" checked={serverMode} onChange={e => { setServerMode(e.target.checked); if (input) recordEvidence(input) }}/>{serverMode ? '서버에서 처리' : '브라우저에서 처리'}</label>
+              <label className="js-parser-upload">파일 열기 <input type="file" accept=".js,.mjs,.cjs,.txt,text/javascript,text/plain" onChange={e => handleFile(e.target.files?.[0])}/></label>
               <Field label="난독화/압축 JS 코드">
-                <textarea className="payload-builder-textarea" rows={12} value={input} onChange={e => setInput(e.target.value)} placeholder="분석할 JavaScript 코드를 붙여넣으세요…"/>
+                <textarea className="payload-builder-textarea" rows={12} value={input} onChange={e => handleInput(e.target.value)} placeholder="분석할 JavaScript 코드를 붙여넣으세요…"/>
               </Field>
             </div>
             {beautified && <div className="js-parser-beautified"><strong>Beautified JS</strong><pre className="js-parser-highlighted-pre">{highlightedJs(beautified)}</pre></div>}
@@ -276,6 +313,12 @@ export function JsParserModal({ onClose, embedded }: { onClose?: () => void; emb
               <strong>전화번호/연락처 후보</strong>
               <div className="js-parser-list">
                 {phones.length ? phones.map((p, i) => <div className="js-parser-item" key={i}>{p}</div>) : <p className="js-parser-empty">발견된 전화번호가 없습니다.</p>}
+              </div>
+            </div>
+            <div className="js-parser-result-group">
+              <strong>주민등록번호 후보</strong>
+              <div className="js-parser-list">
+                {rrns.length ? rrns.map((v, i) => <div className="js-parser-item" key={i}>{v}</div>) : <p className="js-parser-empty">발견된 주민등록번호가 없습니다.</p>}
               </div>
             </div>
             <div className="js-parser-result-group">
