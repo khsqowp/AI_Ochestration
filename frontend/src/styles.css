@@ -471,6 +471,9 @@
 /* 진단 탭: 타일 그리드가 직접 자식(더 이상 embedded 패널 아님) -- 그리드 자체가 남은 높이를 채우고 내부 스크롤 */
 .page.diag-page > .diag-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
+/* 진단 도구 상세 페이지: 그리드(.diag-page)는 공용 패딩 유지, 도구 상세만 여백을 줄여 작업공간(iframe/코드뷰 등)을 넓힌다 */
+.page.diag-tool-page { padding: 6px 8px 8px; }
+
 .notes-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
 .notes-header h2 { margin:0; font-size:19px; color:#3f3b4a; }
 .notes-actions { display:flex; flex-wrap:wrap; gap:8px; }
