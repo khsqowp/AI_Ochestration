@@ -1202,11 +1202,18 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .error-fp-preview-pane { position:sticky; top:0; align-self:flex-start; max-height:calc(100dvh - var(--topbar-h) - 140px); overflow-y:auto; padding-bottom:4px; }
 .error-fp-group { display:flex; flex-direction:column; gap:8px; min-width:0; }
 .error-fp-group .payload-group-title, .error-fp-preview-pane .payload-group-title { margin:0 0 4px; }
+.error-fp-group-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.error-fp-group-heading button { border:0; background:transparent; color:#5d50ba; font-size:11px; font-weight:700; cursor:pointer; }
 .error-fp-item { min-width:0; padding:10px; border:1px solid #eceaf0; border-radius:8px; background:#faf9fc; cursor:pointer; }
 .error-fp-item:hover { border-color:#c9c1e8; }
 .error-fp-item--selected { border-color:#7667dc; background:#f3efff; }
 .error-fp-item .payload-readout { min-width:0; }
 .error-fp-item .cheatsheet-command { max-height:120px; overflow:auto; }
+.error-fp-select { display:flex; align-items:center; gap:6px; margin:0 0 7px; color:#625d6b; font-size:11px; cursor:pointer; }
+.error-fp-script { margin-top:18px; padding:12px; border:1px solid #ded9e8; border-radius:9px; background:#faf9fc; }
+.error-fp-script-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; font-size:12px; }
+.error-fp-script-toolbar button:disabled { opacity:.45; cursor:not-allowed; }
+.error-fp-script pre { max-height:360px; margin:0; padding:12px; overflow:auto; border-radius:7px; background:#211e2a; color:#f3efff; font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre; }
 .error-fp-hint { margin:6px 0 0; font-size:11px; line-height:1.5; color:#6f6977; overflow-wrap:anywhere; }
 .error-fp-preview-empty { padding:24px 16px; border:1px dashed #d9d3e4; border-radius:8px; background:#faf9fc; color:#6f6977; font-size:12px; }
 .error-fp-term, .error-fp-repeater { min-width:0; overflow:hidden; border:1px solid #ded9e8; border-radius:8px; }
