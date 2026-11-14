@@ -38,12 +38,14 @@
   .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .bc-pane { border: 1px solid #eceaf0; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: #fafafc; }
   .bc-pane-head { background: #fafafc; color: #6f6977; border-bottom: 1px solid #d1cce0; font-size: 13px; font-weight: 700; padding: 9px 12px; }
-  .bc-pane-body { margin: 0; padding: 12px; background: #fafafc; border: 1px solid #eceaf0; border-radius: 12px; color: #252537; flex: 1; min-height: 400px; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+  .bc-pane-body { margin: 0; padding: 12px; background: #fafafc; border: 1px solid #eceaf0; border-radius: 12px; color: #252537; flex: 1; min-height: 400px; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6; }
   .bc-pane-body mark.mod { background: #dceafd; color: #245b8b; border-radius: 2px; }
   .bc-pane-body mark.del { background: #fbeaec; color: #a43f45; border-radius: 2px; }
   .bc-pane-body mark.add { background: #e6f4ec; color: #276646; border-radius: 2px; }
   .empty { padding: 20px; color: #6f6977; }
-  .warn { color: #8b5a16; font-size: 12.5px; margin-top: 6px; }
+  .warn { color: #8b5a16; font-size: 12.5px; margin: 6px 0 0; }
+  .warn:empty { display: none; }
+  .bc-pane-body mark { background: #ffe484; color: #252537; border-radius: 2px; padding: 0 1px; }
   @media (max-width: 900px) { .side-grid, .result-grid { grid-template-columns: 1fr; } }
 
   input[type=search] { padding: 9px; background: #fff; color: #252537; border: 1px solid #dcd8e5; border-radius: 10px; }
@@ -92,9 +94,9 @@ html.embedded .history-paths pre { min-height: 35px; max-height: 70px; }
   .history-workspace:has(#detail:not([hidden])) { grid-template-rows: repeat(2,minmax(0,1fr)); }
 }
 </style></head><body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')"><main>
-<h1>Burp History 뷰어</h1><p>Burp Suite의 HTTP history XML을 요청 한 줄씩 살펴보고 요청·응답 원문과 경로 목록을 확인한다. 서버로 전송하지 않음, 브라우저 안에서만 파싱 -- 이 HTML 파일 하나로 인터넷 없는 PC에서도 동작한다.</p>
+<h1>Burp History 뷰어</h1><p>Burp Suite의 HTTP history XML을 요청 한 줄씩 살펴보고 요청·응답 원문과 경로 목록을 확인한다. 분석은 브라우저 안에서만 일어난다(새로고침하면 비워짐) -- 이 HTML 파일 하나로 인터넷 없는 PC에서도 동작한다. 단, 파일을 불러오면 원본이 증거 기록용으로 서버에 전송된다(오프라인에서는 전송이 실패해도 조회에는 영향 없음).</p>
 <section class="panel" id="drop"><button id="load" type="button">파일 불러오기</button> <button id="paste" type="button">클립보드 붙여넣기</button><input type="file" id="file" accept=".xml,application/xml,text/xml" hidden><p>Proxy &gt; HTTP history에서 우클릭 &gt; Save items로 저장한 XML을 선택하거나 여기에 끌어 놓으세요.</p><span id="status" role="status" aria-live="polite"></span></section>
-<div class="history-workspace"><section class="panel"><h2>HTTP History</h2><p id="summary">XML 파일을 불러오세요.</p><div class="controls"><label>URL 검색 <input id="search" type="search" placeholder="URL 문자열 포함 검색"></label><label>상태 <select id="filter"><option value="">전체</option></select></label></div><div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">Host</th><th scope="col">Method</th><th scope="col">URL</th><th scope="col">Status</th><th scope="col">Length</th><th scope="col">MIME type</th><th scope="col">Time</th></tr></thead><tbody id="rows"></tbody></table></div><div class="controls"><button id="prev" disabled>이전</button><span id="page" role="status"></span><button id="next" disabled>다음</button></div></section>
+<div class="history-workspace"><section class="panel"><h2>HTTP History</h2><p id="summary">XML 파일을 불러오세요.</p><div class="controls"><label>키워드 검색 <input id="search" type="search" placeholder="요청+응답 본문(헤더+바디) 전체에서 검색"></label><label class="sync"><input type="checkbox" id="searchRegex">정규식</label><label>상태 <select id="filter"><option value="">전체</option></select></label></div><p class="warn" id="searchError" role="alert"></p><div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">Host</th><th scope="col">Method</th><th scope="col">URL</th><th scope="col">Status</th><th scope="col">Length</th><th scope="col">MIME type</th><th scope="col">Time</th></tr></thead><tbody id="rows"></tbody></table></div><div class="controls"><button id="prev" disabled>이전</button><span id="page" role="status"></span><button id="next" disabled>다음</button></div></section>
 <section class="panel" id="detail" hidden><h2 id="selection"></h2><div class="result-grid"><div class="bc-pane"><div class="bc-pane-head"><label>Request <select id="requestMode"><option>Raw</option><option>Pretty</option></select></label></div><pre class="bc-pane-body" id="request"></pre></div><div class="bc-pane"><div class="bc-pane-head"><label>Response <select id="responseMode"><option>Raw</option><option>Pretty</option></select></label></div><pre class="bc-pane-body" id="response"></pre></div></div></section></div>
 <div id="vresize" role="separator" aria-orientation="horizontal" aria-label="영역 크기 조절" tabindex="0"></div><section class="panel history-paths"><h2>중복 제거 URL 경로 목록</h2><p>쿼리스트링·프래그먼트·맨 앞 슬래시를 제거하고 정렬한다. 루트 경로는 목록에서 제외한다. 필터와 관계없이 전체 히스토리를 사용한다.</p><div class="controls"><button id="copy" disabled>클립보드 복사</button><button id="download" disabled>txt로 다운로드</button></div><pre class="bc-pane-body" id="paths"></pre></section>
 </main><script>
@@ -185,6 +187,17 @@ function decodeMessage(element, name) {
   try { return { text:new TextDecoder('utf-8', { fatal:true, ignoreBOM:true }).decode(bytes) }; }
   catch { return { text:`바이너리 데이터(${bytes.length}바이트, 표시 안 함)`, displayOnly:true }; }
 }
+// 검색은 요청+응답 raw 텍스트(헤더+바디) 전체를 대상으로 한다 -- item마다 1회만 디코딩해 캐시한다.
+function getItemSearchText(item) {
+  if (!item.searchText) item.searchText = decodeMessage(item.element,'request').text + '\n' + decodeMessage(item.element,'response').text;
+  return item.searchText;
+}
+function buildMatcher(query, useRegex) {
+  if (!query) return { test:() => true, error:'' };
+  if (!useRegex) { const needle = query.toLowerCase(); return { test:haystack => haystack.toLowerCase().includes(needle), error:'' }; }
+  try { const re = new RegExp(query, 'i'); return { test:haystack => re.test(haystack), error:'' }; }
+  catch (error) { return { test:() => false, error:`정규식 오류 -- ${error.message}` }; }
+}
 function prettyMessage(message) {
   if (message.displayOnly) return message.text;
   const separator = /\r\n\r\n|\n\n|\r\r/.exec(message.text);
@@ -194,10 +207,28 @@ function prettyMessage(message) {
   try { return header + (format === 'json' ? formatJSON(body) : format === 'xml' ? formatXML(body) : body); }
   catch { return message.text; }
 }
+function escapeHtml(text) { return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// 검색어가 실제로 어디 있는지 바로 보이도록 요청/응답 본문 안에서 하이라이트한다. 일반 문자열 검색은
+// 정규식 특수문자를 escape해 리터럴로, 정규식 모드는 사용자가 입력한 그대로 전역/대소문자무시 매칭한다.
+function highlightMatches(text, query, useRegex) {
+  if (!query) return escapeHtml(text);
+  let regex;
+  if (useRegex) { try { regex = new RegExp(query, 'gi'); } catch { return escapeHtml(text); } }
+  else regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  let out = '', lastIndex = 0, match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match[0] === '') { regex.lastIndex++; continue; }
+    out += escapeHtml(text.slice(lastIndex, match.index)) + '<mark>' + escapeHtml(match[0]) + '</mark>';
+    lastIndex = match.index + match[0].length;
+  }
+  return out + escapeHtml(text.slice(lastIndex));
+}
 function renderDetail() {
+  const query = $('search').value, useRegex = $('searchRegex').checked;
   for (const name of ['request','response']) {
     const message = selected.messages[name];
-    $(name).textContent = $(name+'Mode').value === 'Pretty' ? prettyMessage(message) : message.text;
+    const text = $(name+'Mode').value === 'Pretty' ? prettyMessage(message) : message.text;
+    $(name).innerHTML = highlightMatches(text, query, useRegex);
   }
 }
 function selectItem(item) {
@@ -228,12 +259,33 @@ function renderRows() {
   $('prev').disabled = page === 0; $('next').disabled = page+1 >= pages;
 }
 function applyFilters() {
-  const query = $('search').value.toLowerCase(), status = $('filter').value;
-  filtered = items.filter(item => item.url.toLowerCase().includes(query) && (!status || item.status === status));
+  // 쿼리가 없거나 정규식이 잘못됐을 때는 전체 디코딩(getItemSearchText)을 건너뛴다 -- 큰 히스토리에서
+  // 매 입력마다 모든 요청/응답을 base64 디코딩하면 느려지므로, 실제로 검색할 때만 캐시를 채운다.
+  const query = $('search').value, status = $('filter').value;
+  const matcher = buildMatcher(query, $('searchRegex').checked);
+  $('searchError').textContent = matcher.error;
+  filtered = items.filter(item => {
+    if (status && item.status !== status) return false;
+    if (!query) return true;
+    if (matcher.error) return false;
+    return matcher.test(getItemSearchText(item));
+  });
   page = 0; renderRows();
+}
+// 증거 기록용 fire-and-forget 전송 -- 뷰어 자체 동작(파싱/표시)과 완전히 분리되어 있어 실패해도
+// (오프라인 사용, 아직 엔드포인트가 없는 경우, 네트워크 오류 등) 사용자에게 에러를 보이지 않고 조용히 무시한다.
+// 조회 API는 없다 -- 이 뷰어는 과거 업로드를 다시 불러오지 않고 항상 새로고침 시 비워진다.
+function reportEvidence(file) {
+  try {
+    const body = new FormData();
+    body.append('file', file, file.name);
+    body.append('toolType', 'burp-history');
+    fetch('/api/diag/evidence', { method:'POST', credentials:'include', body }).catch(() => {});
+  } catch {}
 }
 async function loadFile(file) {
   if (!file) return;
+  reportEvidence(file);
   const version = ++loadVersion; $('status').textContent = 'XML 읽는 중…';
   try {
     const text = await file.text(); if (version !== loadVersion) return;
@@ -276,7 +328,9 @@ $('file').addEventListener('change', () => { loadFile($('file').files[0]); $('fi
 for (const event of ['dragenter','dragover']) $('drop').addEventListener(event, e => { e.preventDefault(); $('drop').classList.add('drag'); });
 $('drop').addEventListener('dragleave', () => $('drop').classList.remove('drag'));
 $('drop').addEventListener('drop', e => { e.preventDefault(); $('drop').classList.remove('drag'); loadFile(e.dataTransfer.files[0]); });
-$('search').addEventListener('input',applyFilters); $('filter').addEventListener('change',applyFilters);
+// 검색어/정규식 토글이 바뀌면 목록 필터뿐 아니라, 열려 있는 상세 패널의 하이라이트도 같이 갱신한다.
+function onSearchChange() { applyFilters(); if (!$('detail').hidden) renderDetail(); }
+$('search').addEventListener('input',onSearchChange); $('searchRegex').addEventListener('change',onSearchChange); $('filter').addEventListener('change',applyFilters);
 $('prev').addEventListener('click', () => { page--; renderRows(); }); $('next').addEventListener('click', () => { page++; renderRows(); });
 for (const name of ['request','response']) $(name+'Mode').addEventListener('change',renderDetail);
 const wordlist = () => paths.join('\n')+'\n';
