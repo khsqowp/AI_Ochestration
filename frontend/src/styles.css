@@ -141,6 +141,16 @@
 .csrf-poc-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .csrf-action-btn { width:auto !important; margin-top:0 !important; flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px !important; font-size:12.5px; }
 .payload-readout-title { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#6f6977; margin-bottom:4px; }
+/* XSS 소거법 워크벤치(xss.tsx) 전용 — 다른 payload-builder 도구엔 영향 없게 xss-guide- 접두사로만 스코프. */
+.xss-guide-filters-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 0 6px; }
+.xss-guide-clear { flex:none; padding:5px 11px; border-radius:100px; background:#f4f2fb; color:#6f6977; font-size:11px; font-weight:700; }
+.xss-guide-clear:hover { background:#eceaf0; color:#4b4654; }
+.xss-guide-group { margin:10px 0 2px; padding:4px 0 8px; border-top:1px solid #eceaf0; }
+.xss-guide-group:first-of-type { border-top:0; }
+.xss-guide-group-title { margin:6px 0 2px; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#8a84a6; }
+.xss-guide-results { margin-top:4px; }
+.xss-guide-result { margin-bottom:14px; }
+.xss-guide-result:last-child { margin-bottom:0; }
 .cheatsheet-command.wrap-anywhere { white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; }
 .mermaid-diagram { display:flex; justify-content:center; overflow-x:auto; margin:10px 0; }.mermaid-diagram svg { max-width:100%; }.mermaid-error { white-space:pre-wrap; font-size:12px; padding:10px 12px; border-radius:12px; background:#fdecec; color:#963f3f; }
 .calendar-timeline { margin-top:22px; padding-top:18px; border-top:1px solid #efedf1; display:grid; gap:10px; }.timeline-card { padding:12px 14px; border-radius:12px; background:#f7f6fa; border-left:3px solid #cfc8ec; display:grid; gap:6px; }.timeline-card-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }.timeline-card-head b { font-size:13px; color:#3f3b47; }.timeline-updated { margin-left:auto; font-size:10px; font-weight:800; color:#7667dc; white-space:nowrap; }.timeline-card small { font-size:11.5px; color:#6d6875; line-height:1.5; }.timeline-toggle { justify-self:start; padding:4px 9px; border-radius:100px; background:#eeecfc; color:#5d50ba; font-size:10.5px; font-weight:750; }.timeline-toggle:hover { background:#e2ddf9; }.timeline-history { margin-top:2px; padding-top:8px; border-top:1px dashed #e0dcea; display:grid; gap:6px; }.timeline-history p { margin:0; font-size:11px; color:#6d6875; line-height:1.5; }.timeline-history-date { font-size:10px; font-weight:800; color:#6f6977; margin-right:6px; }
