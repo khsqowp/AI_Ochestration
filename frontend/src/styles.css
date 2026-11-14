@@ -1393,3 +1393,27 @@ small { letter-spacing:.005em; line-height:1.55; }
 .archive-regeocode .archive-refresh-place { background:#f0eefb; color:#51469b; }
 @media (max-width:560px) { .archive-map-location { align-items:flex-start; flex-direction:column; } .archive-map-link { width:100%; justify-content:center; } }
 @media (max-width:560px) { .archive-regeocode { grid-template-columns:1fr; } .archive-regeocode label,.archive-regeocode-warning,.archive-regeocode-status { grid-column:auto; } }
+.js-parser-hit--endpoint { color:#1769aa; background:rgba(23,105,170,.12); }
+.js-parser-hit--secret { color:#b42318; background:rgba(180,35,24,.12); }
+.js-parser-hit--comment { color:#6f6977; background:rgba(111,105,119,.12); }
+.js-parser-hit--crypto { color:#6b3fa0; background:rgba(107,63,160,.12); }
+.js-parser-hit--phone { color:#087e8b; background:rgba(8,126,139,.13); }
+.js-parser-hit--rrn { color:#9a3412; background:rgba(234,88,12,.16); }
+.js-parser-hit--version { color:#475569; background:rgba(71,85,105,.12); }
+.js-parser-hit--base64 { color:#64748b; background:rgba(100,116,139,.12); }
+.js-parser-hit--email { color:#0369a1; background:rgba(3,105,161,.12); }
+.js-parser-hit--aws { color:#9a6700; background:rgba(234,179,8,.2); }
+.js-parser-hit--google { color:#188038; background:rgba(24,128,56,.13); }
+.js-parser-hit--slack { color:#7c3aed; background:rgba(124,58,237,.13); }
+.js-parser-hit--slackWebhook { color:#6d28d9; background:rgba(167,139,250,.23); }
+.js-parser-hit--github { color:#24292f; background:rgba(36,41,47,.13); }
+.js-parser-hit--jwt { color:#be185d; background:rgba(190,24,93,.13); }
+.js-parser-hit--stripe { color:#4f46e5; background:rgba(79,70,229,.14); }
+.js-parser-hit--twilio { color:#c0262d; background:rgba(220,38,38,.12); }
+.js-parser-hit--sendgrid { color:#0f766e; background:rgba(15,118,110,.13); }
+.js-parser-hit--mailgun { color:#c2410c; background:rgba(234,88,12,.13); }
+.js-parser-hit--npm { color:#cc3534; background:rgba(204,53,52,.13); }
+.js-parser-hit--square { color:#334155; background:rgba(51,65,85,.14); }
+.js-parser-hit--basicAuth { color:#a21caf; background:rgba(162,28,175,.14); }
+.js-parser-mode, .js-parser-upload { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:13px; }
+.js-parser-upload input { max-width:100%; }
