@@ -1,57 +1,45 @@
 import { useMemo, useState } from 'react'
 import { Clipboard } from 'lucide-react'
 import { Note } from './shared'
+import {
+  type Charset, CHARSETS, EucKrEncodeError, b64DecodeToBytes, b64EncodeBytes,
+  binaryToBytes, bytesToBinary, codecForLabel, decodeBytesWithCharset, encodeTextWithCharset,
+  hexDecodeToBytes, hexEncodeBytes, labelCharset, looksText, percentDecodeToBytes, percentEncodeBytes,
+  strongText,
+} from './decoderCore'
+import { eucKrDecodeBytes, eucKrEncodeBytes } from './euckr'
 
 /* 스마트 디코더 — khsqowp/Burp_Extension 의 DecoderPanel.java + tab_encoder.py 로직 이식.
    값을 붙여넣으면 인코딩/해시 포맷을 자동 판별해 (연쇄로) 디코딩하고, 디코딩 결과를
-   수정하면 감지된 체인을 역순으로 다시 적용해 원래 포맷으로 재인코딩한다. 순수 클라이언트. */
+   수정하면 감지된 체인을 역순으로 다시 적용해 원래 포맷으로 재인코딩한다. 순수 클라이언트.
+
+   바이트 ⇄ 텍스트 변환과 EUC-KR 인코더/디코더 본체는 ./decoderCore 와 ./euckr 로 뽑아뒀다 —
+   트리형 변형(decoderTree.tsx)도 같은 모듈을 그대로 가져다 쓰기 때문에 두 화면이 서로 다른
+   EUC-KR 판정을 내리는 일은 없다. */
 
 const td = new TextDecoder('utf-8', { fatal: false })
-const te = new TextEncoder()
-
-const bytesToBinary = (b: Uint8Array) => { let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return s }
-const binaryToBytes = (s: string) => { const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b }
 
 export function b64Decode(raw: string): string {
-  let t = raw.trim().replace(/\s+/g, '')
-  const urlSafe = /[-_]/.test(t)
-  if (urlSafe) t = t.replace(/-/g, '+').replace(/_/g, '/')
-  t = t + '='.repeat((4 - (t.length % 4)) % 4)
-  return td.decode(binaryToBytes(atob(t)))
+  return td.decode(b64DecodeToBytes(raw))
 }
 function b64Encode(s: string, urlSafe = false): string {
-  const out = btoa(bytesToBinary(te.encode(s)))
-  return urlSafe ? out.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : out
+  return b64EncodeBytes(new TextEncoder().encode(s), urlSafe)
 }
-/** %XX 이스케이프와 리터럴 문자(전부 ASCII 범위라고 가정)를 그대로 바이트로 풀어낸다 —
- * decodeURIComponent 는 항상 UTF-8 로만 해석해서, 옛 한국 사이트가 흔히 쓰는 EUC-KR URL은
- * 이걸로 그대로 깨진다. 문자셋을 골라 TextDecoder 로 넘길 수 있도록 바이트 단계에서 끊어둔다. */
-function percentDecodeToBytes(raw: string): Uint8Array {
-  const bytes: number[] = []
-  for (let i = 0; i < raw.length; i++) {
-    if (raw[i] === '%' && /^[0-9a-fA-F]{2}$/.test(raw.substring(i + 1, i + 3))) {
-      bytes.push(parseInt(raw.substring(i + 1, i + 3), 16))
-      i += 2
-    } else {
-      bytes.push(raw.charCodeAt(i) & 0xff)
-    }
-  }
-  return new Uint8Array(bytes)
-}
-function urlDecodeWithCharset(raw: string, charset: string): string {
-  const bytes = percentDecodeToBytes(raw.replace(/\+/g, ' '))
-  return new TextDecoder(charset, { fatal: false }).decode(bytes)
+function urlDecodeWithCharset(raw: string, charset: Charset): string {
+  return decodeBytesWithCharset(percentDecodeToBytes(raw.replace(/\+/g, ' ')), charset)
 }
 export function hexDecode(raw: string): string {
-  const t = raw.trim().replace(/\s+/g, '')
-  const b = new Uint8Array(t.length / 2)
-  for (let i = 0; i < b.length; i++) b[i] = parseInt(t.substr(i * 2, 2), 16)
-  return td.decode(b)
+  return td.decode(hexDecodeToBytes(raw))
 }
 export function euckrDecode(raw: string): string {
-  return new TextDecoder('euc-kr', { fatal: false }).decode(binaryToBytes(raw))
+  return eucKrDecodeBytes(binaryToBytes(raw))
 }
-const hexEncode = (s: string) => Array.from(te.encode(s)).map(x => x.toString(16).padStart(2, '0')).join('')
+/** euckrDecode의 역 — 지금까지 UTF-8로만 가능하던 재인코딩을, 직접 이식한 EUC-KR 인코더로
+ * 실제 EUC-KR 바이트로 되돌린다(./euckr.ts 참고). */
+export function euckrEncode(s: string): string {
+  return bytesToBinary(eucKrEncodeBytes(s))
+}
+const hexEncode = (s: string) => hexEncodeBytes(new TextEncoder().encode(s))
 
 export function htmlDecode(s: string): string {
   const doc = new DOMParser().parseFromString(s, 'text/html')
@@ -74,25 +62,16 @@ const rot13 = (s: string) => s.replace(/[a-zA-Z]/g, c => {
   return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base)
 })
 
-/** Fraction of code points that are NOT the U+FFFD replacement char or a C0 control.
- * TextDecoder(non-fatal) turns invalid UTF-8 byte runs into U+FFFD, so random bytes
- * reinterpreted as text score low while real text (ASCII or CJK) scores ~1. */
-const textScore = (s: string) => {
-  if (!s) return 0
-  const chars = [...s]
-  let bad = 0
-  for (const c of chars) {
-    const cp = c.codePointAt(0)!
-    if (cp === 0xfffd || (cp < 32 && cp !== 9 && cp !== 10 && cp !== 13)) bad++
-  }
-  return 1 - bad / chars.length
-}
-const looksText = (s: string) => s.length > 0 && textScore(s) > 0.9
-const strongText = (s: string) => s.length > 0 && textScore(s) > 0.95 && /\S/.test(s)
-
 /* ── 감지 가능한 코덱 (우선순위 순) ─────────────────────────────── */
 
-type Step = { label: string; decoded: string; reencode: (edited: string) => string }
+type Step = {
+  label: string
+  decoded: string
+  reencode: (edited: string) => string
+  /** 이 단계가 바이트→텍스트 변환이라 UTF-8/EUC-KR 둘 중 하나로 수동 재해석할 수 있을 때만 존재.
+   * charset은 "지금 이 단계가 실제로 쓰고 있는" 문자셋(자동판별 결과 또는 사용자가 고른 값). */
+  flexible?: { charset: Charset }
+}
 
 export function jwtStep(input: string): Step | null {
   const t = input.trim()
@@ -117,23 +96,40 @@ export function jwtStep(input: string): Step | null {
   }
 }
 
-function detectStep(input: string): Step | null {
+/** value가 charset으로 "읽을 만한 텍스트"로 보이는지(치환문자 없이 깨지지 않는지) */
+function tryUtf8Fatal(bytes: Uint8Array): string | null {
+  try { return decodeBytesWithCharset(bytes, 'utf-8', true) } catch { return null }
+}
+
+function detectStep(input: string, overrideCharset?: Charset): Step | null {
   const s = input
   const jwt = jwtStep(s)
   if (jwt) return jwt
 
   if (/%[0-9a-fA-F]{2}/.test(s)) {
-    try {
-      const d = decodeURIComponent(s.replace(/\+/g, ' '))
-      if (d !== s) return { label: 'URL 인코딩', decoded: d, reencode: e => encodeURIComponent(e) }
-    } catch { /* UTF-8로는 깨짐 — 아래에서 EUC-KR 로 재시도 */ }
-    // UTF-8 로 디코딩하면 깨지거나(예외) 문자열 자체가 안 바뀌는데, 옛 한국 사이트 URL 은 흔히
-    // EUC-KR 로 인코딩돼 있다 — 그걸로 다시 읽으면 정상 텍스트가 나오는지 확인한다. 단, 브라우저는
-    // EUC-KR 인코더를 표준으로 제공하지 않아 재인코딩은 UTF-8 로만 가능하다(원래 바이트와 달라질 수 있음).
-    try {
-      const euckr = urlDecodeWithCharset(s, 'euc-kr')
-      if (strongText(euckr) && euckr !== s) return { label: 'URL 인코딩 (EUC-KR)', decoded: euckr, reencode: e => encodeURIComponent(e) }
-    } catch { /* EUC-KR로도 아님 */ }
+    const bytes = percentDecodeToBytes(s.replace(/\+/g, ' '))
+    let charset: Charset = 'utf-8'
+    let d: string | null = null
+    if (overrideCharset) {
+      charset = overrideCharset
+      d = decodeBytesWithCharset(bytes, charset)
+    } else {
+      // 먼저 UTF-8(표준)로 시도한다 — decodeURIComponent 와 동치. 실패하거나 아무것도 안 바뀌면,
+      // 옛 한국 사이트 URL 이 흔히 쓰는 EUC-KR 로 다시 읽어서 정상 텍스트가 나오는지 확인한다.
+      const utf8 = tryUtf8Fatal(bytes)
+      if (utf8 !== null && utf8 !== s) { charset = 'utf-8'; d = utf8 } else {
+        const euckr = decodeBytesWithCharset(bytes, 'euc-kr')
+        if (strongText(euckr) && euckr !== s) { charset = 'euc-kr'; d = euckr } else d = null
+      }
+    }
+    if (d !== null && d !== s) {
+      return {
+        label: charset === 'euc-kr' ? 'URL 인코딩 (EUC-KR)' : 'URL 인코딩',
+        decoded: d,
+        flexible: { charset },
+        reencode: e => percentEncodeBytes(encodeTextWithCharset(e, charset)),
+      }
+    }
   }
 
   if (/&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]{1,31});/.test(s)) {
@@ -149,18 +145,25 @@ function detectStep(input: string): Step | null {
   const bt = s.trim().replace(/\s+/g, '')
   if (/^[A-Za-z0-9+/_-]+={0,2}$/.test(bt) && bt.length >= 8 && bt.replace(/=+$/, '').length % 4 !== 1) {
     try {
-      const d = b64Decode(bt)
-      if (looksText(d) && d !== bt) {
+      const bytes = b64DecodeToBytes(bt)
+      const charset: Charset = overrideCharset ?? 'utf-8'
+      const d = decodeBytesWithCharset(bytes, charset)
+      if (d !== bt && (overrideCharset ? true : looksText(d))) {
         const urlSafe = /[-_]/.test(bt) && !/[+/]/.test(bt)
-        return { label: urlSafe ? 'Base64 (URL-safe)' : 'Base64', decoded: d, reencode: e => b64Encode(e, urlSafe) }
+        const label = `Base64${urlSafe ? ' (URL-safe)' : ''}${charset === 'euc-kr' ? ' (EUC-KR)' : ''}`
+        return { label, decoded: d, flexible: { charset }, reencode: e => b64EncodeBytes(encodeTextWithCharset(e, charset), urlSafe) }
       }
     } catch { /* not base64 */ }
   }
 
   if (/^[0-9a-fA-F]+$/.test(bt) && bt.length >= 8 && bt.length % 2 === 0) {
     try {
-      const d = hexDecode(bt)
-      if (looksText(d)) return { label: 'Hex', decoded: d, reencode: e => hexEncode(e) }
+      const bytes = hexDecodeToBytes(bt)
+      const charset: Charset = overrideCharset ?? 'utf-8'
+      const d = decodeBytesWithCharset(bytes, charset)
+      if (overrideCharset ? d !== bt : looksText(d)) {
+        return { label: charset === 'euc-kr' ? 'Hex (EUC-KR)' : 'Hex', decoded: d, flexible: { charset }, reencode: e => hexEncodeBytes(encodeTextWithCharset(e, charset)) }
+      }
     } catch { /* not hex text */ }
   }
 
@@ -206,7 +209,7 @@ export function identifyHash(input: string): { name: string; weak: boolean }[] {
 
 /* ── 분석: 연쇄 디코딩 + 최종 재인코딩 ─────────────────────────── */
 
-function analyze(input: string) {
+function analyze(input: string, overrides: Record<number, Charset> = {}) {
   const hashGuess = identifyHash(input)
   const isPrefixHash = HASH_PREFIX.some(([re]) => re.test(input.trim()))
   if (isPrefixHash) return { steps: [] as Step[], final: input, hash: hashGuess }
@@ -215,7 +218,7 @@ function analyze(input: string) {
   let cur = input
   const seen = new Set([input])
   for (let depth = 0; depth < 6; depth++) {
-    const step = detectStep(cur)
+    const step = detectStep(cur, overrides[depth])
     if (!step || step.decoded === cur || seen.has(step.decoded)) break
     steps.push(step)
     cur = step.decoded
@@ -240,6 +243,8 @@ export const ALL_DECODERS: [string, (s: string) => string][] = [
   ['URL 디코딩 (EUC-KR)', s => urlDecodeWithCharset(s, 'euc-kr')],
   ['HTML 엔티티', htmlDecode],
   ['Hex', hexDecode],
+  ['Base64 (EUC-KR)', s => decodeBytesWithCharset(b64DecodeToBytes(s), 'euc-kr')],
+  ['Hex (EUC-KR)', s => decodeBytesWithCharset(hexDecodeToBytes(s), 'euc-kr')],
   ['EUC-KR', euckrDecode],
   ['Unicode escape', unicodeUnescape],
   ['ROT13', rot13],
@@ -248,11 +253,15 @@ const ALL_ENCODERS: [string, (s: string) => string][] = [
   ['Base64', s => b64Encode(s)],
   ['Base64 (URL-safe)', s => b64Encode(s, true)],
   ['Base64 (2중)', s => b64Encode(b64Encode(s))],
+  ['Base64 (EUC-KR)', s => b64EncodeBytes(eucKrEncodeBytes(s))],
   ['URL 인코딩', s => encodeURIComponent(s)],
   ['URL 인코딩 (2중)', s => encodeURIComponent(encodeURIComponent(s))],
+  ['URL 인코딩 (EUC-KR)', s => percentEncodeBytes(eucKrEncodeBytes(s))],
   ['HTML 엔티티 (10진수)', htmlEncode],
   ['HTML 엔티티 (16진수)', s => Array.from(s).map(c => `&#x${c.codePointAt(0)!.toString(16)};`).join('')],
   ['Hex', hexEncode],
+  ['Hex (EUC-KR)', s => hexEncodeBytes(eucKrEncodeBytes(s))],
+  ['EUC-KR', euckrEncode],
   ['ROT13', rot13],
   ['Unicode escape', unicodeEscape],
 ]
@@ -268,23 +277,42 @@ function Row({ name, value }: { name: string; value: string }) {
   </div>
 }
 
+/** 체인/트리 단계 옆에 붙는 작은 UTF-8/EUC-KR 전환 드롭다운. 바꾸면 이 단계부터 다시 디코드된다.
+ * decoderTree.tsx 도 그대로 가져다 쓴다(두 화면이 같은 모양의 컨트롤을 쓰게 하려고). */
+export function CharsetSwitch({ charset, onChange }: { charset: Charset; onChange: (next: Charset) => void }) {
+  return <select className="dec-charset-switch" value={charset} onClick={e => e.stopPropagation()}
+    onChange={e => onChange(e.target.value as Charset)} title="이 단계를 다른 문자셋으로 재해석">
+    {CHARSETS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+  </select>
+}
+
 export function SmartDecoderBuilder() {
   const [raw, setRaw] = useState('')
   const [edited, setEdited] = useState<string | null>(null)
+  const [charsetOverrides, setCharsetOverrides] = useState<Record<number, Charset>>({})
   const [gridInput, setGridInput] = useState('')
   const [copyFailed, setCopyFailed] = useState(false)
 
-  const result = useMemo(() => analyze(raw.trim()), [raw])
-  // 입력이 바뀌면 편집 상태 초기화
+  const result = useMemo(() => analyze(raw.trim(), charsetOverrides), [raw, charsetOverrides])
   const finalText = edited ?? result.final
   const reencoded = useMemo(() => {
     if (result.steps.length === 0) return ''
     try {
       return result.steps.reduceRight((acc, step) => step.reencode(acc), finalText)
     } catch (e) {
-      return `(재인코딩 실패: ${e instanceof Error ? e.message : e})`
+      return `(재인코딩 실패: ${e instanceof EucKrEncodeError ? e.message : e instanceof Error ? e.message : e})`
     }
   }, [result.steps, finalText])
+
+  const setStepCharset = (index: number, charset: Charset) => {
+    setEdited(null)
+    setCharsetOverrides(prev => {
+      const next: Record<number, Charset> = {}
+      for (const k of Object.keys(prev)) { const i = Number(k); if (i < index) next[i] = prev[i] }
+      next[index] = charset
+      return next
+    })
+  }
 
   const copy = async (v: string) => {
     if (!v) return
@@ -292,17 +320,22 @@ export function SmartDecoderBuilder() {
   }
 
   return <div className="payload-builder smart-decoder">
-    <Note>값을 붙여넣으면 인코딩/해시 포맷을 자동 판별합니다. 인코딩된 값은 연쇄로 디코딩하고, 디코딩 결과를 수정하면 같은 포맷으로 즉시 재인코딩됩니다. 모든 처리는 이 브라우저 안에서만 일어납니다.</Note>
+    <Note>값을 붙여넣으면 인코딩/해시 포맷을 자동 판별합니다. 인코딩된 값은 연쇄로 디코딩하고, 디코딩 결과를
+      수정하면 같은 포맷으로 즉시 재인코딩됩니다. 각 단계 옆 드롭다운으로 UTF-8/EUC-KR 해석을 수동으로
+      바꿀 수 있습니다. 모든 처리는 이 브라우저 안에서만 일어납니다.</Note>
 
     <div className="decoder-workspace"><div className="decoder-input-pane"><label className="payload-builder-label">입력</label>
     <textarea className="payload-builder-textarea" rows={3} value={raw}
-      onChange={e => { setRaw(e.target.value); setEdited(null) }}
+      onChange={e => { setRaw(e.target.value); setEdited(null); setCharsetOverrides({}) }}
       placeholder="Base64 / URL / Hex / HTML 엔티티 / JWT / 해시 …"/>
 
     {raw.trim() && <div className="dec-verdict">
       {result.steps.length > 0 && <>
         <span className="dec-verdict-label">감지</span>
-        {result.steps.map((s, i) => <span key={i} className="dec-chain-badge">{s.label}</span>)}
+        {result.steps.map((s, i) => <span key={i} className="dec-chain-badge-wrap">
+          <span className="dec-chain-badge">{s.label}</span>
+          {s.flexible && <CharsetSwitch charset={s.flexible.charset} onChange={cs => setStepCharset(i, cs)}/>}
+        </span>)}
       </>}
       {result.steps.length === 0 && result.hash.length > 0 && <>
         <span className="dec-verdict-label">해시</span>
@@ -318,7 +351,6 @@ export function SmartDecoderBuilder() {
       <textarea className="payload-builder-textarea" rows={result.steps.some(s => s.label === 'JWT') ? 10 : 4}
         value={finalText} onChange={e => setEdited(e.target.value)}/>
 
-      {result.steps.some(s => s.label.includes('EUC-KR')) && <p className="dec-hash-note">EUC-KR 로 읽은 값입니다 — 브라우저는 EUC-KR 인코더를 제공하지 않아 재인코딩은 UTF-8 로만 됩니다(원래 바이트와 달라집니다).</p>}
       <div className="payload-readout-title">원래 포맷으로 재인코딩 ({result.steps.map(s => s.label).reverse().join(' → ')})</div>
       <div className="cheatsheet-command-bar">
         <pre className="cheatsheet-command wrap-anywhere">{reencoded}</pre>
@@ -352,3 +384,6 @@ export function SmartDecoderBuilder() {
     </details>
   </div>
 }
+
+// 참고용으로 내부 헬퍼도 내보내서 decoderTree.tsx 와 테스트가 같은 구현을 공유한다.
+export { codecForLabel, labelCharset }
