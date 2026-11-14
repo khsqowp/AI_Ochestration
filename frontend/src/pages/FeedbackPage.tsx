@@ -11,7 +11,7 @@ type FeedbackReport = {
   createdAt: string
 }
 
-const OWNER_EMAIL = 'kknd03255@gmail.com'
+const OWNER_EMAIL = 'kknd03255'
 
 async function responseJson<T>(response: Response): Promise<T> {
   const raw = await response.text()

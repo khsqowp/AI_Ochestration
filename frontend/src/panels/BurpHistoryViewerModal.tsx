@@ -4,7 +4,7 @@ import { useModalA11y } from '../hooks/useModalA11y'
 import { useAppState } from '../context/AppState'
 
 // 이 도구는 소유자 1명만 접근해야 한다 — FeedbackPage.tsx의 OWNER_EMAIL 패턴을 그대로 재사용.
-const OWNER_EMAIL = 'kknd03255@gmail.com'
+const OWNER_EMAIL = 'kknd03255'
 
 export function BurpHistoryViewerModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
