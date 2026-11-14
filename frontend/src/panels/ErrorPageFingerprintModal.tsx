@@ -64,7 +64,7 @@ const HEADERS: HeaderProbe[] = [
   { id: 'transfer-encoding-cl-conflict', title: 'Transfer-Encoding: chunked + Content-Length 동시 전송 (요청 스머글링 지표)', method: 'POST', extraHeaderLines: () => ['Transfer-Encoding: chunked', 'Content-Length: 4'], checkpoint: 'RFC 7230 §3.3.3은 두 헤더가 동시에 있으면 Transfer-Encoding을 우선하고 메시지를 거부하거나 Content-Length를 무시하도록 요구 — 프록시와 백엔드가 서로 다르게 해석하면 TE.CL/CL.TE 요청 스머글링으로 이어짐. curl/libcurl은 이 조합을 자동으로 정규화해버리므로 반드시 Burp Repeater raw 탭이나 nc/openssl s_client로 직접 전송해야 의미가 있음 — 전송 즉시 400으로 거부되면 스머글링에 대해 보수적인 서버, 200으로 통과되면 추가 조사 대상.' },
   { id: 'accept-unsupported-media', title: '지원하지 않는 Accept 헤더 (콘텐츠 협상 406 유도)', extraHeaderLines: () => ['Accept: application/this-type-does-not-exist'], checkpoint: '엔드포인트가 특정 produces 타입만 지원하도록 선언된 경우(예: Spring MVC @RequestMapping(produces=...)), 클라이언트가 그 타입을 전혀 받아들이지 않겠다고 선언하면 기본적으로 406 Not Acceptable 에러 페이지가 떨어짐 — 커스텀 에러 핸들러가 없으면 Spring Boot는 Whitelabel Error Page(JSON/HTML)로 프레임워크·버전 정보가 노출될 수 있음. 프레임워크별 폴백 동작(406을 내는지, 임의 포맷으터로 폴백하는지)이 달라 비교 포인트로도 활용.' },
   { id: 'unknown-host', title: '존재하지 않는 Host / 기본 vhost 폴백', extraHeaderLines: () => ['Host: nonexistent-vhost.invalid'], checkpoint: 'Host 기반 가상호스트가 일치하지 않을 때 Apache `default server` 또는 nginx 기본 서버 블록이 응답하는지 확인한다. 서버 설정의 default_server/기본 VirtualHost 구성에 따라 기본 사이트의 배너나 다른 오류 템플릿이 드러날 수 있고, CDN이 Host를 제한하면 400/421로 끝날 수 있다.' },
-  { id: 'host-port-mismatch', title: '포트를 포함한 Host 불일치', extraHeaderLines: () => [`Host: ${targetHost}:9999`], checkpoint: 'Host의 포트가 프록시 라우팅, 앱의 절대 URL 생성, 캐시 키에서 동일하게 처리되는지 비교한다. RFC 9110의 authority 처리와 배포별 프록시 설정 차이로 생기는 탐지용 입력이며, 포트 불일치 자체가 서버 오류나 취약성을 뜻하지 않는다.' },
+  { id: 'host-port-mismatch', title: '포트를 포함한 Host 불일치', extraHeaderLines: () => [], checkpoint: 'Host의 포트가 프록시 라우팅, 앱의 절대 URL 생성, 캐시 키에서 동일하게 처리되는지 비교한다. RFC 9110의 authority 처리와 배포별 프록시 설정 차이로 생기는 탐지용 입력이며, 포트 불일치 자체가 서버 오류나 취약성을 뜻하지 않는다.' },
   { id: 'rfc-forwarded', title: 'RFC 7239 Forwarded 스푸핑', usesRedirectTarget: true, extraHeaderLines: target => [`Forwarded: for=127.0.0.1;host=${target};proto=http`], checkpoint: '표준 `Forwarded`를 신뢰 프록시 경계 검증 없이 처리하는 앱에서 생성 URL·리다이렉트 또는 클라이언트 주소 판단이 바뀌는지 본다. 프록시는 이 헤더를 제거·덮어쓸 수 있고, 기본적으로 모든 서버가 이를 신뢰하지는 않는다.' },
   { id: 'method-override', title: 'X-HTTP-Method-Override: DELETE', method: 'POST', extraHeaderLines: () => ['X-HTTP-Method-Override: DELETE'], checkpoint: '일부 Rails 미들웨어/앱과 프록시 구성은 POST의 `X-HTTP-Method-Override`를 실제 동사처럼 해석할 수 있다. 프레임워크 기본 동작만으로 보장되지는 않으며, 라우팅·인증·감사 로그가 원 메서드와 덮어쓴 메서드를 다르게 처리하는지 확인한다.' },
   { id: 'unkeyed-header', title: '캐시 비키잉 헤더 (X-Forwarded-Host)', usesRedirectTarget: true, extraHeaderLines: target => [`X-Forwarded-Host: ${target}`], checkpoint: '캐시가 X-Forwarded-Host를 키에 넣지 않지만 오리진이 절대 URL이나 오류 본문 생성에 사용하면 캐시된 응답에 입력값이 섞이는지 점검한다. 캐시 적중/키 정책을 확인해야 하며, 응답 반영만으로 포이즈닝을 확정할 수 없다. 테스트는 허가된 비공개 경로에서 수행한다.' },
@@ -109,7 +109,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
   const headerCommand = (item: HeaderProbe) => {
     const headers = item.extraHeaderLines(redirectTarget)
     const hasExplicitHost = headers.some(header => header.toLowerCase().startsWith('host:'))
-    const hostHeaders = item.id === 'missing-host' ? ['Host:'] : item.id === 'duplicate-host' ? [`Host: ${targetHost}`, `Host: ${redirectTarget}`] : hasExplicitHost ? headers : [`Host: ${targetHost}`, ...headers]
+    const hostHeaders = item.id === 'missing-host' ? ['Host:'] : item.id === 'duplicate-host' ? [`Host: ${targetHost}`, `Host: ${redirectTarget}`] : item.id === 'host-port-mismatch' ? [`Host: ${targetHost}:9999`] : hasExplicitHost ? headers : [`Host: ${targetHost}`, ...headers]
     const body = item.body === undefined ? '' : ` --data ${shellQuote(item.body)}`
     return `${curlBin} -i -X ${item.method ?? 'GET'} ${hostHeaders.map(curlHeader).join(' ')}${body} ${shellQuote(`https://${targetHost}${targetPath}`)}`
   }
@@ -139,6 +139,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
     const lines = item.extraHeaderLines(redirectTarget)
     if (item.id === 'missing-host') return `${method} ${targetPath} HTTP/1.1\n\n`
     if (item.id === 'duplicate-host') return `${method} ${targetPath} HTTP/1.1\nHost: ${targetHost}\nHost: ${redirectTarget}\n\n`
+    if (item.id === 'host-port-mismatch') return `${method} ${targetPath} HTTP/1.1\nHost: ${targetHost}:9999\n\n`
     const hasExplicitHost = lines.some(line => line.toLowerCase().startsWith('host:'))
     return `${method} ${targetPath} HTTP/1.1\n${hasExplicitHost ? '' : `Host: ${targetHost}\n`}${lines.join('\n')}\n\n`
   }
@@ -212,7 +213,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
             {selectedHeader && <>
               <div className="error-fp-repeater">
                 <div className="error-fp-repeater-header">Repeater — Request</div>
-                <pre>{selectedHeader.method ?? 'GET'} {targetPath} HTTP/1.1{'\n'}{selectedHeader.id === 'missing-host' ? <span className="error-fp-highlight">(Host 헤더 의도적으로 생략){'\n'}</span> : selectedHeader.id === 'duplicate-host' ? <><span className="error-fp-highlight">Host: {targetHost}{'\n'}</span><span className="error-fp-highlight">Host: {redirectTarget}{'\n'}</span></> : <>Host: {targetHost}{'\n'}{extraHeaderLines.map((line, index) => <span className="error-fp-highlight" key={index}>{line}{'\n'}</span>)}</>}{'\n'}</pre>
+                <pre>{selectedHeader.method ?? 'GET'} {targetPath} HTTP/1.1{'\n'}{selectedHeader.id === 'missing-host' ? <span className="error-fp-highlight">(Host 헤더 의도적으로 생략){'\n'}</span> : selectedHeader.id === 'duplicate-host' ? <><span className="error-fp-highlight">Host: {targetHost}{'\n'}</span><span className="error-fp-highlight">Host: {redirectTarget}{'\n'}</span></> : selectedHeader.id === 'host-port-mismatch' ? <span className="error-fp-highlight">Host: {targetHost}:9999{'\n'}</span> : <>Host: {targetHost}{'\n'}{extraHeaderLines.map((line, index) => <span className="error-fp-highlight" key={index}>{line}{'\n'}</span>)}</>}{'\n'}</pre>
               </div>
               <p className="error-fp-hint">점검 포인트: {selectedHeader.checkpoint}</p>
               {selectedHeader.usesRedirectTarget && <Note>{selectedHeader.redirectNote ?? `응답 Location 헤더나 본문 링크에 ${redirectTarget}이 그대로 반영되면 취약 가능성이 있습니다.`}</Note>}
