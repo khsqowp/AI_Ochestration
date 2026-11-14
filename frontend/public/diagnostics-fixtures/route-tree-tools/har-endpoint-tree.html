@@ -3,120 +3,89 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HAR 화면·API 관계 트리</title>
+<title>HAR 통합 경로 트리</title>
 <style>
-  :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #252537; background: #f4f4f7; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #252537; background: #f4f4f7; --ease-out: cubic-bezier(.23,1,.32,1); }
   * { box-sizing: border-box; }
   body { margin: 0; }
   main { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; padding: 28px 22px 60px; }
   h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -.02em; line-height: 1.2; }
   p { margin: 0 0 18px; color: #6f6977; line-height: 1.6; }
   .panel { background: #fff; border: 1px solid #eceaf0; border-radius: 16px; padding: 18px; margin-top: 15px; box-shadow: 0 2px 6px rgba(0,0,0,.03), 0 14px 36px rgba(0,0,0,.04); }
-  input, button, select { font: inherit; }
+  input, button { font: inherit; }
   input[type=file] { width: 100%; padding: 16px; border: 1px dashed #a59bca; border-radius: 12px; background: #faf9ff; color: #252537; }
-  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-  .controls input[type=search] { flex: 1; min-width: 220px; padding: 10px; border: 1px solid #dcd8e5; border-radius: 10px; background: #fff; color: #252537; }
-  .controls input[type=search]::placeholder { color: #6f6977; }
-  button, select { padding: 9px 12px; border-radius: 10px; border: 1px solid #dcd8e5; background: #fff; color: #252537; cursor: pointer; transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out), transform 140ms var(--ease-out); }
-  button:active:not(:disabled) { transform: scale(.97); }
-  button:disabled { opacity: .55; cursor: not-allowed; }
-  .primary { background: #7667dc; border-color: #7667dc; color: #fff; }
-  #status, #summary { color: #6f6977; font-size: 14px; }
-  #summary { margin: 15px 0; }
-  .table { flex: 1; min-height: 400px; overflow: auto; border: 1px solid #eceaf0; border-radius: 12px; background: #fafafc; }
-  .panel:has(> .table) { flex: 1; display: flex; flex-direction: column; }
-  .head, .route { display: grid; grid-template-columns: minmax(300px, 1.5fr) minmax(180px, 1fr) 92px 74px; gap: 12px; align-items: center; min-width: 730px; }
-  .head { position: sticky; top: 0; z-index: 2; padding: 11px 12px; background: #fafafc; color: #6f6977; border-bottom: 1px solid #eceaf0; font-size: 13px; font-weight: 700; }
-  .head span:last-child { text-align: right; }
-  .tree { padding: 6px 0; min-width: 730px; }
-  details { margin-left: 18px; border-left: 1px solid #d1cce0; padding-left: 12px; }
-  .tree > details { margin-left: 10px; border: 0; padding-left: 0; }
-  summary { cursor: pointer; padding: 7px 4px; color: #252537; font-weight: 650; }
-  .route { padding: 8px 10px 8px 16px; margin-left: 18px; border-left: 1px solid #dcd8e5; border-top: 1px solid #eceaf0; }
-  .path { overflow-wrap: anywhere; }
-  .params { color: #6f6977; font-size: 13px; overflow-wrap: anywhere; }
-  .method { display: inline-block; min-width: 58px; text-align: center; border-radius: 999px; padding: 4px 6px; font-size: 12px; font-weight: 750; background: #f1f0f7; color: #514d61; }
-  .method.get { background: #e8f2fd; color: #245b8b; } .method.post { background: #e6f4ec; color: #276646; } .method.delete { background: #fbeaec; color: #a43f45; }
-  .copy { justify-self: end; padding: 5px 9px; font-size: 12px; }
-  .badge { display: inline-block; margin-right: 7px; padding: 2px 5px; border-radius: 999px; font-size: 11px; background: #e6f4ec; color: #276646; }
-  .badge.candidate { background: #fff1dc; color: #8b5a16; }
-  .hint { display: block; margin-top: 3px; color: #6f6977; font-size: 11px; }
-  .view-tabs { display:flex; gap:8px; flex-wrap:wrap; margin: 0 0 12px; }
-  .view-tabs button[aria-pressed="true"] { background:#7667dc; border-color:#7667dc; color:#fff; }
-  .tree-note { margin:8px 0 12px; color:#6f6977; font-size:13px; }
-  .api-row, .candidate-row { display:flex; align-items:flex-start; gap:10px; padding:9px 12px; border-top:1px solid #eceaf0; cursor:context-menu; }
-  .api-main { min-width:0; overflow-wrap:anywhere; }
-  .api-sub { display:block; margin-top:3px; color:#6f6977; font-size:11px; }
-  .unlinked { border:1px dashed #c89d5b; border-radius:12px; margin:10px; background:#fffbf5; }
-  .empty { padding: 20px; color: #6f6977; }
-  .zoom-controls { position: fixed; right: 18px; bottom: 18px; z-index: 10; display: flex; align-items: center;
-    gap: 2px; background: #fff; border: 1px solid #eceaf0; border-radius: 12px; padding: 5px; box-shadow: 0 2px 6px rgba(0,0,0,.03), 0 14px 36px rgba(0,0,0,.04); }
-  .zoom-controls button { width: 32px; height: 32px; padding: 0; font-size: 17px; font-weight: 700; line-height: 1; }
-  .zoom-controls span { width: 46px; text-align: center; font-size: 12px; color: #6f6977; }
-  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, .api-row:focus-visible, .candidate-row:focus-visible { outline: 3px solid rgba(118,103,220,.38); outline-offset: 2px; }
-  @media (hover: hover) and (pointer: fine) {
-    button:not(:disabled):hover { background: #f4f1ff; border-color: #8b80e4; }
-    button.primary:hover, .view-tabs button[aria-pressed="true"]:hover { background: #5d50ba; border-color: #5d50ba; }
-    summary:hover { color: #6556c8; }
-    .route:hover, .api-row:hover, .candidate-row:hover { background: #f4f1ff; }
-  }
-
-html.embedded main { height: 100dvh; min-height: 0; padding: 8px; overflow: hidden; }
-html.embedded main > h1, html.embedded main > h1 + p { display: none; }
-html.embedded main > .panel { margin-top: 6px; padding: 10px; min-height: 0; }
-html.embedded main > .panel:first-of-type { flex: 0 0 auto; }
-html.embedded input[type=file] { padding: 8px; }
-html.embedded .panel:has(> .table) { flex: 1 1 auto; }
-html.embedded .table { min-height: 0; }
-html.embedded .view-tabs, html.embedded .tree-note, html.embedded #summary { margin: 0 0 5px; }
-html.embedded .controls { margin-top: 6px; }
+  .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px; }
+  .controls input[type=search] { flex:1; min-width:200px; padding:10px; border:1px solid #dcd8e5; border-radius:10px; color:#252537; }
+  button { padding:9px 12px; border-radius:10px; border:1px solid #dcd8e5; background:#fff; color:#252537; cursor:pointer; transition:background-color 140ms var(--ease-out), border-color 140ms var(--ease-out), transform 140ms var(--ease-out); }
+  button:active:not(:disabled) { transform:scale(.97); } button:disabled { opacity:.55; cursor:not-allowed; }
+  .primary { background:#7667dc; border-color:#7667dc; color:#fff; }
+  #status, #summary { color:#6f6977; font-size:14px; } #status { margin-left:auto; }
+  #summary { margin:15px 0; }
+  .panel:has(> .tree) { flex:1; display:flex; flex-direction:column; }
+  .tree { flex:1; min-height:400px; overflow:auto; border:1px solid #eceaf0; border-radius:12px; background:#fafafc; padding:8px 12px; }
+  details { margin-left:17px; border-left:1px solid #d1cce0; padding-left:12px; }
+  .tree > details { margin-left:0; border:0; padding-left:0; }
+  summary { cursor:pointer; padding:7px 4px; font-weight:650; overflow-wrap:anywhere; }
+  .route { display:flex; align-items:center; flex-wrap:wrap; gap:7px; padding:8px 10px 8px 14px; margin-left:17px; border-left:1px solid #dcd8e5; border-top:1px solid #eceaf0; overflow-wrap:anywhere; }
+  .route-path { min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .method, .badge { display:inline-block; border-radius:999px; padding:3px 7px; font-size:11px; font-weight:750; white-space:nowrap; }
+  .method { min-width:54px; text-align:center; background:#eeeef2; color:#4f4e5b; }
+  .method.get { background:#e8f2fd;color:#245b8b } .method.post { background:#e6f4ec;color:#276646 } .method.put { background:#fff1dc;color:#8b5a16 }
+  .method.patch { background:#f0eaff;color:#6548a8 } .method.delete { background:#fbeaec;color:#a43f45 } .method.head { background:#e4f4f4;color:#236568 }
+  .method.options { background:#e9edf2;color:#475569 } .method.connect { background:#e8edf9;color:#344f92 } .method.trace { background:#f3e9f3;color:#754575 }
+  .badge { background:#e6f4ec;color:#276646 } .badge.candidate { background:#fff1dc;color:#8b5a16 }
+  .badge.risk { background:#b42318;color:#fff; cursor:help; }
+  .route.risk-row { background:#fff3f2; border-left-color:#b42318; }
+  .empty { padding:20px; color:#6f6977; }
+  .zoom-controls { position:fixed;right:18px;bottom:18px;z-index:10;display:flex;align-items:center;gap:2px;background:#fff;border:1px solid #eceaf0;border-radius:12px;padding:5px;box-shadow:0 2px 6px rgba(0,0,0,.03),0 14px 36px rgba(0,0,0,.04); }
+  .zoom-controls button { width:32px;height:32px;padding:0;font-size:17px;font-weight:700;line-height:1; }
+  .zoom-controls span { width:46px;text-align:center;font-size:12px;color:#6f6977; }
+  button:focus-visible,input:focus-visible,summary:focus-visible { outline:3px solid rgba(118,103,220,.38);outline-offset:2px; }
+  @media (hover:hover) and (pointer:fine) { button:not(:disabled):hover { background:#f4f1ff;border-color:#8b80e4 } button.primary:hover { background:#5d50ba;border-color:#5d50ba } summary:hover,.route:hover { background:#f4f1ff } }
+  @media (max-width:700px) { main { padding:18px 12px 60px } h1 { font-size:25px } #status { width:100%;margin:0 } }
+  html.embedded main { height:100dvh;min-height:0;padding:8px;overflow:hidden; }
+  html.embedded main > h1, html.embedded main > h1 + p { display:none; }
+  html.embedded main > .panel { margin-top:6px;padding:10px;min-height:0; }
+  html.embedded main > .panel:first-of-type { flex:0 0 auto; }
+  html.embedded .panel:has(> .tree) { flex:1 1 auto; }
+  html.embedded .tree { min-height:0; }
+  html.embedded input[type=file] { padding:8px; }
+  html.embedded .controls { margin-top:6px; }
+  html.embedded #summary { margin:6px 0; }
 </style>
 </head>
 <body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')">
 <main id="zoomRoot">
-  <h1>HAR 화면·API 관계 트리</h1>
-  <p>로그인한 브라우저의 Network에서 Preserve log를 켜고 탐색한 뒤 HAR를 내보내세요. 이 파일은 브라우저 안에서만 분석하며 서버로 전송하지 않습니다.</p>
+  <h1>HAR 통합 경로 트리</h1>
+  <p>HAR의 실제 요청과 JavaScript 응답 본문에서 추출한 후보 경로를 함께 표시합니다. 분석은 브라우저 안에서만 이루어지며 서버로 전송하지 않습니다.</p>
   <section class="panel">
     <input id="files" type="file" accept=".har,.json,application/json" multiple aria-label="HAR 파일 선택">
     <div class="controls"><button class="primary" id="analyze">분석하기</button><button id="clear">초기화</button><span id="status" role="status"></span></div>
   </section>
   <section class="panel">
-    <div class="view-tabs" role="group" aria-label="트리 보기 방식">
-      <button id="screenView" type="button" aria-pressed="true">화면·API 관계</button>
-      <button id="pathView" type="button" aria-pressed="false">요청 경로 트리</button>
-    </div>
-    <p class="tree-note" id="treeNote">HAR에 기록된 페이지와 Referer 정보를 이용해 화면 이동 관계를 구성합니다. 연결이 불명확한 항목은 추정 또는 미연결로 표시합니다.</p>
     <div class="controls" style="margin-top:0">
-      <input id="search" type="search" placeholder="경로, 도메인, 파라미터 검색" aria-label="결과 검색">
-      <input id="exclude" type="search" placeholder="제외 키워드 (| 로 구분, 예: youtube|google|kakao)" aria-label="제외 키워드">
-      <select id="scope" aria-label="결과 종류"><option value="all">전체</option><option value="observed">실제 요청</option><option value="candidate">JS 후보</option></select>
+      <input id="search" type="search" placeholder="경로, 도메인, 메서드 검색" aria-label="결과 검색">
+      <input id="exclude" type="search" placeholder="제외 키워드 (| 로 구분)" aria-label="제외 키워드">
       <button id="expand">모두 펼치기</button><button id="collapse">모두 접기</button>
+      <button id="copyAll" disabled title="필터와 관계없이 전체 결과의 고유 경로를 복사합니다">전체 경로 복사</button>
     </div>
     <div id="summary">HAR 파일을 선택해 주세요.</div>
-    <div class="table"><div class="head"><span>경로</span><span>파라미터 이름</span><span>메서드</span><span>복사</span></div><div id="tree" class="tree"><div class="empty">분석 결과가 여기에 표시됩니다.</div></div></div>
+    <div id="tree" class="tree"><div class="empty">분석 결과가 여기에 표시됩니다.</div></div>
   </section>
 </main>
-<div class="zoom-controls">
-  <button id="zoomOut" type="button" title="축소" aria-label="축소">&minus;</button>
-  <span id="zoomLevel">100%</span>
-  <button id="zoomIn" type="button" title="확대" aria-label="확대">+</button>
-</div>
+<div class="zoom-controls"><button id="zoomOut" type="button" title="축소" aria-label="축소">&minus;</button><span id="zoomLevel">100%</span><button id="zoomIn" type="button" title="확대" aria-label="확대">+</button></div>
 <script>
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  let results = [];
-  let screenResults = null;
-  let viewMode = 'screens';
-  let stats = { requests: 0, scripts: 0, scriptBodies: 0 };
-  const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
+  let results = [], stats = { requests:0, scripts:0, scriptBodies:0 };
   const staticExt = /\.(?:js|mjs|cjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|mp4|webm|pdf)(?:$|[?#])/i;
+  const adminTerms = ['admin','manage','internal','private','debug','console'];
 
   function parseUrl(raw, base) {
     if (typeof raw !== 'string') return null;
-    let text = raw.trim().replace(/\\\//g, '/').replace(/\$\{[^}]+\}/g, '{…}');
-    if (!text || /^(?:data|blob|javascript|mailto):/i.test(text)) return null;
-    if (/^\/(?:\/|\*)/.test(text)) return null;
+    let text = raw.trim().replace(/\\\//g,'/').replace(/\$\{[^}]+\}/g,'{…}');
+    if (!text || /^(?:data|blob|javascript|mailto):/i.test(text) || /^\/(?:\/|\*)/.test(text)) return null;
     if (!/^(?:https?:)?\/\//i.test(text) && !text.startsWith('/')) {
       if (!/^(?:api|v\d+|graphql|rest)\//i.test(text)) return null;
       text = '/' + text;
@@ -124,19 +93,17 @@ html.embedded .controls { margin-top: 6px; }
     try {
       const url = new URL(text.startsWith('//') ? 'https:' + text : text, base);
       if (!/^https?:$/.test(url.protocol)) return null;
-      return { host: url.host.toLowerCase(), path: url.pathname || '/', query: [...url.searchParams.keys()], origin: url.origin };
+      return { host:url.host.toLowerCase(), path:url.pathname || '/', origin:url.origin, params:[...url.searchParams.keys()] };
     } catch { return null; }
   }
-
   function add(map, data) {
-    const key = [data.kind, data.host, data.path, data.method].join('\u0000');
-    if (!map.has(key)) map.set(key, { ...data, params: new Set(), sources: new Set(), count: 0 });
+    const key = [data.host,data.path,data.method].join('\u0000');
+    if (!map.has(key)) map.set(key,{...data,params:new Set(),sources:new Set(),count:0});
     const item = map.get(key);
     for (const param of data.params || []) if (param) item.params.add(param);
     if (data.source) item.sources.add(data.source);
     item.count++;
   }
-
   function bodyParams(postData) {
     if (!postData || typeof postData !== 'object') return [];
     const names = new Set((postData.params || []).map(x => x.name).filter(Boolean));
@@ -144,453 +111,120 @@ html.embedded .controls { margin-top: 6px; }
     if (typeof raw !== 'string') return [...names];
     const mime = postData.mimeType || '';
     if (/json/i.test(mime)) {
-      try {
-        const visit = (value, prefix = '', depth = 0) => {
-          if (!value || typeof value !== 'object' || depth > 4) return;
-          for (const [key, nested] of Object.entries(value)) {
-            const name = prefix ? prefix + '.' + key : key;
-            names.add(name);
-            visit(nested, name, depth + 1);
-          }
-        };
-        visit(JSON.parse(raw));
-      } catch { /* Invalid or truncated JSON body. */ }
-    } else if (/x-www-form-urlencoded/i.test(mime)) {
-      for (const key of new URLSearchParams(raw).keys()) names.add(key);
-    }
+      try { const visit=(v,p='',d=0)=>{ if(!v||typeof v!=='object'||d>4)return; for(const [k,n] of Object.entries(v)){const name=p?p+'.'+k:k;names.add(name);visit(n,name,d+1);} }; visit(JSON.parse(raw)); } catch {}
+    } else if (/x-www-form-urlencoded/i.test(mime)) for (const key of new URLSearchParams(raw).keys()) names.add(key);
     return [...names];
   }
-
   function responseText(content) {
     if (!content || typeof content.text !== 'string') return null;
     if (content.encoding !== 'base64') return content.text;
-    try {
-      const binary = atob(content.text);
-      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-    } catch { return null; }
+    try { const binary=atob(content.text), bytes=Uint8Array.from(binary,c=>c.charCodeAt(0)); return new TextDecoder('utf-8',{fatal:false}).decode(bytes); } catch { return null; }
   }
-
   function jsCandidates(code, source, map) {
-    let base;
-    try { base = new URL(source).origin; } catch { return; }
-    const push = (raw, method = '?') => {
-      const parsed = parseUrl(raw, base);
-      if (!parsed || staticExt.test(parsed.path)) return;
-      add(map, { ...parsed, kind: 'candidate', method, params: parsed.query, source });
-    };
-    // Request calls provide stronger evidence and sometimes a visible HTTP method.
-    const calls = /\b(?:axios\s*\.\s*(get|post|put|patch|delete|head|options)|fetch)\s*\(\s*(["'`])((?:\\.|(?!\2)[^\\])*?)\2/gi;
-    for (const match of code.matchAll(calls)) push(match[3], match[1] ? match[1].toUpperCase() : '?');
-    // Other string literals may be endpoint definitions; label them as candidates.
-    const literals = /(["'`])((?:\\.|(?!\1)[^\\])*?)\1/g;
-    for (const match of code.matchAll(literals)) {
-      const value = match[2];
-      if (/^(?:https?:)?\/\//i.test(value) || value.startsWith('/') || /^(?:api|v\d+|graphql|rest)\//i.test(value)) push(value);
-    }
+    const push=(raw,method='?')=>{ const p=parseUrl(raw,source); if(p&&!staticExt.test(p.path)) add(map,{...p,kind:'candidate',method,params:p.params,source}); };
+    const calls=/\b(?:axios\s*\.\s*(get|post|put|patch|delete|head|options)|fetch)\s*\(\s*(["'`])((?:\\.|(?!\2)[^\\])*?)\2/gi;
+    for(const m of code.matchAll(calls)) push(m[3],m[1]?m[1].toUpperCase():'?');
+    const literals=/("|'|`)((?:\\.|(?!\1)[^\\])*?)\1/g;
+    for(const m of code.matchAll(literals)) if(/^(?:https?:)?\/\//i.test(m[2])||m[2].startsWith('/')||/^(?:api|v\d+|graphql|rest)\//i.test(m[2])) push(m[2]);
   }
-
   function analyzeHar(har, observed, candidates) {
-    const entries = har?.log?.entries;
-    if (!Array.isArray(entries)) throw new Error('HAR 형식이 아닙니다 (log.entries 없음).');
-    for (const entry of entries) {
-      const request = entry?.request;
-      if (!request?.url) continue;
-      stats.requests++;
-      const parsed = parseUrl(request.url);
-      if (parsed) {
-        const method = String(request.method || '?').toUpperCase();
-        const query = (request.queryString || []).map(x => x.name).filter(Boolean);
-        add(observed, { ...parsed, kind: 'observed', method, params: [...parsed.query, ...query, ...bodyParams(request.postData)], source: request.url });
-      }
-      const content = entry.response?.content;
-      const script = /(?:java|ecma)script/i.test(content?.mimeType || '') || /\.(?:js|mjs|cjs)(?:$|[?#])/i.test(request.url);
-      if (!script) continue;
-      stats.scripts++;
-      const code = responseText(content);
-      if (code === null) continue;
-      stats.scriptBodies++;
-      jsCandidates(code, request.url, candidates);
+    const entries=har?.log?.entries;
+    if(!Array.isArray(entries)) throw new Error('HAR 형식이 아닙니다 (log.entries 없음).');
+    for(const entry of entries) {
+      const req=entry?.request; if(!req?.url) continue; stats.requests++;
+      const parsed=parseUrl(req.url);
+      if(parsed) add(observed,{...parsed,kind:'observed',method:String(req.method||'?').toUpperCase(),params:[...parsed.params,...(req.queryString||[]).map(x=>x.name),...bodyParams(req.postData)],source:req.url});
+      const content=entry.response?.content;
+      if(!(/(?:java|ecma)script/i.test(content?.mimeType||'')||/\.(?:js|mjs|cjs)(?:$|[?#])/i.test(req.url))) continue;
+      stats.scripts++; const code=responseText(content); if(code===null) continue;
+      stats.scriptBodies++; jsCandidates(code,req.url,candidates);
     }
   }
-
-  function headerValue(headers, name) {
-    const header = (headers || []).find(item => String(item?.name || '').toLowerCase() === name.toLowerCase());
-    return typeof header?.value === 'string' ? header.value : '';
-  }
-
-  function pageKey(raw) {
-    const parsed = parseUrl(raw);
-    return parsed ? `${parsed.origin}${parsed.path}` : '';
-  }
-
-  function pageLabel(page) {
-    const parsed = parseUrl(page.url);
-    const path = parsed?.path || page.url || '(주소 미확인)';
-    const base = path === '/' ? `${parsed?.host || ''} · 사이트 루트 화면` : `${parsed?.host || ''}${path}`;
-    return page.title && page.title !== page.url ? `${page.title} · ${base}` : base;
-  }
-
-  function buildScreenRelations(har) {
-    const entries = har?.log?.entries || [];
-    const pageMeta = new Map((har?.log?.pages || []).map(page => [page.id, page]));
-    const pages = new Map();
-    const ensurePage = (url, title = '', confidence = 'observed', pageRef = '') => {
-      const key = pageKey(url);
-      if (!key) return null;
-      if (!pages.has(key)) pages.set(key, { key, url: key, title, confidence, parentKey: '', apis: [], firstSeen: '', pageRef });
-      const page = pages.get(key);
-      if (title && !page.title) page.title = title;
-      if (confidence === 'observed') page.confidence = 'observed';
-      if (pageRef && !page.pageRef) page.pageRef = pageRef;
-      return page;
-    };
-
-    // First identify actual document navigations and map HAR pageref IDs to their screens.
-    const pageRefToKey = new Map();
-    for (const entry of entries) {
-      const request = entry?.request;
-      if (!request?.url) continue;
-      const mime = String(entry.response?.content?.mimeType || '');
-      const resourceType = String(entry._resourceType || request._resourceType || '').toLowerCase();
-      const isDocument = resourceType === 'document' || /text\/html/i.test(mime);
-      if (!isDocument) continue;
-      const meta = pageMeta.get(entry.pageref);
-      const page = ensurePage(request.url, meta?.title || '', 'observed', entry.pageref || '');
-      if (!page) continue;
-      if (entry.startedDateTime && (!page.firstSeen || entry.startedDateTime < page.firstSeen)) page.firstSeen = entry.startedDateTime;
-      const referer = headerValue(request.headers, 'referer');
-      const parentKey = pageKey(referer);
-      if (parentKey && parentKey !== page.key) page.parentKey = parentKey;
-      if (entry.pageref) pageRefToKey.set(entry.pageref, page.key);
+  function finalize(observed,candidates) {
+    const merged=new Map();
+    for(const [kind,map] of [['observed',observed],['candidate',candidates]]) for(const item of map.values()) {
+      const key=[item.host,item.path,item.method].join('\u0000');
+      if(!merged.has(key)) merged.set(key,{...item,kindSet:new Set(),params:new Set(),sources:new Set(),count:0});
+      const target=merged.get(key); target.kindSet.add(kind); target.count+=item.count;
+      for(const p of item.params) target.params.add(p); for(const s of item.sources) target.sources.add(s);
     }
-
-    // HAR pages may exist without a recognizable document entry. Use page metadata only
-    // when the exporter provides a non-standard URL field; otherwise leave it unlinked.
-    for (const [id, meta] of pageMeta) {
-      if (typeof meta.url !== 'string') continue;
-      const page = ensurePage(meta.url, meta.title || '', 'inferred', id);
-      if (page) pageRefToKey.set(id, page.key);
+    const origins = new Map();
+    for (const item of merged.values()) {
+      const pathKey = item.host + '\u0000' + item.path;
+      if (!origins.has(pathKey)) origins.set(pathKey, new Set());
+      for (const kind of item.kindSet) origins.get(pathKey).add(kind);
     }
-
-    const unlinkedApis = [];
-    for (const entry of entries) {
-      const request = entry?.request;
-      if (!request?.url) continue;
-      const mime = String(entry.response?.content?.mimeType || '');
-      const resourceType = String(entry._resourceType || request._resourceType || '').toLowerCase();
-      if (resourceType === 'document' || /text\/html/i.test(mime)) continue;
-      const parsed = parseUrl(request.url);
-      if (!parsed) continue;
-      const method = String(request.method || '?').toUpperCase();
-      const requestPath = parsed.path.toLowerCase();
-      const isApi = ['xhr', 'fetch'].includes(resourceType)
-        || /\/(?:api|rest|graphql|gql)(?:\/|$)/i.test(requestPath)
-        || /(?:json|graphql)/i.test(mime)
-        || !['GET', 'HEAD', '?'].includes(method);
-      if (!isApi) continue;
-      const apiEvidence = ['xhr', 'fetch'].includes(resourceType) ? `${resourceType.toUpperCase()} 요청`
-        : /\/(?:api|rest|graphql|gql)(?:\/|$)/i.test(requestPath) ? 'API 경로 패턴'
-          : /(?:json|graphql)/i.test(mime) ? 'JSON/GraphQL 응답 유형' : '상태 변경 HTTP 메서드';
-      const referrer = headerValue(request.headers, 'referer');
-      const refKey = pageKey(referrer);
-      const pageKeyForRequest = pageRefToKey.get(entry.pageref) || refKey;
-      const page = pageKeyForRequest ? (pages.get(pageKeyForRequest) || ensurePage(pageKeyForRequest, '', 'inferred')) : null;
-      const api = {
-        url: `${parsed.origin}${parsed.path}`, method, status: Number(entry.response?.status) || 0,
-        mime: String(entry.response?.content?.mimeType || '유형 미확인'),
-        params: [...new Set([...(request.queryString || []).map(x => x.name), ...parsed.query, ...bodyParams(request.postData)])],
-        count: 1, startedDateTime: entry.startedDateTime || '', apiEvidence,
-        confidence: pageRefToKey.has(entry.pageref) ? 'HAR 페이지 연결' : (refKey ? 'Referer 기준 추정' : '화면 연결 미확인'),
-        source: request.url,
-      };
-      if (page) {
-        const existing = page.apis.find(item => item.method === api.method && item.url === api.url);
-        if (existing) existing.count++;
-        else page.apis.push(api);
-      } else {
-        const existing = unlinkedApis.find(item => item.method === api.method && item.url === api.url);
-        if (existing) existing.count++;
-        else unlinkedApis.push(api);
-      }
-    }
-
-    const candidates = results.filter(item => item.kind === 'candidate');
-    const roots = [];
-    const byKey = new Map(pages);
-    for (const page of pages.values()) {
-      if (!page.parentKey || !byKey.has(page.parentKey)) roots.push(page);
-    }
-    roots.sort((a, b) => (a.firstSeen || '').localeCompare(b.firstSeen || '') || a.key.localeCompare(b.key));
-    return { roots, pages: [...pages.values()], unlinkedApis, candidates };
+    for (const item of merged.values()) item.kindSet = origins.get(item.host + '\u0000' + item.path);
+    return [...merged.values()].sort((a,b)=>(a.host+a.path+a.method).localeCompare(b.host+b.path+b.method));
   }
-
-  function finalize(observed, candidates) {
-    const actual = [...observed.values()];
-    const known = new Map();
-    const candidateMethods = new Map();
-    for (const item of actual) {
-      const key = item.host + '\u0000' + item.path;
-      if (!known.has(key)) known.set(key, new Set());
-      known.get(key).add(item.method);
-    }
-    for (const item of candidates.values()) {
-      const key = item.host + '\u0000' + item.path;
-      if (!candidateMethods.has(key)) candidateMethods.set(key, new Set());
-      candidateMethods.get(key).add(item.method);
-    }
-    const hidden = [...candidates.values()].filter(item => {
-      const key = item.host + '\u0000' + item.path;
-      const seen = known.get(key);
-      if (item.method === '?' && candidateMethods.get(key)?.size > 1) return false;
-      return !seen || (item.method !== '?' && !seen.has(item.method));
-    });
-    return [...actual, ...hidden].sort((a, b) => (a.host + a.path + a.method).localeCompare(b.host + b.path + b.method));
-  }
-
-  function excludeKeywords() {
-    return $('exclude').value.split('|').map(x => x.trim().toLocaleLowerCase()).filter(Boolean);
-  }
-
-  function isExcluded(text, keywords) {
-    const value = String(text).toLocaleLowerCase();
-    return keywords.some(keyword => value.includes(keyword));
-  }
-
   function visible() {
-    const query = $('search').value.trim().toLocaleLowerCase();
-    const scope = $('scope').value;
-    const excluded = excludeKeywords();
-    return results.filter(item => {
-      if (scope !== 'all' && scope !== item.kind) return false;
-      if (isExcluded(`${item.host} ${item.path} ${[...item.params].join(' ')}`, excluded)) return false;
-      return !query || [item.host, item.path, item.method, ...item.params].some(x => x.toLocaleLowerCase().includes(query));
-    });
+    const q=$('search').value.trim().toLocaleLowerCase(), excluded=$('exclude').value.split('|').map(x=>x.trim().toLocaleLowerCase()).filter(Boolean);
+    return results.filter(x=>{const text=`${x.host} ${x.path} ${x.method} ${[...x.params].join(' ')}`.toLocaleLowerCase();return (!q||text.includes(q))&&!excluded.some(k=>text.includes(k));});
   }
-
-  function treeNode() { return { children: new Map(), routes: [] }; }
+  function makeNode(){return {children:new Map(),routes:[]};}
   function build(items) {
-    const root = treeNode();
-    for (const item of items) {
-      let node = root;
-      for (const part of [item.host, ...item.path.split('/').filter(Boolean)]) {
-        if (!node.children.has(part)) node.children.set(part, treeNode());
-        node = node.children.get(part);
-      }
-      node.routes.push(item);
-    }
+    const root=makeNode();
+    for(const item of items){let n=root;for(const part of [item.host,...item.path.split('/').filter(Boolean)]){if(!n.children.has(part))n.children.set(part,makeNode());n=n.children.get(part);}n.routes.push(item);}
     return root;
   }
-
-  function copyValue(item) {
-    const params = [...item.params].filter(x => !x.includes('.'));
-    return item.origin + item.path + (params.length ? '?' + params.map(x => encodeURIComponent(x) + '={' + x + '}').join('&') : '');
-  }
-  async function copy(text, button) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const area = document.createElement('textarea');
-      area.value = text; document.body.append(area); area.select();
-      document.execCommand('copy'); area.remove();
-    }
-    const old = button.textContent;
-    button.textContent = '복사됨';
-    setTimeout(() => button.textContent = old, 1200);
-  }
-  async function copyRoute(text, element) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const area = document.createElement('textarea');
-      area.value = text; document.body.append(area); area.select();
-      document.execCommand('copy'); area.remove();
-    }
-    const oldTitle = element.title;
-    element.title = `복사됨: ${text}`;
-    setTimeout(() => { element.title = oldTitle; }, 1200);
-  }
   function routeRow(item) {
-    const row = document.createElement('div'); row.className = 'route';
-    const path = document.createElement('div'); path.className = 'path';
-    const badge = document.createElement('span'); badge.className = 'badge' + (item.kind === 'candidate' ? ' candidate' : '');
-    badge.textContent = item.kind === 'candidate' ? 'JS 후보' : '실제 요청'; path.append(badge);
-    const label = document.createElement('span'); label.textContent = item.path; path.append(label);
-    const hint = document.createElement('span'); hint.className = 'hint';
-    hint.textContent = item.kind === 'observed' ? `${item.count}회 요청` : `${item.sources.size}개 JS에서 발견`;
-    path.append(hint);
-    const params = document.createElement('div'); params.className = 'params';
-    params.textContent = item.params.size ? [...item.params].sort().join(', ') : '—';
-    const methodCell = document.createElement('div');
-    const method = document.createElement('span'); method.className = 'method ' + item.method.toLowerCase();
-    method.textContent = item.method; method.title = item.method === '?' ? 'JS 문자열에서 메서드를 확인할 수 없음' : item.method;
-    methodCell.append(method);
-    const button = document.createElement('button'); button.className = 'copy'; button.textContent = '복사';
-    button.title = '값을 제외한 URL과 파라미터 이름 복사';
-    button.addEventListener('click', () => copy(copyValue(item), button));
-    row.append(path, params, methodCell, button);
+    const row=document.createElement('div');row.className='route';
+    const method=document.createElement('span');method.className='method '+item.method.toLowerCase().replace(/[^a-z0-9_-]/g,'');method.textContent=item.method;row.append(method);
+    const path=document.createElement('span');path.className='route-path';path.textContent=item.path;path.title=`${item.host}${item.path}`;row.append(path);
+    if(item.kindSet.has('observed')){const b=document.createElement('span');b.className='badge';b.textContent='실제 요청(HAR)';b.title=`HAR에서 ${item.count}회 관측`;row.append(b);}
+    if(item.kindSet.has('candidate')){const b=document.createElement('span');b.className='badge candidate';b.textContent='JS 추출(추정)';b.title=`${item.sources.size}개 JS 응답에서 추출`;row.append(b);}
+    if(adminTerms.some(term=>item.path.toLowerCase().includes(term))){const b=document.createElement('span');b.className='badge risk';b.textContent='관리 경로 의심';b.title='인증우회/권한상승 의심 — 비인증 상태로 직접 수동 테스트할 것. 정적 표시이며 네트워크 요청을 보내지 않습니다.';row.append(b);row.classList.add('risk-row');}
     return row;
   }
-  function renderBranch(container, node, depth = 0) {
-    for (const [name, child] of [...node.children].sort((a, b) => a[0].localeCompare(b[0]))) {
-      const details = document.createElement('details'); details.open = depth < 2;
-      const summary = document.createElement('summary'); summary.textContent = name; details.append(summary);
-      for (const item of child.routes) details.append(routeRow(item));
-      renderBranch(details, child, depth + 1);
-      container.append(details);
+  function populate(details,node,depth) {
+    if(details.dataset.loaded==='1') return;
+    details.dataset.loaded='1';
+    for(const item of node.routes) details.append(routeRow(item));
+    for(const [name,child] of [...node.children].sort((a,b)=>a[0].localeCompare(b[0]))) {
+      const nested=document.createElement('details');nested.open=depth<1;
+      nested._treeNode=child;nested._treeDepth=depth+1;
+      const summary=document.createElement('summary');summary.textContent=name;summary.title=name;nested.append(summary);
+      nested.addEventListener('toggle',()=>{if(nested.open)populate(nested,child,depth+1);},{once:true});
+      if(nested.open) populate(nested,child,depth+1);
+      details.append(nested);
     }
   }
   function render() {
-    const items = visible(); $('tree').replaceChildren();
-    if (viewMode === 'screens') renderScreens(items);
-    else if (items.length) renderBranch($('tree'), build(items));
-    else { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '표시할 결과가 없습니다.'; $('tree').append(empty); }
-    const actual = results.filter(x => x.kind === 'observed').length;
-    const candidate = results.length - actual;
-    $('summary').textContent = viewMode === 'screens'
-      ? `${screenResults?.pages.length || 0}개 화면 · ${screenResults?.pages.reduce((n, p) => n + p.apis.length, 0) || 0}개 연결 API · ${screenResults?.unlinkedApis.length || 0}개 미연결 요청 · JS 후보 ${candidate}개`
-      : `${items.length}개 표시 · 실제 요청 ${actual}개 · JS 후보 ${candidate}개 · JS 응답 본문 ${stats.scriptBodies}/${stats.scripts}개 분석`;
+    const items=visible(), tree=$('tree');tree.replaceChildren();
+    if(!items.length){const e=document.createElement('div');e.className='empty';e.textContent='표시할 경로가 없습니다.';tree.append(e);}
+    else {
+      const root=build(items);
+      for(const [name,child] of [...root.children].sort((a,b)=>a[0].localeCompare(b[0]))) {
+        const d=document.createElement('details');d.open=true;d._treeNode=child;d._treeDepth=0;const s=document.createElement('summary');s.textContent=name;s.title=name;d.append(s);
+        d.addEventListener('toggle',()=>{if(d.open)populate(d,child,0);});populate(d,child,0);tree.append(d);
+      }
+    }
+    $('summary').textContent=`${items.length}개 표시 / 전체 ${results.length}개 메서드별 경로 · 실제 요청 ${results.filter(x=>x.kindSet.has('observed')).length}개 · JS 추출 ${results.filter(x=>x.kindSet.has('candidate')).length}개 · JS 응답 본문 ${stats.scriptBodies}/${stats.scripts}개 분석`;
+    $('copyAll').disabled=!results.length;
   }
-
-  function renderScreens(filteredItems) {
-    if (!screenResults) return;
-    const scope = $('scope').value;
-    const showObserved = scope !== 'candidate';
-    const showCandidates = scope !== 'observed';
-    const allowedApis = new Set(filteredItems.filter(item => item.kind === 'observed').map(item => `${item.method}\u0000${item.origin}${item.path}`));
-    const query = $('search').value.trim().toLocaleLowerCase();
-    const matches = value => !query || String(value || '').toLocaleLowerCase().includes(query);
-    const excluded = excludeKeywords();
-    const copyable = (element, text) => {
-      element.tabIndex = 0;
-      element.addEventListener('contextmenu', event => { event.preventDefault(); copyRoute(text, element); });
-      element.addEventListener('keydown', event => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); copyRoute(text, element); } });
-    };
-    const seen = new Set();
-    const renderPage = (container, page, depth = 0) => {
-      if (seen.has(page.key)) return;
-      seen.add(page.key);
-      const details = document.createElement('details'); details.open = depth < 2;
-      const summary = document.createElement('summary');
-      const title = pageLabel(page);
-      summary.textContent = `${title} · ${page.confidence === 'observed' ? '관측' : '추정'} · ${page.apis.length} API`;
-      summary.title = `${page.confidence === 'observed' ? 'HAR에서 관측된 화면' : 'URL/Referer 기반 추정 화면'}\n우클릭: 경로 복사\n${page.url}`;
-      copyable(summary, page.url);
-      details.append(summary);
-      for (const api of page.apis) {
-        if (!showObserved || !allowedApis.has(`${api.method}\u0000${api.url}`) || !matches(`${api.method} ${api.url} ${api.params.join(' ')} ${api.status}`)) continue;
-        const row = document.createElement('div'); row.className = 'api-row';
-        const main = document.createElement('div'); main.className = 'api-main';
-        const method = document.createElement('span'); method.className = `method ${api.method.toLowerCase()}`; method.textContent = api.method;
-        main.append(method, document.createTextNode(` ${api.url}`));
-        const sub = document.createElement('span'); sub.className = 'api-sub';
-        sub.textContent = `${api.apiEvidence} · ${api.confidence} · HTTP ${api.status || '미기록'} · ${api.mime} · ${api.count}회${api.params.length ? ` · 파라미터: ${api.params.join(', ')}` : ''}`;
-        main.append(sub);
-        row.title = `${api.method} ${api.url}\n요청 분류 근거: ${api.apiEvidence}\n화면 연결 근거: ${api.confidence}\n상태: ${api.status || '미기록'} · 응답 유형: ${api.mime}\n파라미터: ${api.params.join(', ') || '없음'}\n우클릭: 경로 복사`;
-        copyable(row, api.url);
-        row.append(main); details.append(row);
-      }
-      for (const child of screenResults.pages.filter(item => item.parentKey === page.key)) renderPage(details, child, depth + 1);
-      container.append(details);
-    };
-    if (showObserved) {
-      for (const root of screenResults.roots) renderPage($('tree'), root);
-      for (const page of screenResults.pages) if (!seen.has(page.key)) renderPage($('tree'), page);
-    }
-    if (showObserved && screenResults.unlinkedApis.length) {
-      const section = document.createElement('details'); section.className = 'unlinked'; section.open = true;
-      const summary = document.createElement('summary'); summary.textContent = `화면 연결 미확인 요청 (${screenResults.unlinkedApis.length})`; section.append(summary);
-      for (const api of screenResults.unlinkedApis) {
-        if (!matches(`${api.method} ${api.url} ${api.params.join(' ')} ${api.status}`) || isExcluded(api.url, excluded)) continue;
-        const row = document.createElement('div'); row.className = 'api-row';
-        row.textContent = `${api.method} ${api.url} · HTTP ${api.status || '미기록'} · 연결 근거 없음`;
-        row.title = 'HAR에 화면 참조 정보가 없어 특정 화면에 연결하지 않았습니다. 우클릭하면 URL을 복사합니다.';
-        copyable(row, api.url); section.append(row);
-      }
-      $('tree').append(section);
-    }
-    if (showCandidates && screenResults.candidates.length) {
-      const section = document.createElement('details'); section.open = false;
-      const summary = document.createElement('summary'); summary.textContent = `JS에서만 발견된 후보 경로 (${screenResults.candidates.length})`; section.append(summary);
-      for (const item of screenResults.candidates) {
-        if (!matches(`${item.method} ${item.origin}${item.path} ${[...item.params].join(' ')}`) || isExcluded(item.origin + item.path, excluded)) continue;
-        const row = document.createElement('div'); row.className = 'candidate-row';
-        row.textContent = `JS 후보 · ${item.method} ${item.origin}${item.path} · 실제 호출 미관측`;
-        row.title = 'JavaScript 본문에서 찾은 문자열입니다. HAR에서 실제 요청으로 관측되지 않았습니다.';
-        copyable(row, `${item.origin}${item.path}`); section.append(row);
-      }
-      $('tree').append(section);
-    }
-    const hasObservedData = showObserved && (screenResults.pages.length > 0 || screenResults.unlinkedApis.length > 0);
-    const hasCandidateData = showCandidates && screenResults.candidates.length > 0;
-    if (!hasObservedData && !hasCandidateData) {
-      const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '표시할 화면 또는 요청이 없습니다.'; $('tree').append(empty);
-    }
+  async function copyText(text,button) {
+    try { await navigator.clipboard.writeText(text); }
+    catch { const area=document.createElement('textarea');area.value=text;document.body.append(area);area.select();document.execCommand('copy');area.remove(); }
+    if(button){const old=button.textContent;button.textContent='복사됨';setTimeout(()=>button.textContent=old,1200);}
   }
-
-  $('analyze').addEventListener('click', async () => {
-    const files = [...$('files').files];
-    if (!files.length) { $('status').textContent = 'HAR 파일을 선택해 주세요.'; return; }
-    $('status').textContent = '분석 중…';
-    const observed = new Map(), candidates = new Map();
-    stats = { requests: 0, scripts: 0, scriptBodies: 0 };
-    try {
-      const hars = [];
-      for (const file of files) {
-        const har = JSON.parse(await file.text());
-        analyzeHar(har, observed, candidates);
-        hars.push(har);
-      }
-      results = finalize(observed, candidates);
-      screenResults = { roots: [], pages: [], unlinkedApis: [], candidates: results.filter(item => item.kind === 'candidate') };
-      for (const har of hars) {
-        const part = buildScreenRelations(har);
-        for (const page of part.pages) {
-          let target = screenResults.pages.find(item => item.key === page.key);
-          if (!target) { target = { ...page, apis: [] }; screenResults.pages.push(target); }
-          if (page.title && !target.title) target.title = page.title;
-          if (page.parentKey && !target.parentKey) target.parentKey = page.parentKey;
-          for (const api of page.apis) {
-            const existing = target.apis.find(item => item.method === api.method && item.url === api.url);
-            if (existing) existing.count += api.count; else target.apis.push(api);
-          }
-        }
-        for (const api of part.unlinkedApis) {
-          const existing = screenResults.unlinkedApis.find(item => item.method === api.method && item.url === api.url);
-          if (existing) existing.count += api.count; else screenResults.unlinkedApis.push(api);
-        }
-      }
-      const pageKeys = new Set(screenResults.pages.map(page => page.key));
-      screenResults.roots = screenResults.pages.filter(page => !page.parentKey || !pageKeys.has(page.parentKey));
-      render();
-      $('status').textContent = `${files.length}개 HAR, ${stats.requests}개 요청 분석 완료`;
-    } catch (error) { $('status').textContent = `분석 실패: ${error.message}`; }
+  $('analyze').addEventListener('click',async()=>{
+    const files=[...$('files').files];if(!files.length){$('status').textContent='HAR 파일을 선택해 주세요.';return;}
+    $('status').textContent='분석 중…';const observed=new Map(),candidates=new Map();stats={requests:0,scripts:0,scriptBodies:0};
+    try { for(const file of files) analyzeHar(JSON.parse(await file.text()),observed,candidates);results=finalize(observed,candidates);render();$('status').textContent=`${files.length}개 HAR, ${stats.requests}개 요청 분석 완료`; }
+    catch(error){$('status').textContent=`분석 실패: ${error.message}`;}
   });
-  $('clear').addEventListener('click', () => { $('files').value = ''; $('search').value = ''; $('exclude').value = ''; $('scope').value = 'all'; results = []; screenResults = null; stats = { requests: 0, scripts: 0, scriptBodies: 0 }; $('tree').replaceChildren(); $('summary').textContent = 'HAR 파일을 선택해 주세요.'; $('status').textContent = ''; });
-  $('screenView').addEventListener('click', () => { viewMode = 'screens'; $('screenView').setAttribute('aria-pressed', 'true'); $('pathView').setAttribute('aria-pressed', 'false'); $('treeNote').textContent = '페이지 노드는 HAR 문서 요청 또는 Referer로 확인합니다. API 연결은 HAR 페이지 참조·Referer 근거를 표시하며, 연결 근거가 없는 요청은 따로 둡니다. 노드 우클릭 또는 키보드 메뉴 키로 경로를 복사할 수 있습니다.'; render(); });
-  $('pathView').addEventListener('click', () => { viewMode = 'paths'; $('screenView').setAttribute('aria-pressed', 'false'); $('pathView').setAttribute('aria-pressed', 'true'); $('treeNote').textContent = '기존 방식대로 실제 요청과 JS 후보를 도메인·경로 계층으로 표시합니다.'; render(); });
-  $('search').addEventListener('input', render); $('scope').addEventListener('change', render);
-  $('exclude').addEventListener('input', render);
-  $('expand').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = true));
-  $('collapse').addEventListener('click', () => $('tree').querySelectorAll('details').forEach(x => x.open = false));
-
-  // 뷰가 좁은 iframe/모달에 끼면 글자가 너무 커서 안 읽히므로 50~150% 축소/확대 지원.
-  // CSS zoom은 main 서브트리에만 걸어서 우측하단 버튼 자체는 그대로 크기 유지.
-  const ZOOM_KEY = 'har-endpoint-tree-zoom';
-  // sandbox="allow-scripts"만 걸린 iframe(allow-same-origin 없음) 안에서는 origin이 opaque라
-  // localStorage 접근 자체가 던진다 -- 이 줄이 try/catch 밖에 있으면 스크립트 전체가 여기서 죽어서
-  // 뒤에 나오는 줌 버튼 리스너조차 등록이 안 된다(버튼은 보이는데 안 눌리는 증상의 원인이었음).
-  let zoom = 100;
-  try { zoom = Number(localStorage.getItem(ZOOM_KEY)) || 100; } catch {}
-  function applyZoom() {
-    zoom = Math.min(150, Math.max(50, zoom));
-    $('zoomRoot').style.zoom = zoom + '%';
-    $('zoomLevel').textContent = zoom + '%';
-    try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {}
-  }
-  $('zoomIn').addEventListener('click', () => { zoom += 10; applyZoom(); });
-  $('zoomOut').addEventListener('click', () => { zoom -= 10; applyZoom(); });
-  applyZoom();
+  $('clear').addEventListener('click',()=>{$('files').value='';$('search').value='';$('exclude').value='';results=[];stats={requests:0,scripts:0,scriptBodies:0};$('tree').replaceChildren();$('summary').textContent='HAR 파일을 선택해 주세요.';$('status').textContent='';$('copyAll').disabled=true;});
+  $('search').addEventListener('input',render);$('exclude').addEventListener('input',render);
+  $('copyAll').addEventListener('click',()=>{const paths=[...new Set(results.map(x=>x.path))].sort();copyText(paths.join('\n'),$('copyAll'));});
+  $('expand').addEventListener('click',()=>{
+    const openBranch=d=>{d.open=true;populate(d,d._treeNode,d._treeDepth);for(const child of d.querySelectorAll(':scope > details'))openBranch(child);};
+    for(const d of $('tree').querySelectorAll(':scope > details'))openBranch(d);
+  });
+  $('collapse').addEventListener('click',()=>{$('tree').querySelectorAll('details').forEach(d=>d.open=false);});
+  // 50~150% 확대/축소를 제공한다. opaque-origin sandbox iframe의 localStorage 예외도 처리한다.
+  const ZOOM_KEY='har-endpoint-tree-zoom';let zoom=100;try{zoom=Number(localStorage.getItem(ZOOM_KEY))||100;}catch{}
+  function applyZoom(){zoom=Math.min(150,Math.max(50,zoom));$('zoomRoot').style.zoom=zoom+'%';$('zoomLevel').textContent=zoom+'%';try{localStorage.setItem(ZOOM_KEY,String(zoom));}catch{}}
+  $('zoomIn').addEventListener('click',()=>{zoom+=10;applyZoom();});$('zoomOut').addEventListener('click',()=>{zoom-=10;applyZoom();});applyZoom();
 })();
 </script>
 </body>
