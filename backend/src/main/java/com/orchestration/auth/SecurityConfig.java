@@ -55,6 +55,8 @@ class SecurityConfig {
 
         // Evidence capture is authenticated for every tool; burp-history additionally checks its configured owner.
         .requestMatchers("/api/diag/evidence").authenticated()
+        // Diagnostic tools (e.g. JS beautifier) are available to every logged-in user, not just ADMIN.
+        .requestMatchers("/api/diag/js-parser").authenticated()
 
         // 파일 아카이브 — read is USER+ADMIN, maintenance/dedup mutation is ADMIN-only
         .requestMatchers(HttpMethod.GET, "/api/archive/files", "/api/archive/content", "/api/archive/search", "/api/archive/graph").authenticated()
