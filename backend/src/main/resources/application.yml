@@ -26,12 +26,11 @@ spring:
       # /api/dolphin/chat의 Bedrock 응답을 기다리는 동안 비동기 SSE 연결을 유지한다.
       # 기본 async 타임아웃이면 AsyncRequestTimeoutException 으로 스트림이 끊긴다 — nginx(600s)에 맞춰 늘린다.
       request-timeout: 600000
-  # FileIntakeController가 50MB까지 허용한다고 검사하지만, 이 설정이 없으면 스프링 기본값(파일당 1MB,
-  # 요청당 10MB)이 먼저 걸려서 그보다 큰 파일은 컨트롤러에 닿기도 전에 멀티파트 파싱 단계에서 막힌다.
+  # multipart evidence uploads may exceed 3GB; keep this aligned with nginx client_max_body_size.
   servlet:
     multipart:
-      max-file-size: 55MB
-      max-request-size: 55MB
+      max-file-size: 4GB
+      max-request-size: 4GB
 server:
   forward-headers-strategy: framework
 management:
@@ -56,6 +55,10 @@ app:
     originals-path: ${ORIGINALS_PATH:../inbox/archive_ochestration}
     obsidian-path: ${OBSIDIAN_PATH:../obsidian}
     scan-delay-ms: ${FILE_SCAN_DELAY_MS:30000}
+  diag:
+    evidence:
+      # burp-history uploads are restricted to this account; blank disables that tool type.
+      owner-user-id: ${DIAG_EVIDENCE_OWNER_USER_ID:}
   notebook:
     images-path: ${NOTEBOOK_IMAGES_PATH:../inbox/notebook-images}
   n8n:

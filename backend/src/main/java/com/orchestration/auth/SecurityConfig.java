@@ -53,6 +53,9 @@ class SecurityConfig {
         // pre-login and static/bootstrap endpoints
         .requestMatchers("/api/auth/**", "/", "/index.html", "/assets/**", "/build-info.json", "/actuator/health").permitAll()
 
+        // Evidence capture is authenticated for every tool; burp-history additionally checks its configured owner.
+        .requestMatchers("/api/diag/evidence").authenticated()
+
         // 파일 아카이브 — read is USER+ADMIN, maintenance/dedup mutation is ADMIN-only
         .requestMatchers(HttpMethod.GET, "/api/archive/files", "/api/archive/content", "/api/archive/search", "/api/archive/graph").authenticated()
         .requestMatchers("/api/archive/**").hasRole("ADMIN")
