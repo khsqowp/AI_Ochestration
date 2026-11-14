@@ -256,8 +256,18 @@ export function JsParserModal({ onClose, embedded }: { onClose?: () => void; emb
   const recordEvidence = (content: string) => {
     try { void fetch('/api/diag/evidence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, toolType: 'js-parser' }) }).catch(() => {}) } catch {}
   }
-  const handleInput = (content: string) => { setInput(content); recordEvidence(content) }
+  const handleInput = (content: string) => { setInput(content) }
   const handleFile = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => handleInput(String(reader.result ?? '')); reader.readAsText(file) }
+
+  // Live beautify/highlight recompute happens on every keystroke above (via `extractResults(input)`),
+  // but evidence logging must NOT fire per-keystroke (the backend inserts a new row per call).
+  // Debounce the evidence POST so it fires once ~1.5s after the user stops typing/uploading,
+  // instead of on every change.
+  useEffect(() => {
+    if (!input) return
+    const timer = window.setTimeout(() => { recordEvidence(input) }, 1500)
+    return () => window.clearTimeout(timer)
+  }, [input])
   const { beautified, endpoints, secrets, comments, crypto, phones, rrns, versions, base64, emails } = results
 
   return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
