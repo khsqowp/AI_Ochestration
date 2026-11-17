@@ -21,6 +21,7 @@ public class ResearchSource {
   // AI가 제안한 출처를 owner가 승인하면 candidate의 justification(길이 제한 없는 LLM 문단)을 그대로
   // note에 옮겨 담는데, 500자 VARCHAR로는 자주 넘쳐서 MySQL이 문장 중간을 조용히 잘라버렸다.
   @Lob @Column(columnDefinition = "TEXT") private String note;
+  @Lob @Column(columnDefinition = "TEXT") private String lastAnalyzedExcerpt;
   @Column(nullable = false) private Instant createdAt = Instant.now();
   private Instant lastCollectedAt;
   // A collection cycle that saves zero pages (site down, blocking us, DNS failure) would otherwise sit
@@ -48,6 +49,7 @@ public class ResearchSource {
   public int getMaxPages() { return maxPages; }
   public boolean isEnabled() { return enabled; }
   public String getNote() { return note; }
+  public String getLastAnalyzedExcerpt() { return lastAnalyzedExcerpt; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getLastCollectedAt() { return lastCollectedAt; }
   public int getConsecutiveFailures() { return consecutiveFailures; }
@@ -57,6 +59,8 @@ public class ResearchSource {
   /** A cycle that saved at least one page counts as recovered — clears the backoff so a future blip
    * starts counting from zero again instead of inheriting today's failure streak. */
   void clearRetryState() { consecutiveFailures = 0; nextRetryAt = null; }
+  /** Stores the per-source analysis baseline so SECURITY duplicate checks do not depend on its shared daily archive file; ECONOMY still uses its per-source archive file. */
+  void recordAnalyzedExcerpt(String excerpt) { this.lastAnalyzedExcerpt = excerpt; }
   /** Backoff schedule indexed by attempt number (1st failure → hours[0], etc.); once the streak exceeds
    * the schedule's length, retries stop and the source just waits for its normal intervalHours cycle. */
   void recordCollectionFailure(long[] backoffHours) {

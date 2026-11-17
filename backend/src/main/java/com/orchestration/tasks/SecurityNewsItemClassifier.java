@@ -53,7 +53,7 @@ class SecurityNewsItemClassifier {
     } catch (Exception exception) {
       log.warn("security_news_split_failed source={}", sourceTitle, exception);
     }
-    return List.of(new NewsItem(FALLBACK_TYPE, sourceTitle, report));
+    return List.of(new NewsItem(FALLBACK_TYPE, "", report));
   }
 
   private List<NewsItem> attempt(String sourceTitle, String report, List<String> knownTypes) throws Exception {
@@ -89,7 +89,7 @@ class SecurityNewsItemClassifier {
       String title = node.path("title").asText("").trim();
       String body = node.path("body").asText("").trim();
       if (type.isBlank() || body.isBlank()) continue;
-      items.add(new NewsItem(type, title.isBlank() ? sourceTitle : title, body));
+      items.add(new NewsItem(type, title, body));
     }
     return items;
   }

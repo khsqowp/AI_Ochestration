@@ -175,6 +175,17 @@ class KnowledgeArchiveServiceTest {
   }
 
   @Test
+  void collectionOrigin_fallbackOmitsDuplicateSourceTitleFromAttribution(@TempDir Path obsidian) throws Exception {
+    WorkTask task = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
+
+    String path = service(obsidian).archive(task, "# 랜섬웨어 동향\n\n본문 내용입니다.");
+
+    String content = Files.readString(obsidian.resolve(path));
+    assertThat(content).contains("**출처: [보안] Krebs on Security**")
+        .doesNotContain("Krebs on Security · Krebs on Security");
+  }
+
+  @Test
   void collectionOrigin_differentSourcesSameDay_mergeIntoTheSameDailyFile(@TempDir Path obsidian) throws Exception {
     WorkTask krebs = new WorkTask("[보안] Krebs on Security 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);
     WorkTask hackerNews = new WorkTask("[보안] The Hacker News 파일 아카이브", "지시 내용", TaskDomain.SECURITY, TaskOrigin.COLLECTION);

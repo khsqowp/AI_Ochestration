@@ -231,7 +231,8 @@ public class KnowledgeArchiveService {
       String itemBody = item.body().strip();
       if (itemBody.isBlank()) continue;
       String type = normalizeNewsType(item.type());
-      String block = "**출처: " + sourceTitle + " · " + item.title() + "**\n\n" + itemBody;
+      String titleSuffix = item.title().isBlank() || item.title().equals(sourceTitle) ? "" : " · " + item.title();
+      String block = "**출처: " + sourceTitle + titleSuffix + "**\n\n" + itemBody;
       sections.merge(type, block, (existingContent, newBlock) -> existingContent.stripTrailing() + "\n\n---\n\n" + newBlock);
     }
     StringBuilder body = new StringBuilder();

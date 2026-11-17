@@ -37,4 +37,13 @@ class ResearchSourceTest {
     assertThat(source.getConsecutiveNoContentCycles()).isZero();
     assertThat(source.isEnabled()).isFalse();
   }
+
+  @Test
+  void recordAnalyzedExcerpt_storesPerSourceBaseline() {
+    ResearchSource source = source();
+
+    source.recordAnalyzedExcerpt("analyzed excerpt");
+
+    assertThat(source.getLastAnalyzedExcerpt()).isEqualTo("analyzed excerpt");
+  }
 }

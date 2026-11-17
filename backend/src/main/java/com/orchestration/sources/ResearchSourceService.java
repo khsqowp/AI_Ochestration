@@ -56,6 +56,11 @@ public class ResearchSourceService {
   }
 
   @Transactional
+  public void recordAnalyzedExcerpt(UUID id, String excerpt) {
+    sources.findById(id).ifPresent(source -> source.recordAnalyzedExcerpt(excerpt));
+  }
+
+  @Transactional
   public void recordCollectionFailure(UUID id, long[] backoffHours) {
     sources.findById(id).ifPresent(source -> source.recordCollectionFailure(backoffHours));
   }

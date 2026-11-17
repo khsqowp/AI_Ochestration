@@ -50,12 +50,8 @@ class SourceCollectionServiceTest {
   private final Map<String, PageSnapshot> store = new HashMap<>();
   private SourceCollectionService service;
 
-  /** A bare {@code mock(KnowledgeArchiveService.class)} returns {@code null} (not {@code Optional.empty()})
-   * for an unstubbed {@code latestArchivedExcerpt} call, which would NPE inside
-   * {@code isNearDuplicateOfArchive}'s {@code .map(...)} chain. This gives every test that doesn't care
-   * about the near-duplicate behavior a safe default of "nothing archived yet" (never a duplicate),
-   * matching this suite's existing happy-path assumptions. Tests that specifically exercise the
-   * near-duplicate skip build and stub their own instance instead. */
+  /** A bare archive mock returns null for latestArchivedExcerpt; default it to no archived excerpt for
+   * the ECONOMY path. SECURITY uses each source's persisted analysis baseline instead. */
   private static KnowledgeArchiveService noPriorArchive() {
     KnowledgeArchiveService archive = mock(KnowledgeArchiveService.class);
     when(archive.latestArchivedExcerpt(any(), anyString())).thenReturn(Optional.empty());
@@ -371,6 +367,7 @@ class SourceCollectionServiceTest {
     Path originals = Files.createTempDirectory("source-collection-dup-test-");
     try {
       ResearchSource source = testSource(server);
+      source.recordAnalyzedExcerpt("이전에 이미 아카이브된 내용과 거의 동일한 발췌문입니다");
       ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
       when(sourceLookup.get(source.getId())).thenReturn(source);
       TaskService tasks = mock(TaskService.class);
@@ -398,6 +395,7 @@ class SourceCollectionServiceTest {
     Path originals = Files.createTempDirectory("source-batch-dup-test-");
     try {
       ResearchSource source = testSource(server);
+      source.recordAnalyzedExcerpt("이전에 이미 아카이브된 내용과 거의 동일한 발췌문입니다");
       TaskService tasks = mock(TaskService.class);
       LlmGateway llm = mock(LlmGateway.class);
       SecurityCalendarService calendar = mock(SecurityCalendarService.class);
@@ -425,6 +423,7 @@ class SourceCollectionServiceTest {
     Path originals = Files.createTempDirectory("source-collection-lowoverlap-test-");
     try {
       ResearchSource source = testSource(server);
+      source.recordAnalyzedExcerpt("완전히 무관한 과거 기사 내용");
       ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
       when(sourceLookup.get(source.getId())).thenReturn(source);
       TaskService tasks = mock(TaskService.class);
@@ -435,7 +434,6 @@ class SourceCollectionServiceTest {
       when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
       when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
       KnowledgeArchiveService archive = mock(KnowledgeArchiveService.class);
-      when(archive.latestArchivedExcerpt(any(), anyString())).thenReturn(Optional.of("완전히 무관한 과거 기사 내용"));
       when(archive.overlapRatio(anyString(), anyString())).thenReturn(0.1);
       SourceCollectionService target = loopbackService(sourceLookup, new FileProperties(originals.toString(), "/tmp/obsidian", 30000L),
           tasks, mock(SecurityCalendarService.class), mock(LlmGateway.class), mock(GeminiCollectionBatchRepository.class), snapshots, archive);
@@ -447,9 +445,65 @@ class SourceCollectionServiceTest {
     } finally { server.stop(0); deleteTree(originals); }
   }
 
+  @Test
+  void collectNow_securityNearDuplicateBaselineIsPerSource() throws Exception {
+    HttpServer server = sourceServer(NEW_LOOKING_PAGE_BODY, 200);
+    server.start();
+    Path originals = Files.createTempDirectory("source-collection-per-source-test-");
+    try {
+      ResearchSource duplicateSource = testSource(server);
+      duplicateSource.recordAnalyzedExcerpt("previous excerpt");
+      ResearchSource newSource = new ResearchSource("다른 소스", duplicateSource.getUrl(), ResearchDomain.SECURITY, 24, 0, 1, null);
+      org.springframework.test.util.ReflectionTestUtils.setField(newSource, "id", UUID.randomUUID());
+      ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
+      when(sourceLookup.get(duplicateSource.getId())).thenReturn(duplicateSource);
+      when(sourceLookup.get(newSource.getId())).thenReturn(newSource);
+      TaskService tasks = mock(TaskService.class);
+      WorkTask created = mock(WorkTask.class);
+      when(created.getId()).thenReturn(UUID.randomUUID());
+      when(tasks.create(anyString(), anyString(), any(), any(), any(UUID.class))).thenReturn(created);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+      KnowledgeArchiveService archive = nearDuplicateArchive();
+      SourceCollectionService target = loopbackService(sourceLookup, new FileProperties(originals.toString(), "/tmp/obsidian", 30000L),
+          tasks, mock(SecurityCalendarService.class), mock(LlmGateway.class), mock(GeminiCollectionBatchRepository.class), snapshots, archive);
+
+      assertThat(target.collectNow(duplicateSource.getId()).analysisTaskId()).isNull();
+      assertThat(target.collectNow(newSource.getId()).analysisTaskId()).isNotNull();
+      verify(tasks).create(anyString(), anyString(), any(), any(), eq(newSource.getId()));
+      verify(archive, never()).latestArchivedExcerpt(any(), anyString());
+    } finally { server.stop(0); deleteTree(originals); }
+  }
+
+  @Test
+  void collectNow_economyStillUsesPerSourceArchiveLookup() throws Exception {
+    HttpServer server = sourceServer(NEW_LOOKING_PAGE_BODY, 200);
+    server.start();
+    Path originals = Files.createTempDirectory("source-collection-economy-test-");
+    try {
+      ResearchSource source = new ResearchSource("경제 소스", "http://127.0.0.1:" + server.getAddress().getPort() + "/",
+          ResearchDomain.ECONOMY, 24, 0, 1, null);
+      org.springframework.test.util.ReflectionTestUtils.setField(source, "id", UUID.randomUUID());
+      ResearchSourceService sourceLookup = mock(ResearchSourceService.class);
+      when(sourceLookup.get(source.getId())).thenReturn(source);
+      PageSnapshotRepository snapshots = mock(PageSnapshotRepository.class);
+      when(snapshots.findByUrl(anyString())).thenReturn(Optional.empty());
+      when(snapshots.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+      KnowledgeArchiveService archive = mock(KnowledgeArchiveService.class);
+      when(archive.latestArchivedExcerpt(eq(TaskDomain.ECONOMY), anyString())).thenReturn(Optional.empty());
+      SourceCollectionService target = loopbackService(sourceLookup, new FileProperties(originals.toString(), "/tmp/obsidian", 30000L),
+          mock(TaskService.class), mock(SecurityCalendarService.class), mock(LlmGateway.class),
+          mock(GeminiCollectionBatchRepository.class), snapshots, archive);
+
+      target.collectNow(source.getId());
+
+      verify(archive).latestArchivedExcerpt(eq(TaskDomain.ECONOMY), anyString());
+    } finally { server.stop(0); deleteTree(originals); }
+  }
+
   private static KnowledgeArchiveService nearDuplicateArchive() {
     KnowledgeArchiveService archive = mock(KnowledgeArchiveService.class);
-    when(archive.latestArchivedExcerpt(any(), anyString())).thenReturn(Optional.of("이전에 이미 아카이브된 내용과 거의 동일한 발췌문입니다"));
     when(archive.overlapRatio(anyString(), anyString())).thenReturn(0.95);
     return archive;
   }

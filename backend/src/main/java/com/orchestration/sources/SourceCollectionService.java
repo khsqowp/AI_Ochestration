@@ -172,15 +172,16 @@ public class SourceCollectionService {
         taskTitle(source),
         buildInstruction(source, outcome.changed(), excerpt),
         source.getDomain() == ResearchDomain.SECURITY ? TaskDomain.SECURITY : TaskDomain.ECONOMY, TaskOrigin.COLLECTION, source.getId()) : null;
-    if (hasUsableContent && source.getDomain() == ResearchDomain.SECURITY) calendar.extractFromCollection(source, excerpt);
+    if (hasUsableContent && source.getDomain() == ResearchDomain.SECURITY) {
+      sources.recordAnalyzedExcerpt(source.getId(), excerpt);
+      calendar.extractFromCollection(source, excerpt);
+    }
     return new CollectionResult(outcome.saved(), outcome.changed(), outcome.failed(), outcome.visited(), source.getCrawlDepth(), source.getMaxPages(), outcome.warning(), analysisTask == null ? null : analysisTask.getId());
   }
 
   /** The crafted WorkTask title both {@link #collect} and {@link #crawlAndEnqueue} use for a source's
-   * analysis task — factored out since {@link #isNearDuplicateOfArchive} also needs it, to look up where
-   * {@code KnowledgeArchiveService} would have filed this source's most recently archived note (that
-   * lookup is keyed off this exact title string, see {@code KnowledgeArchiveService.archive()}'s
-   * title-based slug). */
+   * analysis task — factored out since the ECONOMY branch of {@link #isNearDuplicateOfArchive} also
+   * needs it to find the per-source archive note, whose path is derived from this title. */
   private String taskTitle(ResearchSource source) {
     return "[%s] %s 파일 아카이브".formatted(source.getDomain() == ResearchDomain.SECURITY ? "보안" : "경제", source.getName());
   }
@@ -195,6 +196,14 @@ public class SourceCollectionService {
    * fallback, which stays as a safety net for near-duplicates this cheaper check doesn't catch (e.g. a
    * genuinely new article URL whose content happens to only partially overlap). */
   private boolean isNearDuplicateOfArchive(ResearchSource source, String excerpt) {
+    if (source.getDomain() == ResearchDomain.SECURITY) {
+      String previous = source.getLastAnalyzedExcerpt();
+      if (previous == null || previous.isBlank()) return false;
+      double ratio = archive.overlapRatio(previous, excerpt);
+      boolean duplicate = ratio >= NEAR_DUPLICATE_OVERLAP_THRESHOLD;
+      if (duplicate) log.info("research_source_near_duplicate_skipped sourceId={} overlapRatio={}", source.getId(), ratio);
+      return duplicate;
+    }
     TaskDomain domain = source.getDomain() == ResearchDomain.SECURITY ? TaskDomain.SECURITY : TaskDomain.ECONOMY;
     return archive.latestArchivedExcerpt(domain, taskTitle(source))
         .map(previous -> {
@@ -302,7 +311,10 @@ public class SourceCollectionService {
     WorkTask task = tasks.createAwaitingBatch(
         taskTitle(source),
         instruction, domain, TaskOrigin.COLLECTION, source.getId());
-    if (source.getDomain() == ResearchDomain.SECURITY) calendar.extractFromCollection(source, excerpt);
+    if (source.getDomain() == ResearchDomain.SECURITY) {
+      sources.recordAnalyzedExcerpt(source.getId(), excerpt);
+      calendar.extractFromCollection(source, excerpt);
+    }
     return new PendingBatchItem(task, llm.collectPrompt(domain, instruction));
   }
 

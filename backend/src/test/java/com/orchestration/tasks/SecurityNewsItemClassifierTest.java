@@ -62,6 +62,7 @@ class SecurityNewsItemClassifierTest {
 
     assertThat(items).singleElement().satisfies(item -> {
       assertThat(item.type()).isEqualTo(SecurityNewsItemClassifier.FALLBACK_TYPE);
+      assertThat(item.title()).isEmpty();
       assertThat(item.body()).isEqualTo(report);
     });
   }
@@ -77,7 +78,7 @@ class SecurityNewsItemClassifierTest {
 
     assertThat(items).singleElement().satisfies(item -> {
       assertThat(item.type()).isEqualTo(SecurityNewsItemClassifier.FALLBACK_TYPE);
-      assertThat(item.title()).isEqualTo("Test Source");
+      assertThat(item.title()).isEmpty();
       assertThat(item.body()).isEqualTo(report);
     });
   }

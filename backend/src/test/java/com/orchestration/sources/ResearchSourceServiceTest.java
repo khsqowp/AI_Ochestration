@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -62,5 +64,16 @@ class ResearchSourceServiceTest {
     ResearchSource created = service().create(request("https://example.com/feed"));
 
     assertThat(created.getUrl()).isEqualTo("https://example.com/feed");
+  }
+
+  @Test
+  void recordAnalyzedExcerpt_updatesExistingSource() {
+    ResearchSource source = new ResearchSource("이름", "https://example.com/feed", ResearchDomain.SECURITY, 24, 1, 20, null);
+    UUID id = UUID.randomUUID();
+    when(sources.findById(id)).thenReturn(Optional.of(source));
+
+    service().recordAnalyzedExcerpt(id, "analyzed excerpt");
+
+    assertThat(source.getLastAnalyzedExcerpt()).isEqualTo("analyzed excerpt");
   }
 }
