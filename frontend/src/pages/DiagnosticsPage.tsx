@@ -3,7 +3,7 @@ import {
   AppWindow, Binary, Bomb, Bug, CloudCog, Compass, Crosshair, Database,
   FileCode2, FlaskConical, FolderSearch, GitBranch, GitCompare, History,
   KeyRound, Layers, Network, Radar, ServerCog, ServerCrash, SquareTerminal,
-  Terminal,
+  Terminal, Wifi,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
@@ -42,6 +42,9 @@ export function DiagnosticsPage() {
         <div className="diag-tile-grid">
           <Link className="diag-tile" to="/dashboard/diag/scanner-tools">
             <FolderSearch size={20}/><span>정찰/취약점 스캐너</span>
+          </Link>
+          <Link className="diag-tile" to="/dashboard/diag/network-diagnose">
+            <Wifi size={20}/><span>네트워크 진단</span>
           </Link>
           {ROUTE_TREE_TOOLS.map(({ id, name, icon: Icon }) => <Link className="diag-tile" key={id} to={`/dashboard/diag/${id}`}>
             <Icon size={20}/><span>{name}</span>

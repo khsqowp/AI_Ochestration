@@ -9,6 +9,7 @@ import { BurpHistoryViewerModal } from '../panels/BurpHistoryViewerModal'
 import { JsParserModal } from '../panels/JsParserModal'
 import { ErrorPageFingerprintModal } from '../panels/ErrorPageFingerprintModal'
 import { XssScoutConsoleModal } from '../panels/XssScoutConsoleModal'
+import { NetworkDiagnosticsModal } from '../panels/NetworkDiagnosticsModal'
 import { RouteTreeToolPage } from './RouteTreeToolPage'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
 
@@ -20,6 +21,7 @@ const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'js-parser': JsParserModal,
   'error-page-fingerprint': ErrorPageFingerprintModal,
   'xss-scout-console': XssScoutConsoleModal,
+  'network-diagnose': NetworkDiagnosticsModal,
 }
 
 export function DiagToolPage() {
