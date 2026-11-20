@@ -284,6 +284,21 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  trading-forward-test-12h:
+    mem_limit: 512m
+    pids_limit: 32
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "forward_test.run_loop"]
+    user: "1000:1000"
+    environment:
+      FORWARD_PROFILE: l5_12h
+    volumes:
+      - ./trading-forward-test-12h:/app/data
+    networks: [trading]
+    profiles: ["forward-test"]
+    restart: unless-stopped
+    logging: *default-logging
+
 networks:
   trading:
 
