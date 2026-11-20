@@ -23,6 +23,7 @@ backup-obsidian-migration/
 /.kis-cache/
 # 크립토 페이퍼 전략 런타임 상태(JSON) — trading-tick-archive와 같은 이유로 git 제외
 /trading-crypto-paper-state/
+/trading-forward-test/
 # trading/ 봇이 받아둔 시세/온체인 캐시 데이터 — 소스 아님, 재생성 가능
 /trading/.rs_cache/
 # Large source-of-truth market data snapshots are kept local and never committed.

@@ -269,6 +269,21 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  # Isolated public-data PAPER forward-test. No env file, exchange keys, or orders.
+  trading-forward-test:
+    mem_limit: 512m
+    pids_limit: 32
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "forward_test.run_loop"]
+    # 서버 호스트 유저(noroot, uid 1000)와 맞춰서 bind mount 디렉터리에 별도 chown 없이 쓸 수 있게 한다
+    user: "1000:1000"
+    volumes:
+      - ./trading-forward-test:/app/data
+    networks: [trading]
+    profiles: ["forward-test"]
+    restart: unless-stopped
+    logging: *default-logging
+
 networks:
   trading:
 
