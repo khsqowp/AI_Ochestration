@@ -299,6 +299,21 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  trading-forward-test-jbb-1h:
+    mem_limit: 512m
+    pids_limit: 32
+    build: ./trading
+    entrypoint: ["python", "-u", "-m", "forward_test.run_loop"]
+    user: "1000:1000"
+    environment:
+      FORWARD_PROFILE: jbb_1h
+    volumes:
+      - ./trading-forward-test-jbb-1h:/app/data
+    networks: [trading]
+    profiles: ["forward-test"]
+    restart: unless-stopped
+    logging: *default-logging
+
 networks:
   trading:
 
