@@ -6,6 +6,24 @@ type UpdateGroup = {
 // Public-facing product updates, kept separate from private task execution history.
 const updates: UpdateGroup[] = [
   {
+    date: '2026-11-19',
+    items: [
+      '진단 페이지에 네트워크 진단 도구 추가: DNS, TCP 포트 연결, 직접/프록시 HTTP 접속을 한 번에 점검하고 원인 추정 결과까지 표시 (로그인 계정 전체 이용 가능)',
+    ],
+  },
+  {
+    date: '2026-11-17',
+    items: [
+      '보안 뉴스 노트의 중복 출처 표시 버그 수정, 새로 수집된 내용이 없으면 재노출되지 않도록 개선',
+    ],
+  },
+  {
+    date: '2026-11-15',
+    items: [
+      'XSS 치트시트에 PortSwigger·PayloadsAllTheThings 기반 페이로드 150개 이상 추가',
+    ],
+  },
+  {
     date: '2026-11-01',
     items: [
       '대상 사이트 콘솔에서 실행하는 XSS Scout 콘솔 스캐너 전용 페이지와 결과 뷰어 추가',
