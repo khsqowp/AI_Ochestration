@@ -81,16 +81,16 @@ rc=0
 grep -q 'compose .* build' "$DOCKER_RECORD" || rc=1
 grep -q 'compose .* up -d --remove-orphans' "$DOCKER_RECORD" || rc=1
 ! grep -q 'docker-compose.trading.yml' "$DOCKER_RECORD" || rc=1
+! grep -q 'docker-compose.crypto-data.yml' "$DOCKER_RECORD" || rc=1
 report "$rc" 'README deploy'
 
 setup_case trading_only
 new_commit "$CASE_DIR" trading/x.py 'print(1)'
-new_commit "$CASE_DIR" docker-compose.trading.yml 'services: {}'
 bash "$DEPLOY_ROOT/scripts/linux/auto_deploy.sh"
 rc=0
 [ "$(git -C "$DEPLOY_ROOT" rev-parse HEAD)" = "$(git -C "$CASE_DIR/seed" rev-parse HEAD)" ] || rc=1
-[ ! -s "$DOCKER_RECORD" ] || rc=1
-report "$rc" 'trading-only fast-forward'
+grep -q 'compose .* build' "$DOCKER_RECORD" || rc=1
+report "$rc" 'trading-only change deploys site compose'
 
 setup_case docker_failure
 new_commit "$CASE_DIR" README.md failing

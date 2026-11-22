@@ -5,6 +5,7 @@ NAS_MOUNT=${NAS_MOUNT:-/mnt/nas}; NAS_BASE=${NAS_BASE:-$NAS_MOUNT/Ochestration};
 LOG=${NAS_HEALTH_LOG:-$STATE_DIR/nas-health.log}; [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 1048576 ] && mv "$LOG" "$LOG.1"
 log(){ printf '[%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >> "$LOG"; }
 fail=$(cat "$STATE_DIR/failures" 2>/dev/null || echo 0); reason=''
+timeout 10 ls "$NAS_MOUNT" >/dev/null 2>&1
 if ! timeout -k 5 10 findmnt -t nfs,nfs4 "$NAS_MOUNT" >/dev/null 2>&1; then reason='NFS mount missing'
 elif ! timeout -k 5 10 test -f "$NAS_BASE/.nas-mounted"; then reason='NAS sentinel missing'
 elif ! timeout -k 5 10 stat "$NAS_BASE" >/dev/null 2>&1; then reason='NAS stat failed'

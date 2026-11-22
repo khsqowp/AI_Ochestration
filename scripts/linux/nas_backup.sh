@@ -3,6 +3,7 @@ set -u
 ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}; HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); . "$HERE/notify.sh"
 NAS_MOUNT=${NAS_MOUNT:-/mnt/nas}; BASE=${NAS_BASE:-$NAS_MOUNT/Ochestration}; STATE_DIR=${STATE_DIR:-$HOME/.local/state/ochestration/nas-backup}; mkdir -p "$STATE_DIR"; LOG=${NAS_BACKUP_LOG:-$HOME/logs/host/nas-backup.log}; mkdir -p "$(dirname "$LOG")"; [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 5242880 ] && mv "$LOG" "$LOG.1"
 log(){ printf '[%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >> "$LOG"; }; run(){ timeout -k 5 "$1" "${@:2}"; }
+timeout 10 ls "$NAS_MOUNT" >/dev/null 2>&1
 if ! run 10 findmnt -t nfs,nfs4 "$NAS_MOUNT" >/dev/null 2>&1 || ! run 10 test -f "$BASE/.nas-mounted" || ! run 10 stat "$BASE" >/dev/null 2>&1; then log 'NAS guard failed'; notify nas-backup 'NAS backup aborted' 'mount, sentinel, or stat check failed'; exit 1; fi
 status=0
 run 15 mkdir -p "$BASE/site/db" "$BASE/site/logs" "$BASE/coin/state" "$BASE/coin/logs" "$BASE/kr/state" "$BASE/kr/logs" "$BASE/us/state" "$BASE/us/logs" "$BASE/market-data/tick-archive" "$BASE/market-data/logs" || { log 'NAS backup directory create failed'; notify nas-backup 'NAS backup aborted' 'cannot create required backup directories on NAS'; exit 1; }
@@ -14,8 +15,8 @@ step momentum-state state_step ochestration-trading-trading-momentum-rotation-1 
 step kr-state state_step ochestration-trading-trading-kr-rotation-1 "$BASE/kr/state" kr-rotation
 step us-state state_step ochestration-trading-trading-us-rotation-1 "$BASE/us/state" us-rotation
 archive_args=(--no-auto-mount --source "$ROOT/trading-tick-archive" --mount "$NAS_MOUNT" --dest "$BASE/market-data/tick-archive" --state-dir "$STATE_DIR" --max-minutes 150 --throttle-mbps 30 --keep-days 1 --close-margin-hours 6 --idle-seconds 5 --no-delete); [[ ${NAS_BACKUP_ENABLE_DELETE:-0} == 1 ]] && archive_args=("${archive_args[@]/--no-delete/--enable-delete}")
-step tick-archive run 9300 python3 "$ROOT/trading/scripts/archive_to_nas.py" "${archive_args[@]}"
-step shadow-archive run 1800 python3 "$ROOT/trading/shadow_predictor/archive_store.py" --flush --db "$HOME/Library/Application Support/CoinTradeShadowArchive/shadow_archive.sqlite3" --nas-root "$BASE/coin" --volume-mount "$NAS_MOUNT"
+step tick-archive run 9300 python3 "${COIN_TRADE_DIR:-$HOME/CODE/Coin_Trade}/scripts/archive_to_nas.py" "${archive_args[@]}"
+step shadow-archive run 1800 python3 "${COIN_TRADE_DIR:-$HOME/CODE/Coin_Trade}/shadow_predictor/archive_store.py" --flush --db "$HOME/Library/Application Support/CoinTradeShadowArchive/shadow_archive.sqlite3" --nas-root "$BASE/coin" --volume-mount "$NAS_MOUNT"
 log_bucket(){ case "$1" in *crypto*|*shadow*|*momentum-rotation*|*coin-swing*|*funding-arb*) printf coin;; *-kr-*) printf kr;; *-us-*) printf us;; *tick-stream*) printf market-data;; *) printf site;; esac; }
 logs_rsync(){ local failed=0 d name bucket; run 1800 rsync -rlt "$HOME/logs/host/" "$BASE/site/logs/host/" || failed=1; if [ -d "$HOME/logs/migrate" ]; then run 1800 rsync -rlt "$HOME/logs/migrate/" "$BASE/site/logs/migrate/" || failed=1; fi; if [ -d "$HOME/logs/site" ]; then for d in "$HOME"/logs/site/*/; do [ -d "$d" ] || continue; name=${d%/}; name=${name##*/}; bucket=$(log_bucket "$name"); run 1800 rsync -rlt "$d" "$BASE/$bucket/logs/$name/" || failed=1; done; fi; for d in "$HOME"/logs/*; do [ -e "$d" ] || continue; name=${d##*/}; [[ "$name" == host || "$name" == migrate || "$name" == site ]] && continue; [ -d "$d" ] && d=$d/; run 1800 rsync -rlt "$d" "$BASE/site/logs/$name/" || failed=1; done; return "$failed"; }
 step logs-rsync logs_rsync

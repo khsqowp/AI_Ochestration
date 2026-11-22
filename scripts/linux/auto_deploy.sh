@@ -79,30 +79,16 @@ main() {
         return 1
     fi
 
-    changed=$(git -C "$root" diff --name-only "$local_sha" "$remote_sha") || return 1
     if ! git -C "$root" merge --ff-only origin/main; then
         notify auto-deploy-diverged 'Auto deploy checkout diverged' 'fast-forward merge failed; manual checkout repair required'
         return 1
     fi
 
-    needs_deploy=false
-    while IFS= read -r path; do
-        [ -z "$path" ] && continue
-        case "$path" in
-            trading/*|docker-compose.trading.yml) ;;
-            *) needs_deploy=true ;;
-        esac
-    done <<< "$changed"
-
     old_short=${local_sha:0:7}
     new_short=${remote_sha:0:7}
-    if [ "$needs_deploy" = false ]; then
-        log "SKIP trading-only $old_short..$new_short"
-        return 0
-    fi
 
-    # docker-compose.trading.yml must never be added: live real-money bots are deployed manually.
-    local compose_args=(-f docker-compose.yml -f docker-compose.crypto-data.yml)
+    # 거래 코드는 Coin_Trade 로 이전됨
+    local compose_args=(-f docker-compose.yml)
     step=build
     if ! (cd "$root" && timeout "${DEPLOY_BUILD_TIMEOUT:-1800}" docker compose "${compose_args[@]}" build) >> "$log_file" 2>&1; then
         printf '%s\n' "$remote_sha" > "$failed_sha_file"

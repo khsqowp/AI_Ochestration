@@ -1,3 +1,0 @@
-All done! ✨ 🍰 ✨
-9 files would be left unchanged.
-PASS python3 py_compile, black9, pylint E/F9
