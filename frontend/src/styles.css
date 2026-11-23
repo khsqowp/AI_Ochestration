@@ -127,6 +127,9 @@
 .payload-builder-textarea { max-width:none; resize:vertical; line-height:1.5; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }
 .payload-builder-hint { margin:6px 0 2px; font-size:11px; line-height:1.5; color:#6f6977; }
 .payload-readout-group { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+.error-inducer-method { padding:10px 12px; border:1px solid #e7e3ec; border-radius:10px; background:#fff; }
+.error-inducer-method .payload-readout-title { margin-bottom:8px; }
+.error-inducer-method .cheatsheet-command-bar { margin-top:0; padding-top:0; border-top:0; }
 /* 클릭재킹 PoC 빌더 전용: 캡처용으로 iframe 미리보기를 큼직하게 보여준다. 다른 payload-builder
    도구들의 공용 클래스에는 영향 없게 clickjacking- 접두사로만 스코프를 건다. */
 .clickjacking-top-row { display:flex; gap:16px; align-items:flex-start; margin-top:10px; }
