@@ -12,6 +12,8 @@ import { XssScoutConsoleModal } from '../panels/XssScoutConsoleModal'
 import { NetworkDiagnosticsModal } from '../panels/NetworkDiagnosticsModal'
 import { RouteTreeToolPage } from './RouteTreeToolPage'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
+import { Soft404AnalyzerModal } from '../panels/Soft404AnalyzerModal'
+import { ScopeRedirectLinterModal } from '../panels/ScopeRedirectLinterModal'
 
 const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'prompt-injection': PromptInjectionModal,
@@ -22,6 +24,8 @@ const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'error-page-fingerprint': ErrorPageFingerprintModal,
   'xss-scout-console': XssScoutConsoleModal,
   'network-diagnose': NetworkDiagnosticsModal,
+  'soft-404-analyzer': Soft404AnalyzerModal,
+  'scope-redirect-linter': ScopeRedirectLinterModal,
 }
 
 export function DiagToolPage() {
