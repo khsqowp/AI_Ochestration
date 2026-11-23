@@ -52,7 +52,9 @@ export function ErrorInducerBuilder() {
       <div className="payload-readout-group">
         <strong className="payload-group-title">HTTP 메서드 (자주 빠뜨리는 메서드별 커스텀 에러 페이지 점검)</strong>
         {methods.map(({ method, desc }) => (
-          <Readout key={method} title={`${method} — ${desc}`} value={`curl -i -X ${method} https://${targetHost}${targetPath}`} wrap="anywhere" />
+          <div className="error-inducer-method" key={method} role="group" aria-label={`${method} 요청과 점검 설명`}>
+            <Readout title={`${method} — ${desc}`} value={`curl -i -X ${method} https://${targetHost}${targetPath}`} wrap="anywhere" />
+          </div>
         ))}
       </div>
 
