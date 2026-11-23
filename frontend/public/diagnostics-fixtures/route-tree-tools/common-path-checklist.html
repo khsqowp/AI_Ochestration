@@ -33,6 +33,7 @@ textarea::placeholder { color: #6f6977; }
 .top-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .category-label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .category-label input { width: 18px; height: 18px; margin: 0; accent-color: #7667dc; flex: none; }
+.category-note { display:block; margin:8px 0 0 28px; color:#6f6977; font-size:12px; line-height:1.45; }
 .badge { border-radius: 999px; background: #f4f1ff; color: #5d50ba; padding: 2px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 details { margin: 12px 0 0 28px; }
 summary { cursor: pointer; color: #5d50ba; font-size: 13px; }
@@ -67,7 +68,7 @@ html.embedded .wrap > .card { padding: 8px 12px; margin: 4px 0 8px; }
 </head>
 <body onload="if(window.self!==window.top||new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded')"><main class="wrap">
 <header><h1>공통 경로 체크리스트 · Intruder 페이로드 생성기</h1><p class="muted">독립 실행형 파일 · 외부 통신·라이브러리 없음 · 모든 선택과 목록 생성은 현재 브라우저에서만 처리됩니다.</p></header>
-<p class="warning">승인받은 대상에서만 사용하세요. 이 목록은 실제 스캔 결과가 아니라 웹 서버·프레임워크에서 흔히 노출되는 일반적인 경로 모음일 뿐이며, 대상 서버에 해당 경로가 실제로 존재하거나 취약하다는 것을 보장하지 않습니다.</p>
+<p class="warning">승인받은 대상에서만 사용하세요. 이 목록은 실제 스캔 결과가 아니라 웹 서버·프레임워크에서 흔히 노출되는 일반적인 경로 모음일 뿐이며, 대상 서버에 해당 경로가 실제로 존재하거나 취약하다는 것을 보장하지 않습니다. 운영체제 프리셋은 OS 파일시스템을 직접 검색하는 것이 아니라 해당 OS·웹서버 조합의 웹 경로를 확인합니다.</p>
 <section class="card">
 <div class="top-bar">
 <div class="controls"><button id="deselect-all" type="button">전체 해제</button><span id="count">0개 카테고리 · 0개 경로 선택됨</span></div>
@@ -85,6 +86,8 @@ html.embedded .wrap > .card { padding: 8px 12px; margin: 4px 0 8px; }
 <script>
 'use strict';
 const CATEGORIES = [
+  { title: '운영체제 · Linux/Unix 웹 서버', note: 'Linux/Unix에서 자주 쓰이는 웹 서버·CGI·상태 경로입니다. 운영체제 식별이나 취약점 판정 결과가 아닙니다.', paths: ['cgi-bin/', 'cgi-bin/test-cgi', 'fcgi-bin/', 'server-status', 'server-info', 'nginx_status', 'php-fpm-status', 'fpm-status', 'icons/', 'manual/', '.htaccess', '.htpasswd'] },
+  { title: '운영체제 · Windows/IIS', note: 'IIS·ASP.NET 관례 경로입니다. 응답이 존재해도 설정과 인증 상태를 따로 확인해야 합니다.', paths: ['iisstart.htm', 'IISHelp/', 'aspnet_client/', 'aspnet_client/system_web/', 'aspnet_client/system_web/4_0_30319/', 'App_Data/', 'Global.asax', 'web.config', 'trace.axd', 'elmah.axd', 'ScriptResource.axd', 'WebResource.axd', 'Default.aspx'] },
   { title: 'Git 경로', paths: ['.git/', '.git/HEAD', '.git/config', '.git/index', '.git/logs/HEAD', '.git/COMMIT_EDITMSG', '.gitignore', '.gitattributes', '.git/packed-refs', '.git/info/refs', '.git/info/exclude', '.git/objects/info/packs', '.git/objects/info/alternates', '.git/objects/info/http-alternates', '.git/config.worktree', '.git/description', '.git/refs/heads/main', '.git/refs/heads/master', '.gitmodules'] },
   { title: '기타 VCS 경로', paths: ['.hg/hgrc', '.hg/hgrc-not-shared', '.hg/requires', '.hg/dirstate', '.svn/entries', '.svn/wc.db', '.bzr/branch/branch.conf'] },
   { title: '앱/일반 경로', paths: ['app/', 'application/', 'api/', 'admin/', 'backend/', 'static/', 'public/', 'uploads/', 'config/', 'include/', 'src/', 'dist/', 'build/', 'test/', 'tests/', 'docs/'] },
@@ -92,7 +95,16 @@ const CATEGORIES = [
   { title: '패키지 매니저 / 의존성 파일', paths: ['package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.json', 'composer.lock', 'auth.json', 'Gemfile', 'Gemfile.lock', 'requirements.txt', 'Pipfile', 'Pipfile.lock', 'pyproject.toml', 'poetry.lock', 'go.mod', 'go.sum', 'Cargo.toml', 'Cargo.lock', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'gradle.properties', 'nuget.config'] },
   { title: '인프라 / IaC 설정 파일', paths: ['compose.yaml', 'compose.yml', '.terraform.lock.hcl', 'terraform.tfstate', 'terraform.tfstate.backup', 'terraform.tfvars', 'main.tf', 'variables.tf', 'ansible.cfg', 'Vagrantfile', 'Makefile', 'Chart.yaml', 'values.yaml', 'kustomization.yaml', 'skaffold.yaml'] },
   { title: '프레임워크 설정 파일', paths: ['nuxt.config.js', '.nuxt/router.js', 'phpunit.xml', 'phpunit.xml.dist'] },
+  { title: '프런트엔드 · React/CRA', note: '배포 산출물과 개발 소스 노출 여부를 확인합니다. 해시가 포함된 번들 파일명은 HAR 또는 정적 파일 목록을 기준으로 별도 추가해야 합니다.', paths: ['static/js/', 'static/css/', 'asset-manifest.json', 'manifest.json', 'service-worker.js', 'src/', 'public/', 'main.js.map', 'runtime.js.map', 'main.css.map'] },
+  { title: '프런트엔드 · Vue/Vite', note: 'Vite 개발 서버 경로는 개발 서버가 외부에 노출된 경우에만 의미가 있습니다. 경로 응답만으로 취약점을 확정하지 마세요.', paths: ['@vite/client', 'vite.svg', 'src/main.js', 'src/main.ts', 'src/App.vue', '.vite/manifest.json', 'assets/', 'manifest.webmanifest', 'env.js'] },
+  { title: '프런트엔드 · Angular', note: 'Angular 배포 번들·서비스 워커·개발 소스 관례 경로입니다.', paths: ['main.js', 'runtime.js', 'polyfills.js', 'styles.css', 'ngsw.json', 'ngsw-worker.js', 'src/main.ts', 'src/app/', 'src/environments/', 'angular.json', 'main.js.map', 'runtime.js.map'] },
+  { title: '프런트엔드 · Next.js', note: 'Next.js 정적 리소스·라우트·소스맵의 관례 경로입니다. 배포 방식에 따라 실제 경로와 소스맵 공개 여부가 달라집니다.', paths: ['_next/static/', '_next/static/chunks/main.js.map', '_next/static/chunks/pages/_app.js.map', '_next/data/', '_next/image', 'next.svg', 'vercel.svg', 'next.config.js', 'server.js', 'src/app/', 'pages/', 'middleware.js'] },
   { title: 'Django / Laravel / Rails 프레임워크 파일', paths: ['manage.py', 'db.sqlite3', 'artisan', 'vendor/composer/installed.json', 'storage/logs/laravel.log', 'config/database.php', 'config/database.yml', 'config/credentials.yml.enc', 'config/master.key'] },
+  { title: '백엔드 · Node.js/Express', note: '일반적인 API·상태·설정 경로입니다. 상태·문서 엔드포인트가 공개되어도 반환 정보와 접근통제를 확인해야 합니다.', paths: ['api/v1/', 'graphql', 'healthz', 'readyz', 'livez', 'metrics', 'openapi.json', 'swagger.json', 'api-docs/', 'server.js', 'app.js', 'config/default.json', 'config/production.json', 'tsconfig.json'] },
+  { title: '백엔드 · Node.js/NestJS', note: 'NestJS 기본 API 접두사·Swagger·빌드 파일 관례 경로입니다.', paths: ['api/v1/', 'docs', 'swagger', 'swagger-json', 'nest-cli.json', 'tsconfig.build.json', 'main.js', 'src/main.ts', 'dist/'] },
+  { title: '백엔드 · Python/Django·FastAPI', note: 'Django 진단 패널과 FastAPI 문서 기본 경로를 함께 제공합니다. 문서 경로는 비활성화·인증 보호된 구성이 정상일 수 있습니다.', paths: ['__debug__/', 'silk/', 'api/schema/', 'api/docs/', 'api/redoc/', 'docs', 'redoc', 'openapi.json', 'docs/oauth2-redirect', 'static/', 'media/', 'healthz', 'server.py', 'app.py', 'wsgi.py', 'asgi.py'] },
+  { title: '백엔드 · Go', note: 'Go 서비스의 상태·프로파일링 기본 경로입니다. pprof 응답은 내부 진단 정보 노출 여부를 검토하세요.', paths: ['debug/pprof/', 'debug/vars', 'healthz', 'readyz', 'livez', 'metrics', 'swagger/', 'openapi.json'] },
+  { title: '백엔드 · .NET/ASP.NET Core', note: 'ASP.NET Core Swagger·상태·운영 도구 관례 경로입니다. Hangfire·ELMAH 등은 사용 여부에 따라 존재하지 않을 수 있습니다.', paths: ['swagger/', 'swagger/index.html', 'swagger/v1/swagger.json', 'healthz', 'hangfire', 'elmah', 'appsettings.json', 'appsettings.Development.json', 'web.config', 'App_Data/', 'Global.asax'] },
   { title: 'Spring Boot', paths: ['actuator', 'actuator/health', 'actuator/info', 'actuator/env', 'actuator/beans', 'actuator/mappings', 'actuator/configprops', 'actuator/heapdump', 'actuator/threaddump', 'actuator/loggers', 'actuator/auditevents', 'actuator/caches', 'actuator/conditions', 'actuator/flyway', 'actuator/health/liveness', 'actuator/health/readiness', 'actuator/httpexchanges', 'actuator/httptrace', 'actuator/integrationgraph', 'actuator/liquibase', 'actuator/metrics', 'actuator/quartz', 'actuator/scheduledtasks', 'actuator/sessions', 'actuator/startup', 'actuator/logfile', 'actuator/prometheus', 'actuator/sbom'] },
   { title: 'Nginx', paths: ['nginx_status', 'status', 'nginx.conf', '.nginx/'] },
   { title: 'Apache', paths: ['server-status', 'server-info', '.htaccess', '.htpasswd', 'icons/', 'manual/', 'cgi-bin/', '.htdigest', 'httpd.conf', 'apache2.conf', 'conf/httpd.conf', 'server-status?auto'] },
@@ -118,17 +130,26 @@ function textElement(tag, value, className) {
 }
 function setStatus(message) { $('status').textContent = message; }
 
-function updatePreview() {
+function collectSelectedPaths(categories, selected) {
   const paths = [];
-  let selectedCategories = 0;
-  CATEGORIES.forEach((category, index) => {
-    if (categoryCheckboxes[index].checked) {
-      selectedCategories += 1;
-      paths.push(...category.paths);
-    }
+  const seen = new Set();
+  categories.forEach((category, index) => {
+    if (!selected[index]) return;
+    category.paths.forEach(path => {
+      if (seen.has(path)) return;
+      seen.add(path);
+      paths.push(path);
+    });
   });
+  return paths;
+}
+
+function updatePreview() {
+  const selected = categoryCheckboxes.map(checkbox => checkbox.checked);
+  const selectedCategories = selected.filter(Boolean).length;
+  const paths = collectSelectedPaths(CATEGORIES, selected);
   $('preview').value = paths.join('\n');
-  $('count').textContent = selectedCategories + '개 카테고리 · ' + paths.length + '개 경로 선택됨';
+  $('count').textContent = selectedCategories + '개 카테고리 · ' + paths.length + '개 고유 경로 선택됨';
 }
 
 function buildUI() {
@@ -144,6 +165,7 @@ function buildUI() {
     categoryCheckboxes.push(checkbox);
     label.append(checkbox, textElement('span', category.title, 'category-title'), textElement('span', '(' + category.paths.length + '개)', 'badge'));
     section.appendChild(label);
+    if (category.note) section.appendChild(textElement('small', category.note, 'category-note'));
 
     const details = document.createElement('details');
     details.appendChild(textElement('summary', '경로 목록 보기'));

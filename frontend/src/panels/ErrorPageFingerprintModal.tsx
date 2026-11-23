@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Lock, ServerCrash, X } from 'lucide-react'
+import { Copy, Lock, ServerCrash, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
 import { DISCLAIMER, Note, Readout, TextInput } from '../payloads/shared'
@@ -115,15 +115,13 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
     const body = item.body === undefined ? '' : ` --data ${shellQuote(item.body)}`
     return `${curlBin} -i -X ${item.method ?? 'GET'} ${hostHeaders.map(curlHeader).join(' ')}${body} ${shellQuote(`https://${targetHost}${targetPath}`)}`
   }
-  const script = [
-    ...METHODS.filter(x => checkedIds.has(`method-${x.id}`)).flatMap(x => [echoCommand(methodCommand(x)), methodCommand(x)]),
-    ...PATHS.filter(x => checkedIds.has(`path-${x.id}`)).flatMap(x => [echoCommand(pathCommand(x)), pathCommand(x)]),
-    ...HEADERS.filter(x => checkedIds.has(`header-${x.id}`)).flatMap(x => [echoCommand(headerCommand(x)), headerCommand(x)]),
-    ...PROTOCOLS.filter(x => checkedIds.has(`protocol-${x.id}`)).flatMap(x => {
-      const command = `${curlBin} -i ${x.option} ${shellQuote(`https://${targetHost}${targetPath}`)}`
-      return [echoCommand(command), command]
-    }),
-  ].join('\n')
+  const selectedCommands = [
+    ...METHODS.filter(item => checkedIds.has(`method-${item.id}`)).map(item => ({ id: `method-${item.id}`, title: `${item.method} 메서드`, command: methodCommand(item) })),
+    ...PATHS.filter(item => checkedIds.has(`path-${item.id}`)).map(item => ({ id: `path-${item.id}`, title: item.title, command: pathCommand(item) })),
+    ...HEADERS.filter(item => checkedIds.has(`header-${item.id}`)).map(item => ({ id: `header-${item.id}`, title: item.title, command: headerCommand(item) })),
+    ...PROTOCOLS.filter(item => checkedIds.has(`protocol-${item.id}`)).map(item => ({ id: `protocol-${item.id}`, title: item.title, command: `${curlBin} -i ${item.option} ${shellQuote(`https://${targetHost}${targetPath}`)}` })),
+  ]
+  const script = selectedCommands.map(item => item.command).join('\n')
   const toggleGroup = (ids: string[]) => setCheckedIds(previous => {
     const next = new Set(previous)
     if (ids.every(id => next.has(id))) ids.forEach(id => next.delete(id))
@@ -131,6 +129,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
     return next
   })
   const copyScript = async () => {
+    if (!script) return
     try { await navigator.clipboard.writeText(script); setCopyState('copied') }
     catch { setCopyState('error') }
     window.setTimeout(() => setCopyState('idle'), 1500)
@@ -194,6 +193,18 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
             </section>
           </div>
           <div className="error-fp-preview-pane">
+            <section className="error-fp-command-panel">
+              <div className="error-fp-script-toolbar">
+                <strong>선택한 명령 {selectedCommands.length}개</strong>
+                <button className="cheatsheet-copy" disabled={!selectedCommands.length} onClick={copyScript}><Copy size={14}/>{copyState === 'error' ? '복사 실패' : copyState === 'copied' ? '복사됨' : '명령 복사'}</button>
+              </div>
+              {selectedCommands.length ? <div className="error-fp-command-list">
+                {selectedCommands.map(item => <article className="error-fp-command-item" key={item.id}>
+                  <strong>{item.title}</strong><code>{item.command}</code>
+                </article>)}
+              </div> : <p className="error-fp-preview-empty">왼쪽에서 포함할 항목을 선택하면 실행 명령이 여기에 표시됩니다.</p>}
+              <Note>대상과 명령을 확인한 뒤 승인된 범위에서 직접 실행하세요. 이 도구는 요청을 자동 전송하지 않습니다.</Note>
+            </section>
             <h3 className="payload-group-title">입력 위치 미리보기</h3>
             {!selectedId && <div className="error-fp-preview-empty">왼쪽에서 항목을 선택하면 입력 위치 예시를 보여줍니다.</div>}
             {selectedId?.startsWith('protocol-') && <p className="error-fp-hint">점검 포인트: {PROTOCOLS.find(item => `protocol-${item.id}` === selectedId)?.checkpoint}</p>}
@@ -218,11 +229,6 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
             </>}
           </div>
         </div>
-        <section className="error-fp-script">
-          <div className="error-fp-script-toolbar"><strong>선택된 {checkedIds.size}개</strong><button className="cheatsheet-copy" disabled={!checkedIds.size} onClick={copyScript}>{copyState === 'error' ? '복사 실패' : copyState === 'copied' ? '복사됨' : '스크립트 복사'}</button></div>
-          <pre>{script || '항목을 체크하면 순차 실행 스크립트가 여기에 표시됩니다.'}</pre>
-          <Note>이 모달은 요청을 보내지 않습니다. 생성된 명령은 검토 후 사용자 터미널에서 직접 실행됩니다.</Note>
-        </section>
       </div>
     </div>
   </PanelShell>

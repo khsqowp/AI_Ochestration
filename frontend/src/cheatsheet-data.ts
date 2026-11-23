@@ -194,11 +194,11 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
   },
   {
     id: 'techstack',
-    name: '기술스택 노출 점검',
+    name: 'BaaS · 기술 스택 지문',
     tools: [
       {
-        id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
-        note: 'Spring Boot 관리 경로, Swagger/OpenAPI·GraphQL, 프런트엔드 메타데이터를 HEAD 요청으로 확인합니다. 응답 본문은 가져오지 않습니다.',
+        id: 'modern-stack-recon', name: '모던 솔루션 경로 · BaaS 권한 점검', base: '', options: [],
+        note: 'Spring Boot 관리 경로, Swagger/OpenAPI·GraphQL, 프런트엔드 메타데이터를 HEAD 요청으로 확인하고 Firebase/Supabase 권한 점검 명령을 제공합니다. 응답 본문은 가져오지 않습니다.',
       },
       {
         id: 'stack-fingerprint', name: '응답 헤더 기술 단서 분석', base: '', options: [],

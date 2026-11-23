@@ -2,12 +2,13 @@ import { type ComponentType, type CSSProperties } from 'react'
 import {
   AppWindow, Binary, Bomb, Bug, CloudCog, Compass, Crosshair, Database,
   FileCode2, FlaskConical, FolderSearch, GitBranch, GitCompare, History,
-  KeyRound, Layers, Network, Radar, ServerCog, ServerCrash, SquareTerminal,
+  KeyRound, Layers, Network, Radar, SearchCheck, ServerCog, ServerCrash, ShieldAlert, SquareTerminal,
   Terminal, Wifi,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
+import { useAppState } from '../context/AppState'
 
 /* 진단 탭의 타일은 항목별 모달로 연결되며, 카테고리별 색상은 섹션에서 상속한다. */
 const CATEGORY_META: Record<string, { icon: ComponentType<{ size?: number }>; color: string }> = {
@@ -35,6 +36,7 @@ const GROUP_LABELS: Record<string, string> = {
 }
 
 export function DiagnosticsPage() {
+  const { isAdmin } = useAppState()
   return <div className="page diag-page">
     <div className="diag-grid">
       <section className="diag-section" style={{ '--diag-accent': '#6b7280' } as CSSProperties}>
@@ -46,6 +48,9 @@ export function DiagnosticsPage() {
           <Link className="diag-tile" to="/dashboard/diag/network-diagnose">
             <Wifi size={20}/><span>네트워크 진단</span>
           </Link>
+          <Link className="diag-tile" to="/dashboard/diag/cve-poc">
+            <Bug size={20}/><span>CVE/PoC 조회</span>
+          </Link>
           {ROUTE_TREE_TOOLS.map(({ id, name, icon: Icon }) => <Link className="diag-tile" key={id} to={`/dashboard/diag/${id}`}>
             <Icon size={20}/><span>{name}</span>
           </Link>)}
@@ -55,11 +60,17 @@ export function DiagnosticsPage() {
           <Link className="diag-tile" to="/dashboard/diag/burp-comparer">
             <GitCompare size={20}/><span>Burp Comparer</span>
           </Link>
-          <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
+          {isAdmin && <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
             <History size={20}/><span>Burp History 뷰어</span>
-          </Link>
+          </Link>}
           <Link className="diag-tile" to="/dashboard/diag/error-page-fingerprint">
             <ServerCrash size={20}/><span>기본 에러 페이지 탐지</span>
+          </Link>
+          <Link className="diag-tile" to="/dashboard/diag/soft-404-analyzer">
+            <SearchCheck size={20}/><span>Soft-404 응답 기준 분석</span>
+          </Link>
+          <Link className="diag-tile" to="/dashboard/diag/scope-redirect-linter">
+            <ShieldAlert size={20}/><span>범위·리다이렉트 사전 점검</span>
           </Link>
           <Link className="diag-tile" to="/dashboard/diag/xss-scout-console">
             <Bug size={20}/><span>XSS 콘솔 스캐너</span>

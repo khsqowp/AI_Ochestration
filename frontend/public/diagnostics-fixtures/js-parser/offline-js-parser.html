@@ -6,6 +6,7 @@
 <title>JavaScript 오프라인 분석기</title>
 <style>
 :root{font:15px/1.55 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;color:#242333;background:#f4f3f8}*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{width:100%;min-height:calc(100dvh - 48px);display:flex;flex-direction:column}.card{background:#fff;border:1px solid #e2dfeb;border-radius:14px;padding:20px;margin:14px 0}h1{font-size:24px;margin:0 0 5px}h2{font-size:16px;margin:0 0 10px}.muted{color:#696779;font-size:13px}.warning{border-left:4px solid #8068d9;background:#f4f1ff;padding:12px 14px;border-radius:8px}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}button,.file{border:1px solid #d8d4e3;border-radius:8px;background:white;padding:8px 12px;font:inherit;cursor:pointer}button:hover,.file:hover{background:#f4f1ff}textarea{display:block;width:100%;min-height:260px;resize:vertical;border:1px solid #d8d4e3;border-radius:9px;padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}.results{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.result{min-width:0;display:flex;flex-direction:column}.result pre{white-space:pre-wrap;overflow-wrap:anywhere;flex:1;max-height:none;overflow:auto;background:#faf9fc;color:#514a61;border:1px solid #e8e6ed;border-radius:8px;padding:12px;min-height:84px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace}.js-syntax-keyword{color:#5b4fc4}.js-syntax-string{color:#1f6d45}.js-syntax-number{color:#9a6418}.js-syntax-comment{color:#8a8591;font-style:italic}.js-syntax-function{color:#2b6cb0}.js-parser-hit{color:#d32f2f;background:rgba(211,47,47,.08);border-radius:3px;padding:0 1px;font-weight:600}.empty{color:#777;font-size:13px}@media(max-width:600px){body{padding:12px}.wrap{min-height:calc(100dvh - 24px)}.card{padding:14px}}
+ .result pre .candidate-link{display:block;width:100%;margin:0 0 8px;padding:0;border:0;border-radius:3px;background:transparent;color:inherit;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;cursor:pointer}.result pre .candidate-link:hover,.result pre .candidate-link:focus-visible{background:#f4f1ff;outline:2px solid #8068d9;outline-offset:2px}#beautified::selection{background:#ffe08a;color:#242333}
 </style>
 </head>
 <body><main class="wrap">
@@ -27,7 +28,7 @@
 const $=id=>document.getElementById(id), source=$('source');
 function beautify(code){if(!code.trim())return '';let result='',quote=null,escaped=false;for(let i=0;i<code.length;i++){const c=code[i];if(escaped){result+=c;escaped=false;continue}if(c==='\\'){result+=c;escaped=true;continue}if(quote){if(c===quote)quote=null;result+=c}else if(c==='"'||c==="'"||c==='`'){quote=c;result+=c}else if(c==='{'||c==='}'||c===';'){result+=c+'\n'}else result+=c}let indent=0;return result.split('\n').map(x=>x.trim()).filter(Boolean).map(line=>{if(line.startsWith('}'))indent=Math.max(0,indent-1);const formatted='  '.repeat(indent)+line;if(line.endsWith('{'))indent++;return formatted}).join('\n')}
 function unique(text,re){return [...new Set(text.match(re)||[])].map(x=>x.trim())}
-function show(id,items,empty='발견된 항목 없음'){const el=$(id);el.textContent=items.length?items.join('\n\n'):empty;el.classList.toggle('empty',!items.length)}
+function show(id,items,empty='발견된 항목 없음'){const el=$(id);el.replaceChildren();el.classList.toggle('empty',!items.length);if(!items.length){el.textContent=empty;return}for(const item of items){const button=document.createElement('button');button.type='button';button.className='candidate-link';button.textContent=item;button.dataset.candidate=item;button.title='Beautified JS에서 위치 보기';el.append(button,document.createTextNode('\n\n'))}}
 const ENDPOINT_RE = /(?:"|')(?:https?:\/\/|\/api\/|\/v\d+\/)[^"'\s]*(?:"|')|https?:\/\/[^\s"'<>]+/g;
 const SECRET_RE = /(?:api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'][^"'\s]{6,}["']|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{10,}/gi;
 const COMMENT_RE = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
@@ -143,6 +144,15 @@ function showBeautified(text){
     if(parent!==el)el.appendChild(parent);
   });
 }
+function jumpToCandidate(value){
+  const pre=$('beautified'),walker=document.createTreeWalker(pre,NodeFilter.SHOW_TEXT),nodes=[];let full='';
+  while(walker.nextNode()){const node=walker.currentNode,start=full.length;full+=node.data;nodes.push({node,start,end:full.length})}
+  const start=full.indexOf(value);if(start<0)return;
+  const end=start+value.length,startPart=nodes.find(x=>start>=x.start&&start<x.end),endPart=nodes.find(x=>end>x.start&&end<=x.end);if(!startPart||!endPart)return;
+  const range=document.createRange();range.setStart(startPart.node,start-startPart.start);range.setEnd(endPart.node,end-endPart.start);
+  const rect=range.getBoundingClientRect(),box=pre.getBoundingClientRect();pre.scrollTop+=rect.top-box.top-pre.clientHeight/2;
+  const selection=getSelection();selection?.removeAllRanges();selection?.addRange(range);
+}
 function render(){
   const text=source.value;
   showBeautified(beautify(text));
@@ -155,5 +165,5 @@ function render(){
   show('base64',unique(text,BASE64_RE));
   show('email',unique(text,EMAIL_RE));
 }
-source.addEventListener('input',render);$('file').addEventListener('change',async e=>{const f=e.target.files?.[0];if(f){source.value=await f.text();render();$('status').textContent=f.name+' 파일을 브라우저에서 읽었습니다.'}});$('clear').addEventListener('click',()=>{source.value='';$('file').value='';render();$('status').textContent='입력을 비웠습니다.'});document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{const text=$(button.dataset.copy).textContent||'';try{await navigator.clipboard.writeText(text);$('status').textContent='복사했습니다.'}catch{$('status').textContent='클립보드 권한이 없어 복사하지 못했습니다. 결과를 직접 선택해 복사하세요.'}}));render();
+source.addEventListener('input',render);document.querySelector('.results').addEventListener('click',e=>{const button=e.target.closest('[data-candidate]');if(button)jumpToCandidate(button.dataset.candidate)});$('file').addEventListener('change',async e=>{const f=e.target.files?.[0];if(f){source.value=await f.text();render();$('status').textContent=f.name+' 파일을 브라우저에서 읽었습니다.'}});$('clear').addEventListener('click',()=>{source.value='';$('file').value='';render();$('status').textContent='입력을 비웠습니다.'});document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{const text=$(button.dataset.copy).textContent||'';try{await navigator.clipboard.writeText(text);$('status').textContent='복사했습니다.'}catch{$('status').textContent='클립보드 권한이 없어 복사하지 못했습니다. 결과를 직접 선택해 복사하세요.'}}));render();
 </script></body></html>

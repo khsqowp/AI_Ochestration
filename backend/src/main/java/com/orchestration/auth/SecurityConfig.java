@@ -58,6 +58,7 @@ class SecurityConfig {
         // Diagnostic tools (e.g. JS beautifier) are available to every logged-in user, not just ADMIN.
         .requestMatchers("/api/diag/js-parser").authenticated()
         .requestMatchers("/api/diag/network-diagnose").authenticated()
+        .requestMatchers("/api/diag/cve-poc").authenticated()
 
         // 파일 아카이브 — read is USER+ADMIN, maintenance/dedup mutation is ADMIN-only
         .requestMatchers(HttpMethod.GET, "/api/archive/files", "/api/archive/content", "/api/archive/search", "/api/archive/graph").authenticated()

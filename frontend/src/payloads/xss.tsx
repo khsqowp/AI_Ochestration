@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ChevronDown, ChevronUp, Copy } from 'lucide-react'
 import { DISCLAIMER, NoteWithCopy, Note, Pick, Readout } from './shared'
 import xssScoutScript from './xssScoutScript.txt?raw'
 
@@ -55,6 +56,36 @@ type Ctx = {
   label: string
   hint: string
   payloads: Payload[]
+}
+
+type EncodingVariant = { id: string; label: string; value: string; applies: string; caveat: string }
+
+function toBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  }
+  return btoa(binary)
+}
+
+function encodingVariants(value: string): EncodingVariant[] {
+  const bytes = new TextEncoder().encode(value)
+  const percentEncoded = Array.from(bytes, byte => `%${byte.toString(16).padStart(2, '0')}`).join('')
+  const htmlEntities = (radix: 10 | 16) => value.replace(/[&<>"']/g, char => {
+    const code = char.codePointAt(0)!.toString(radix)
+    return radix === 16 ? `&#x${code};` : `&#${code};`
+  })
+  const jsUnicode = value.split('').map(char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`).join('')
+  return [
+    { id: 'html-hex', label: 'HTML 숫자 엔티티 · 16진수', value: htmlEntities(16), applies: 'HTML 파서가 문자 참조를 해석하는 데이터/속성값 위치에서 비교할 때 사용합니다.', caveat: '태그명이나 속성명 안의 엔티티는 같은 방식으로 디코딩되지 않습니다. 본문에서 엔티티가 문자로 표시된다는 사실만으로 태그가 재생성되지는 않습니다.' },
+    { id: 'html-decimal', label: 'HTML 숫자 엔티티 · 10진수', value: htmlEntities(10), applies: '16진수 엔티티 표기와 필터·정규화 차이를 비교할 때 사용합니다.', caveat: 'HTML 파싱 단계에서만 의미가 있습니다. 이후 HTML 파싱 없이 일반 텍스트로 남으면 실행 가능한 마크업이 아닙니다.' },
+    { id: 'url-once', label: 'UTF-8 퍼센트 인코딩 · 1회', value: percentEncoded, applies: '요청 입력이 서버나 프레임워크에서 URL 디코딩된 뒤 반사되는지 확인할 때 사용합니다.', caveat: '브라우저가 HTML 응답 본문 안의 퍼센트 인코딩을 자동으로 HTML로 바꾸지는 않습니다. 어느 계층에서 디코딩되는지 확인해야 합니다.' },
+    { id: 'url-twice', label: 'UTF-8 퍼센트 인코딩 · 2회', value: percentEncoded.replaceAll('%', '%25'), applies: '프록시와 애플리케이션 등 디코딩 계층이 중복되는지 차이를 비교할 때 사용합니다.', caveat: '두 번 디코딩되는 경로가 없으면 인코딩된 문자열로 남습니다. 이중 인코딩 자체가 우회 성공을 의미하지 않습니다.' },
+    { id: 'js-unicode', label: 'JavaScript 문자열용 Unicode escape', value: jsUnicode, applies: '값이 JavaScript 문자열 리터럴 안에 들어가 JS 파서가 escape를 해석하는지 확인할 때 사용합니다.', caveat: '문자열 바깥의 일반 텍스트나 HTML 속성명에서 같은 효과가 나지 않습니다. 문자열이 이후 HTML sink로 전달되는지도 별도로 확인해야 합니다.' },
+    { id: 'json-string', label: 'JSON 문자열 리터럴 표기', value: JSON.stringify(value), applies: 'JSON 직렬화·파싱 전후에 특수문자가 어떻게 보존되는지 비교할 때 사용합니다.', caveat: 'JSON escaping은 HTML sanitization이 아닙니다. 파싱 결과를 HTML sink에 넣으면 별도의 HTML 컨텍스트 인코딩이 필요합니다.' },
+    { id: 'base64', label: 'Base64 · UTF-8', value: toBase64Utf8(value), applies: '애플리케이션이 Base64 값을 디코딩한 뒤 어떤 sink로 전달하는지 확인할 때 사용합니다.', caveat: 'Base64는 암호화도 실행도 아닙니다. 애플리케이션이 디코딩하지 않으면 인코딩된 데이터일 뿐입니다.' },
+  ]
 }
 
 /* ── 1. 필터 체크리스트 ────────────────────────────────────────── */
@@ -530,6 +561,8 @@ export function XssPayloadBuilder() {
   const [ctxId, setCtxId] = useState(CONTEXTS[0].id)
   const [checks, setChecks] = useState<Record<string, boolean>>({})
   const [blockText, setBlockText] = useState('')
+  const [expandedPayload, setExpandedPayload] = useState<string | null>(null)
+  const [copiedVariant, setCopiedVariant] = useState<string | null>(null)
 
   const ctx = CONTEXTS.find(c => c.id === ctxId)!
   const checkedSet = useMemo(() => new Set(Object.entries(checks).filter(([, v]) => v).map(([k]) => k)), [checks])
@@ -537,6 +570,15 @@ export function XssPayloadBuilder() {
 
   const toggle = (id: string) => setChecks(c => ({ ...c, [id]: !c[id] }))
   const clearAll = () => { setChecks({}); setBlockText('') }
+  const copyVariant = async (id: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedVariant(id)
+    } catch {
+      setCopiedVariant(`error:${id}`)
+    }
+    window.setTimeout(() => setCopiedVariant(current => current === id || current === `error:${id}` ? null : current), 1500)
+  }
 
   const results = ctx.payloads.filter(p => {
     for (const f of FILTERS) {
@@ -578,6 +620,8 @@ export function XssPayloadBuilder() {
       placeholder={'예: <script> (전체 문자열만 막히고 < 단독은 안 막히는 compound 필터)\nalert('}/>
     <p className="payload-builder-hint">입력한 각 줄을 대소문자 구분 없이 포함하는 페이로드는 결과에서 제외되고, 그 줄을 쓰지 않는 다른 기법으로 자동 대체됩니다.</p>
 
+    <Note>인코딩 변형은 서로 다른 전송 표현을 비교하기 위한 참고값입니다. 인코딩 자체가 XSS 실행이나 필터 우회를 보장하지 않습니다. 요청·응답·브라우저 DOM 중 어디서 디코딩되는지와 최종 삽입 컨텍스트를 확인하세요. 허가된 대상에서만 테스트하세요.</Note>
+
     <div className="xss-guide-results">
       <p className="payload-builder-label" style={{ margin: '14px 0 6px' }}>
         결과 — 전체 {ctx.payloads.length}개 중 {results.length}개 통과
@@ -585,10 +629,27 @@ export function XssPayloadBuilder() {
       </p>
       {results.length === 0 ? <Note>
         남은 페이로드가 없습니다. 이 조합에서는 참고 목록에 있는 클라이언트 측 우회가 없다는 뜻일 수 있습니다 — 체크를 하나씩 해제하며 정확히 어떤 조건이 막는지 역추적하거나, 다른 삽입 지점(속성/URL/JS 등 다른 컨텍스트)을 확인해보세요.
-      </Note> : results.map(p => <div className="xss-guide-result" key={p.id}>
-        <Readout title={p.label} value={p.text} wrap="anywhere"/>
-        <p className="payload-builder-hint">{p.principle}</p>
-      </div>)}
+      </Note> : results.map(p => {
+        const expandedId = `${ctxId}:${p.id}`
+        const isExpanded = expandedPayload === expandedId
+        return <div className="xss-guide-result" key={p.id}>
+          <Readout title={p.label} value={p.text} wrap="anywhere"/>
+          <button type="button" className="xss-encoding-toggle" aria-expanded={isExpanded} onClick={() => setExpandedPayload(isExpanded ? null : expandedId)}>
+            {isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>} 인코딩 변형 보기
+          </button>
+          {isExpanded && <div className="xss-encoding-variants">
+            {encodingVariants(p.text).map(variant => {
+              const copyId = `${expandedId}:${variant.id}`
+              return <article className="xss-encoding-variant" key={variant.id}>
+                <header><strong>{variant.label}</strong><button type="button" onClick={() => void copyVariant(copyId, variant.value)}><Copy size={13}/>{copiedVariant === copyId ? '복사됨' : copiedVariant === `error:${copyId}` ? '복사 실패' : '복사'}</button></header>
+                <pre>{variant.value}</pre>
+                <p>{variant.applies}</p><small>주의: {variant.caveat}</small>
+              </article>
+            })}
+          </div>}
+          <p className="payload-builder-hint">{p.principle}</p>
+        </div>
+      })}
     </div>
   </div>
 }

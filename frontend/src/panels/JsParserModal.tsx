@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Binary, Download, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
@@ -237,6 +237,9 @@ export function JsParserModal({ onClose, embedded }: { onClose?: () => void; emb
   const [input, setInput] = useState('')
   const [serverMode, setServerMode] = useState(false)
   const [serverResults, setServerResults] = useState<ParserResults>(EMPTY_RESULTS)
+  const beautifiedRef = useRef<HTMLPreElement>(null)
+  const [jumpRequest, setJumpRequest] = useState<{ value: string; id: number } | null>(null)
+  const jumpId = useRef(0)
   const clientResults = serverMode ? EMPTY_RESULTS : extractResults(input)
   const results = serverMode ? serverResults : clientResults
 
@@ -270,6 +273,44 @@ export function JsParserModal({ onClose, embedded }: { onClose?: () => void; emb
   }, [input])
   const { beautified, endpoints, secrets, comments, crypto, phones, rrns, versions, base64, emails } = results
 
+  useEffect(() => {
+    if (!jumpRequest || !beautified) return
+    const frame = window.requestAnimationFrame(() => {
+      const pre = beautifiedRef.current
+      if (!pre) return
+      const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT)
+      const textNodes: { node: Text; start: number; end: number }[] = []
+      let fullText = ''
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text
+        const start = fullText.length
+        fullText += node.data
+        textNodes.push({ node, start, end: fullText.length })
+      }
+      const start = fullText.indexOf(jumpRequest.value)
+      if (start < 0) return
+      const end = start + jumpRequest.value.length
+      const startNode = textNodes.find(part => start >= part.start && start < part.end)
+      const endNode = textNodes.find(part => end > part.start && end <= part.end)
+      if (!startNode || !endNode) return
+      const range = document.createRange()
+      range.setStart(startNode.node, start - startNode.start)
+      range.setEnd(endNode.node, end - endNode.start)
+      const rect = range.getBoundingClientRect()
+      const preRect = pre.getBoundingClientRect()
+      pre.scrollTop += rect.top - preRect.top - pre.clientHeight / 2
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [jumpRequest, beautified])
+
+  const jumpToCode = (value: string) => setJumpRequest({ value, id: ++jumpId.current })
+  const candidateList = (items: string[], empty: string) => items.length
+    ? items.map((item, index) => <button type="button" className="js-parser-item js-parser-item--clickable" key={`${item}-${index}`} onClick={() => jumpToCode(item)} title="Beautified JS에서 위치 보기">{item}</button>)
+    : <p className="js-parser-empty">{empty}</p>
+
   return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
     <div className="sheet-header"><div><p className="eyebrow">진단 · 정찰</p><h2><Binary size={18} style={{ verticalAlign: '-3px', marginRight: 6 }}/>JS Beautifier & 정규식 추출기</h2></div>{onClose && <button className="sheet-close" onClick={onClose}><X size={18}/></button>}</div>
     <div className="explorer-preview tool-modal-body">
@@ -292,61 +333,61 @@ export function JsParserModal({ onClose, embedded }: { onClose?: () => void; emb
                 <textarea className="payload-builder-textarea" rows={12} value={input} onChange={e => handleInput(e.target.value)} placeholder="분석할 JavaScript 코드를 붙여넣으세요…"/>
               </Field>
             </div>
-            {beautified && <div className="js-parser-beautified"><strong>Beautified JS</strong><pre className="js-parser-highlighted-pre">{highlightedJs(beautified)}</pre></div>}
+            {beautified && <div className="js-parser-beautified"><strong>Beautified JS</strong><pre ref={beautifiedRef} className="js-parser-highlighted-pre">{highlightedJs(beautified)}</pre></div>}
           </div>
           <div className="js-parser-output-section">
             <div className="js-parser-result-group">
               <strong>API 엔드포인트</strong>
               <div className="js-parser-list">
-                {endpoints.length ? endpoints.map((e, i) => <div className="js-parser-item" key={i}>{e}</div>) : <p className="js-parser-empty">발견된 엔드포인트가 없습니다.</p>}
+                {candidateList(endpoints, '발견된 엔드포인트가 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>키 · 시크릿 · 토큰 후보</strong>
               <div className="js-parser-list">
-                {secrets.length ? secrets.map((s, i) => <div className="js-parser-item" key={i}>{s}</div>) : <p className="js-parser-empty">발견된 시크릿 패턴이 없습니다.</p>}
+                {candidateList(secrets, '발견된 시크릿 패턴이 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>주석</strong>
               <div className="js-parser-list">
-                {comments.length ? comments.map((c, i) => <div className="js-parser-item" key={i}>{c}</div>) : <p className="js-parser-empty">발견된 주석이 없습니다.</p>}
+                {candidateList(comments, '발견된 주석이 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>암호/키 키워드 후보</strong>
               <div className="js-parser-list">
-                {crypto.length ? crypto.map((c, i) => <div className="js-parser-item" key={i}>{c}</div>) : <p className="js-parser-empty">발견된 암호/키 키워드가 없습니다.</p>}
+                {candidateList(crypto, '발견된 암호/키 키워드가 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>전화번호/연락처 후보</strong>
               <div className="js-parser-list">
-                {phones.length ? phones.map((p, i) => <div className="js-parser-item" key={i}>{p}</div>) : <p className="js-parser-empty">발견된 전화번호가 없습니다.</p>}
+                {candidateList(phones, '발견된 전화번호가 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>주민등록번호 후보</strong>
               <div className="js-parser-list">
-                {rrns.length ? rrns.map((v, i) => <div className="js-parser-item" key={i}>{v}</div>) : <p className="js-parser-empty">발견된 주민등록번호가 없습니다.</p>}
+                {candidateList(rrns, '발견된 주민등록번호가 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>버전 문자열 후보</strong>
               <div className="js-parser-list">
-                {versions.length ? versions.map((v, i) => <div className="js-parser-item" key={i}>{v}</div>) : <p className="js-parser-empty">발견된 버전 문자열이 없습니다.</p>}
+                {candidateList(versions, '발견된 버전 문자열이 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>Base64 추정값 후보</strong>
               <div className="js-parser-list">
-                {base64.length ? base64.map((b, i) => <div className="js-parser-item" key={i}>{b}</div>) : <p className="js-parser-empty">발견된 Base64 추정값이 없습니다.</p>}
+                {candidateList(base64, '발견된 Base64 추정값이 없습니다.')}
               </div>
             </div>
             <div className="js-parser-result-group">
               <strong>이메일 후보</strong>
               <div className="js-parser-list">
-                {emails.length ? emails.map((e, i) => <div className="js-parser-item" key={i}>{e}</div>) : <p className="js-parser-empty">발견된 이메일이 없습니다.</p>}
+                {candidateList(emails, '발견된 이메일이 없습니다.')}
               </div>
             </div>
           </div>
