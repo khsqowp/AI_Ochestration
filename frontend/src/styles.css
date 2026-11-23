@@ -486,6 +486,13 @@
 
 /* 진단 도구 상세 페이지: 그리드(.diag-page)는 공용 패딩 유지, 도구 상세만 여백을 줄여 작업공간(iframe/코드뷰 등)을 넓힌다 */
 .page.diag-tool-page { padding: 6px 8px 8px; }
+.diag-curl-toolbar { display:flex; align-items:center; gap:12px; width:max-content; max-width:100%; margin:0 0 8px auto; padding:7px 11px; border:1px solid #e7e3ed; border-radius:10px; background:#fff; color:#625d6c; font-size:11px; }
+.diag-curl-toolbar > span { font-weight:750; }
+.diag-curl-toolbar label { display:inline-flex; align-items:center; gap:6px; color:#514d5a; cursor:pointer; font-weight:650; }
+.diag-curl-toolbar input { accent-color:#7464d8; }
+.diag-curl-toolbar small { color:#817a89; }
+.diag-curl-toolbar code { color:#4c438d; font-weight:750; }
+@media (max-width:600px) { .diag-curl-toolbar { width:100%; justify-content:flex-end; flex-wrap:wrap; } }
 
 .notes-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
 .notes-header h2 { margin:0; font-size:19px; color:#3f3b4a; }

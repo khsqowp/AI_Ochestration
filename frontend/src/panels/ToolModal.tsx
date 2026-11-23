@@ -30,6 +30,8 @@ import { GitSecretsExposureBuilder } from '../payloads/gitSecretsExposure'
 import { CloudStorageCheckBuilder } from '../payloads/cloudStorageCheck'
 import { OsCommandInjectionBuilder } from '../payloads/osCommandInjection'
 import { DnsTakeoverCheckBuilder } from '../payloads/dnsTakeoverCheck'
+import { useCurlCommandMode } from '../context/CurlCommandMode'
+import { formatCurlCommand } from '../lib/curl-command'
 
 const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'xss-payloads': XssPayloadBuilder,
@@ -69,12 +71,13 @@ export function ToolModal({ tool, onClose, embedded }: { tool: CheatSheetTool; o
   const [target, setTarget] = useState('')
   const [copied, setCopied] = useState<boolean | 'error'>(false)
   const builderRef = useRef<HTMLDivElement>(null)
+  const { mode } = useCurlCommandMode()
 
   const toggleOption = (id: string) => { setSelectedOptions(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }); setCopied(false) }
   const command = cheatSheetCommand(tool, selectedOptions, values, target)
   const copy = async (text = command) => {
     if (!text) return
-    try { await navigator.clipboard.writeText(text); setCopied(true) } catch { setCopied('error') }
+    try { await navigator.clipboard.writeText(formatCurlCommand(text, mode)); setCopied(true) } catch { setCopied('error') }
     window.setTimeout(() => setCopied(false), 1500)
   }
 
@@ -99,7 +102,7 @@ export function ToolModal({ tool, onClose, embedded }: { tool: CheatSheetTool; o
             <div><b>목적별 권장 명령</b><small>대상 값을 바꾼 뒤 복사한다. 명령 실행 전 승인 범위와 영향도를 확인한다.</small></div>
             {CHEATSHEET_QUICK_STARTS[tool.id].map(quickStart => <article key={quickStart.id}>
               <header><div><strong>{quickStart.label}</strong><p>{quickStart.description}</p></div><button onClick={() => void copy(quickStart.command)}><Clipboard size={13}/>복사</button></header>
-              <pre>{quickStart.command}</pre>
+              <pre>{formatCurlCommand(quickStart.command, mode)}</pre>
               <p><b>예상 결과:</b> {quickStart.expected}</p>
               <p className="cheatsheet-caution"><b>주의:</b> {quickStart.caution}</p>
             </article>)}
@@ -122,7 +125,7 @@ export function ToolModal({ tool, onClose, embedded }: { tool: CheatSheetTool; o
           </label>}
         </div>
         <div className="cheatsheet-command-bar">
-          <pre className="cheatsheet-command">{command || tool.base || '(옵션을 선택하세요)'}</pre>
+          <pre className="cheatsheet-command">{formatCurlCommand(command || tool.base || '(옵션을 선택하세요)', mode)}</pre>
           <button className="cheatsheet-copy" onClick={() => void copy()} disabled={!command}><Clipboard size={14}/>{copied === 'error' ? '복사 실패' : copied ? '복사됨' : '복사'}</button>
         </div>
       </>}

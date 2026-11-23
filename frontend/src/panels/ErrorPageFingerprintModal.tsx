@@ -3,6 +3,7 @@ import { Lock, ServerCrash, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
 import { DISCLAIMER, Note, Readout, TextInput } from '../payloads/shared'
+import { useCurlCommandMode } from '../context/CurlCommandMode'
 
 type MethodProbe = { id: string; method: string; checkpoint: string }
 type PathProbe = { id: string; title: string; checkpoint: string; suffix: string }
@@ -86,9 +87,10 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set())
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
-  const [platform, setPlatform] = useState<'linux' | 'windows'>('linux')
-  const curlBin = platform === 'windows' ? 'curl.exe' : 'curl'
-  const quoteChar = platform === 'windows' ? '"' : "'"
+  const { mode } = useCurlCommandMode()
+  const windows = mode === 'windows'
+  const curlBin = windows ? 'curl.exe' : 'curl'
+  const quoteChar = windows ? '"' : "'"
   const targetHost = host.trim() || 'example.com'
   const trimmedPath = path.trim()
   const targetPath = trimmedPath ? trimmedPath.startsWith('/') ? trimmedPath : `/${trimmedPath}` : '/'
@@ -101,7 +103,7 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
     ? `${quoteChar}${value.replaceAll('`', '``').replaceAll('$', '`$').replaceAll('"', '`"')}${quoteChar}`
     : `'${value.replaceAll("'", `'\\''`)}'`
   const curlHeader = (line: string) => `-H ${shellQuote(line)}`
-  const echoCommand = (command: string) => platform === 'windows'
+  const echoCommand = (command: string) => windows
     ? `echo '${command.replaceAll("'", "''")}'`
     : `echo "${command.replace(/(["$`])/g, '\\$1')}"`
   const methodCommand = (item: MethodProbe) => `${curlBin} -i -X ${item.method} ${shellQuote(`https://${targetHost}${targetPath}`)}`
@@ -150,10 +152,6 @@ export function ErrorPageFingerprintModal({ onClose, embedded }: { onClose?: () 
       <div className="explorer-preview-body cheatsheet-options-body">
         <Note>{DISCLAIMER}</Note>
         <Note>메서드·경로·헤더 조작으로 커스텀 에러 페이지가 아닌 서버/프레임워크 기본 에러 페이지를 유도해 인프라 정보(서버명·버전·스택트레이스)를 노출시키는지 점검합니다.</Note>
-        <div className="error-fp-platform">
-          <label><input type="checkbox" checked={platform === 'linux'} onChange={() => setPlatform('linux')}/> 리눅스 (curl)</label>
-          <label><input type="checkbox" checked={platform === 'windows'} onChange={() => setPlatform('windows')}/> 윈도우 (curl.exe)</label>
-        </div>
         <div className="error-fp-inputs">
           <div className="error-fp-input"><TextInput label="대상 Host" value={host} onChange={setHost} placeholder="example.com"/></div>
           <div className="error-fp-input"><TextInput label="대상 경로" value={path} onChange={setPath} placeholder="/api/v1/resource"/></div>

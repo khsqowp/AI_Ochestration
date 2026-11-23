@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Clipboard } from 'lucide-react'
+import { useCurlCommandMode } from '../context/CurlCommandMode'
+import { formatCurlCommand } from '../lib/curl-command'
 
 /* ── 인코딩·조립 헬퍼 (전부 순수 문자열 변환) ───────────────────── */
 
@@ -110,14 +112,16 @@ export function NoteWithCopy({ children, copyText, copyLabel = '복사' }: {
 /** 결과 코드 블록 + 복사 버튼. 여러 개를 쌓아 렌더할 수 있다. */
 export function Readout({ title, value, wrap }: { title?: string; value: string; wrap?: 'anywhere' | 'pre' }) {
   const [copied, setCopied] = useState<boolean | 'error'>(false)
+  const { mode } = useCurlCommandMode()
+  const displayedValue = formatCurlCommand(value, mode)
   const copy = async () => {
-    try { await navigator.clipboard.writeText(value); setCopied(true) } catch { setCopied('error') }
+    try { await navigator.clipboard.writeText(displayedValue); setCopied(true) } catch { setCopied('error') }
     window.setTimeout(() => setCopied(false), 1500)
   }
   return <div className="payload-readout">
     {title && <div className="payload-readout-title">{title}</div>}
     <div className="cheatsheet-command-bar">
-      <pre className={`cheatsheet-command ${wrap === 'anywhere' ? 'wrap-anywhere' : ''}`}>{value}</pre>
+      <pre className={`cheatsheet-command ${wrap === 'anywhere' ? 'wrap-anywhere' : ''}`}>{displayedValue}</pre>
       <button className="cheatsheet-copy" onClick={copy}><Clipboard size={14}/>{copied === 'error' ? '복사 실패' : copied ? '복사됨' : '복사'}</button>
     </div>
   </div>

@@ -12,6 +12,7 @@ import { XssScoutConsoleModal } from '../panels/XssScoutConsoleModal'
 import { NetworkDiagnosticsModal } from '../panels/NetworkDiagnosticsModal'
 import { RouteTreeToolPage } from './RouteTreeToolPage'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
+import { CurlCommandModeToggle } from '../context/CurlCommandMode'
 
 const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'prompt-injection': PromptInjectionModal,
@@ -30,7 +31,7 @@ export function DiagToolPage() {
   const tool = !Special && toolId ? CHEATSHEET_CATEGORIES.flatMap(c => c.tools).find(t => t.id === toolId) : undefined
 
   if (toolId && ROUTE_TREE_TOOLS.some(item => item.id === toolId)) return <RouteTreeToolPage toolId={toolId}/>
-  if (Special) return <div className="page diag-tool-page"><Special embedded/></div>
-  if (tool) return <div className="page diag-tool-page"><ToolModal tool={tool} embedded/></div>
+  if (Special) return <div className="page diag-tool-page"><CurlCommandModeToggle/><Special embedded/></div>
+  if (tool) return <div className="page diag-tool-page"><CurlCommandModeToggle/><ToolModal tool={tool} embedded/></div>
   return <Navigate to="/dashboard/diag" replace/>
 }

@@ -4,6 +4,7 @@ import { useAppState } from '../context/AppState'
 import { NotificationStack } from '../components/shared'
 import { TodoFloating } from '../components/Todo'
 import { FeedbackNotificationBell } from '../components/FeedbackNotificationBell'
+import { CurlCommandModeProvider } from '../context/CurlCommandMode'
 
 const NAV: { to: string; label: string; end?: boolean; adminOnly?: boolean; external?: boolean }[] = [
   { to: '/dashboard', label: '대시보드', end: true },
@@ -43,7 +44,7 @@ export function AppShell() {
         <button className="icon-button" onClick={logout} title="로그아웃"><LogOut size={17}/></button>
       </div>
     </header>
-    <main className="app-main"><Outlet/></main>
+    <main className="app-main"><CurlCommandModeProvider><Outlet/></CurlCommandModeProvider></main>
     <NotificationStack notices={notices} onDismiss={dismissNotice}/>
     <TodoFloating items={todos.items} onAdd={todos.add} onToggle={todos.toggle}/>
   </div>
