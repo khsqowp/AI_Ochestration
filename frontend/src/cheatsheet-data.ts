@@ -186,6 +186,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'cdn-proxy-bypass', name: 'CDN / 프록시 우회 빌더', base: '', options: [],
         note: '캐시 확장자·쿼리 변형, 신뢰 헤더 비교, 애플리케이션 내부 경로 정규화와 원본 IP 후보의 읽기 전용 응답 헤더 확인을 제공합니다.',
       },
+      {
+        id: 'cdn-cache-behavior', name: 'CDN 캐시 동작 비교', base: '', options: [],
+        note: '승인된 URL에 HEAD 요청만 보내 기준 경로·확장자·쿼리 변형의 캐시 관련 응답 헤더를 비교합니다. 인증 정보나 요청 본문은 보내지 않으며, HEAD 결과만으로 취약점을 확정하지 않습니다.',
+      },
     ],
   },
   {
@@ -196,6 +200,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
         note: 'Spring Boot 관리 경로, Swagger/OpenAPI·GraphQL, 프런트엔드 메타데이터를 HEAD 요청으로 확인합니다. 응답 본문은 가져오지 않습니다.',
       },
+      {
+        id: 'stack-fingerprint', name: '응답 헤더 기술 단서 분석', base: '', options: [],
+        note: '직접 관측한 응답 헤더에서 서버·프레임워크·세션 쿠키 단서를 정리합니다. 버전과 제품은 위장·프록시 변경 가능성이 있어 확정값이 아닌 약한 단서로 표시합니다.',
+      },
     ],
   },
   {
@@ -203,6 +211,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     name: 'Git / 시크릿 노출',
     tools: [
       { id: 'git-secrets-exposure', name: '소스/시크릿 노출 점검 (.git, .env)', base: '', options: [] },
+      {
+        id: 'release-artifact-check', name: '배포 산출물 경로 확인', base: '', options: [],
+        note: '승인된 웹 루트에서 빌드·릴리스 파일 후보에 제한 시간의 HEAD 요청을 일괄 생성합니다. 응답 본문·파일 다운로드는 수행하지 않으며, 상태 코드만으로 노출 여부를 확정하지 않습니다.',
+      },
     ],
   },
   {
@@ -210,6 +222,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     name: 'DNS / 서브도메인',
     tools: [
       { id: 'dns-takeover-check', name: 'DNS Zone Transfer / 서브도메인 테이크오버', base: '', options: [] },
+      {
+        id: 'dns-delegation-audit', name: 'DNS 위임·DNSSEC 일관성 점검', base: '', options: [],
+        note: '승인된 도메인의 부모·자식 NS, DS·DNSKEY와 재귀 리졸버 응답을 비교하는 dig 명령을 제공합니다. Zone Transfer나 하위 도메인 대량 추측은 수행하지 않습니다.',
+      },
     ],
   },
   {
@@ -502,6 +518,10 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     id: 'exploitation',
     name: '익스플로잇 프레임워크',
     tools: [
+      {
+        id: 'msf-precondition-review', name: 'Metasploit 사전조건 검토', base: '', options: [],
+        note: 'CVE 또는 모듈 경로에 대한 로컬 search/info 조회 명령과 사전조건 확인 항목을 제공합니다. check·run·exploit 등 실제 대상 요청·공격 명령은 생성하지 않습니다.',
+      },
       {
         id: 'metasploit', name: 'Metasploit (msfconsole) 콘솔 명령어', base: '', joiner: '\n',
         note: 'msfconsole을 실행한 뒤 콘솔 안에서 입력하는 명령어들입니다.',

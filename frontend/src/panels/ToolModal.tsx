@@ -30,6 +30,13 @@ import { GitSecretsExposureBuilder } from '../payloads/gitSecretsExposure'
 import { CloudStorageCheckBuilder } from '../payloads/cloudStorageCheck'
 import { OsCommandInjectionBuilder } from '../payloads/osCommandInjection'
 import { DnsTakeoverCheckBuilder } from '../payloads/dnsTakeoverCheck'
+import {
+  CdnCacheBehaviorBuilder,
+  DnsDelegationAuditBuilder,
+  MsfPreconditionReviewBuilder,
+  ReleaseArtifactCheckBuilder,
+  StackFingerprintBuilder,
+} from '../payloads/approvedDiagnosticBuilders'
 import { useCurlCommandMode } from '../context/CurlCommandMode'
 import { formatCurlCommand } from '../lib/curl-command'
 
@@ -59,6 +66,11 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'cloud-storage-check': CloudStorageCheckBuilder,
   'os-command-injection': OsCommandInjectionBuilder,
   'dns-takeover-check': DnsTakeoverCheckBuilder,
+  'cdn-cache-behavior': CdnCacheBehaviorBuilder,
+  'stack-fingerprint': StackFingerprintBuilder,
+  'release-artifact-check': ReleaseArtifactCheckBuilder,
+  'dns-delegation-audit': DnsDelegationAuditBuilder,
+  'msf-precondition-review': MsfPreconditionReviewBuilder,
 }
 
 /* 치트시트 도구 하나를 곧장 보여주는 모달. 타일 그리드(DiagnosticsPage)에서 도구를 클릭하면

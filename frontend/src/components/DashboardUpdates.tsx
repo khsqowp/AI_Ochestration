@@ -8,6 +8,12 @@ type UpdateGroup = {
 // Public-facing product updates, kept separate from private task execution history.
 const updates: UpdateGroup[] = [
   {
+    date: '2026-11-23',
+    items: [
+      '진단 도구에 CDN 캐시 비교, 응답 헤더 기술 단서, 배포 산출물 경로, DNS 위임·DNSSEC 점검, Metasploit 사전조건 검토 추가',
+    ],
+  },
+  {
     date: '2026-11-19',
     items: [
       '진단 페이지에 네트워크 진단 도구 추가: DNS, TCP 포트 연결, 직접/프록시 HTTP 접속을 한 번에 점검하고 원인 추정 결과까지 표시 (로그인 계정 전체 이용 가능)',

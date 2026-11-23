@@ -41,7 +41,7 @@ describe('approved diagnostic tools', () => {
     expect(STACK_HEADER_SIGNATURES.length).toBeGreaterThanOrEqual(10)
     const findings = classifyStackHeaders('Server: nginx/1.24.0\nX-Powered-By: Express\nSet-Cookie: laravel_session=redacted')
     expect(findings.map(item => item.product)).toEqual(expect.arrayContaining(['nginx', 'Express', 'Laravel']))
-    expect(findings.every(item => item.confidence !== '확정')).toBe(true)
+    expect(findings.every(item => item.confidence === '약한 단서')).toBe(true)
   })
 
   it('covers DNS delegation and DNSSEC checks without zone transfer', () => {
