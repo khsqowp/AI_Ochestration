@@ -190,11 +190,11 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
   },
   {
     id: 'techstack',
-    name: '기술스택 노출 점검',
+    name: 'BaaS · 기술 스택 지문',
     tools: [
       {
-        id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
-        note: 'Spring Boot Actuator, Swagger/OpenAPI, Next.js 소스맵, Supabase/Firebase 설정 노출 경로를 대상 URL에 조합해 생성합니다.',
+        id: 'modern-stack-recon', name: 'BaaS 권한 · 기술 스택 지문', base: '', options: [],
+        note: '공통 경로 체크리스트와 겹치는 Actuator·API 문서·Next.js 경로 목록은 그쪽으로 통합했습니다. 여기서는 Firebase/Supabase 권한과 HTTP 헤더·쿠키 기반 스택 단서를 확인합니다.',
       },
     ],
   },
