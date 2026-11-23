@@ -1,40 +1,19 @@
 import { useState } from 'react'
 import { DISCLAIMER, Note, Pick, Readout, TextInput } from './shared'
+import { CLOUD_STORAGE_CHECKS } from './reconCatalog'
 
 type Provider = 'AWS S3' | 'GCP GCS' | 'Azure Blob'
 
 export function CloudStorageCheckBuilder() {
   const [provider, setProvider] = useState<Provider>('AWS S3')
   const [bucket, setBucket] = useState('')
-  const name = bucket.trim() || 'target-bucket'
-
-  const getCommands = (): { label: string; code: string }[] => {
-    switch (provider) {
-      case 'AWS S3':
-        return [
-          { label: '익명 목록 조회', code: `aws s3 ls s3://${name} --no-sign-request` },
-          { label: '익명 다운로드', code: `aws s3 sync s3://${name} ./dumped --no-sign-request` },
-          { label: '퍼블릭 업로드(쓰기 권한) 테스트', code: `echo test > /tmp/poc.txt && aws s3 cp /tmp/poc.txt s3://${name}/poc.txt --no-sign-request` },
-          { label: 'HTTP로 직접 목록 조회 (CLI 없이)', code: `curl -s "https://${name}.s3.amazonaws.com/?list-type=2"` },
-          { label: 'ACL 조회', code: `aws s3api get-bucket-acl --bucket ${name} --no-sign-request` },
-        ]
-      case 'GCP GCS':
-        return [
-          { label: '익명 목록 조회', code: `gsutil ls -r gs://${name}` },
-          { label: '익명 다운로드', code: `gsutil -m cp -r gs://${name} ./dumped` },
-          { label: 'IAM 정책 조회', code: `gsutil iam get gs://${name}` },
-          { label: 'HTTP로 직접 목록 조회', code: `curl -s "https://storage.googleapis.com/storage/v1/b/${name}/o"` },
-        ]
-      case 'Azure Blob':
-        return [
-          { label: '컨테이너 목록 조회 (익명)', code: `az storage blob list --container-name ${name} --account-name <ACCOUNT> --auth-mode login` },
-          { label: 'HTTP로 직접 목록 조회', code: `curl -s "https://<ACCOUNT>.blob.core.windows.net/${name}?restype=container&comp=list"` },
-          { label: '퍼블릭 액세스 레벨 확인', code: `az storage container show-permission --name ${name} --account-name <ACCOUNT>` },
-        ]
-      default:
-        return []
-    }
-  }
+  const rawName = bucket.trim()
+  const nameIsValid = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/i.test(rawName)
+  const name = nameIsValid ? rawName : '<BUCKET>'
+  const commands = CLOUD_STORAGE_CHECKS[provider].map(check => ({
+    ...check,
+    command: check.command.replaceAll('<BUCKET>', name).replaceAll('<CONTAINER>', name),
+  }))
 
   return (
     <div className="payload-builder">
@@ -45,18 +24,23 @@ export function CloudStorageCheckBuilder() {
         { id: 'Azure Blob', label: 'Azure Blob' },
       ]} />
       <TextInput label="버킷/컨테이너 이름" value={bucket} onChange={setBucket} placeholder="target-bucket" />
+      {!nameIsValid && rawName.length > 0 && <Note>이름 형식이 맞지 않아 명령에 대상 자리표시자를 표시합니다. 명령을 실행하기 전에 승인된 버킷·컨테이너 값을 확인하세요.</Note>}
 
       <div className="payload-readout-group">
-        <strong className="payload-group-title">익명 접근 권한 점검</strong>
-        {getCommands().map((command, index) => (
-          <Readout key={index} title={command.label} value={command.code} wrap="anywhere" />
+        <strong className="payload-group-title">읽기 전용 권한·구성 점검</strong>
+        {commands.map(command => (
+          <div key={command.label}>
+            <Readout title={command.label} value={command.command} wrap="anywhere" />
+            <Note>{command.purpose}</Note>
+          </div>
         ))}
+        <Note>목록 열람·객체 다운로드·업로드는 수행하지 않습니다. CLI 명령은 해당 클라우드에 로그인된 점검 계정 권한이 필요할 수 있으며, 익명 HTTP 검사는 헤더만 확인합니다.</Note>
       </div>
 
       <div className="payload-readout-group">
         <strong className="payload-group-title">버킷 이름 추정 (일반 패턴)</strong>
         <Readout title="흔한 네이밍 패턴" value="<company>, <company>-backup, <company>-dev, <company>-staging, <company>-assets, <company>-logs, <company>-media, backup-<company>" wrap="anywhere" />
-        <Note>회사명/도메인명 기반 치환 리스트로 무차별 조회하되, 요청 속도와 과금(요청당 비용 발생 가능)에 주의하십시오.</Note>
+        <Note>이름 패턴은 자산 인벤토리와 대조하기 위한 참고입니다. 후보 버킷을 자동·대량 조회하지 말고, 승인된 이름만 점검하세요.</Note>
       </div>
     </div>
   )

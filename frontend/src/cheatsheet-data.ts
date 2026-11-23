@@ -184,7 +184,7 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     tools: [
       {
         id: 'cdn-proxy-bypass', name: 'CDN / 프록시 우회 빌더', base: '', options: [],
-        note: 'Web Cache Deception 변형, IP 스푸핑 헤더 조합(curl), 경로 정규화 불일치를 이용한 ACL 우회 변형을 생성합니다.',
+        note: '캐시 확장자·쿼리 변형, 신뢰 헤더 비교, 애플리케이션 내부 경로 정규화와 원본 IP 후보의 읽기 전용 응답 헤더 확인을 제공합니다.',
       },
     ],
   },
@@ -194,7 +194,7 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
     tools: [
       {
         id: 'modern-stack-recon', name: '모던 솔루션 노출 경로', base: '', options: [],
-        note: 'Spring Boot Actuator, Swagger/OpenAPI, Next.js 소스맵, Supabase/Firebase 설정 노출 경로를 대상 URL에 조합해 생성합니다.',
+        note: 'Spring Boot 관리 경로, Swagger/OpenAPI·GraphQL, 프런트엔드 메타데이터를 HEAD 요청으로 확인합니다. 응답 본문은 가져오지 않습니다.',
       },
     ],
   },

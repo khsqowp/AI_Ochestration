@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { DISCLAIMER, Note, Readout, TextInput } from './shared'
+import { CORS_ORIGIN_CASES, shellQuote } from './reconCatalog'
 
 export function CorsMisconfigBuilder() {
   const [url, setUrl] = useState('')
@@ -16,28 +17,16 @@ export function CorsMisconfigBuilder() {
   }
   const domain = getDomain(base)
 
-  const tests = [
-    { 
-      label: '임의 Origin 반사 확인', 
-      cmd: `curl -s -I -H "Origin: https://evil.com" ${base}`, 
-      note: '응답 헤더에 Access-Control-Allow-Origin: https://evil.com이 그대로 반사되면 취약. Allow-Origin 반사와 Access-Control-Allow-Credentials: true가 동시에 뜨면 치명적'
-    },
-    { 
-      label: 'null Origin 테스트', 
-      cmd: `curl -s -I -H "Origin: null" ${base}`, 
-      note: 'Access-Control-Allow-Origin: null 반사 시 특정 상황에서 취약 가능' 
-    },
-    { 
-      label: '서브도메인 우회 (evil-domain)', 
-      cmd: `curl -s -I -H "Origin: https://evil-${domain}" ${base}`, 
-      note: '단순 문자열 포함 여부만 체크하는 설정인 경우 우회 가능'
-    },
-    {
-      label: '서브도메인 우회 (domain-evil)',
-      cmd: `curl -s -I -H "Origin: https://${domain}.evil.com" ${base}`,
-      note: '도메인 접두사/접미사 검증 미흡 시 우회 가능'
-    },
-  ]
+  const tests = CORS_ORIGIN_CASES.map(test => {
+    const origin = test.origin
+      .replaceAll('TARGET.example.com', domain)
+      .replaceAll('target.example.com', domain.toLowerCase())
+      .replaceAll('target-example.com', domain.replace(/\./g, '-'))
+    return {
+      ...test,
+      cmd: `curl -sS -I --max-time 8 ${origin ? `-H ${shellQuote(`Origin: ${origin}`)} ` : ''}${shellQuote(base)}`,
+    }
+  })
 
   return (
     <div className="payload-builder">
@@ -45,7 +34,7 @@ export function CorsMisconfigBuilder() {
       <TextInput label="대상 URL" value={url} onChange={setUrl} placeholder="https://api.example.com" />
       
       <div className="payload-readout-group">
-        <strong className="payload-group-title">CORS 취약점 테스트 커맨드 (curl)</strong>
+        <strong className="payload-group-title">CORS Origin 경계 테스트 (curl)</strong>
         {tests.map((t, i) => (
           <div key={i} style={{ marginBottom: '16px' }}>
             <Readout title={t.label} value={t.cmd} wrap="anywhere" />
@@ -53,6 +42,7 @@ export function CorsMisconfigBuilder() {
           </div>
         ))}
       </div>
+      <Note>각 응답에서 Access-Control-Allow-Origin, Access-Control-Allow-Credentials, Vary를 비교하세요. 와일드카드·반사 한 가지로 즉시 취약 판정하지 말고 인증 응답에 대한 브라우저 동작과 허용 Origin 정책을 함께 확인하세요. 이 명령은 응답 헤더만 요청합니다.</Note>
     </div>
   )
 }
