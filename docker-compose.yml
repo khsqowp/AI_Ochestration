@@ -136,11 +136,6 @@ services:
     command: tunnel run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
-    extra_hosts:
-      # host-gateway resolves to docker0's gateway IP; Docker's bridge isolation
-      # drops traffic from a different bridge network (ours is ochestration_app,
-      # not docker0) to it — point at the host's real LAN IP instead.
-      - "host.docker.internal:192.168.0.12"
     depends_on: [web]
     networks: [app]
     restart: unless-stopped
