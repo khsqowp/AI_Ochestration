@@ -54,6 +54,23 @@ class CvePocServiceTest {
   }
 
   @Test
+  void skipsPrivateHostReferenceWhenFetchingForAiSummary() throws Exception {
+    // "localhost" resolves to a loopback address via the JVM's built-in/hosts-file resolution, with
+    // no real network call needed, making this deterministic in CI. The reference must still be
+    // surfaced to the user as a PoC link, but must never be fetched server-side (SSRF guard).
+    String body = """
+        {"vulnerabilities":[{"cve":{"metrics":{},"references":[{"url":"https://localhost/exploit","tags":["Exploit"]}]}}]}
+        """;
+    FakeHttpClient client = new FakeHttpClient(200, body);
+    CvePocService service = new CvePocService(null, json, "", "", client);
+    CvePocService.Response result = service.lookup("CVE-2024-9999", true);
+    assertTrue(result.exists());
+    assertEquals(java.util.List.of("https://localhost/exploit"), result.pocReferenceUrls());
+    assertNull(result.aiSummary());
+    assertEquals(1, client.calls); // only the NVD lookup call; the private-host reference was never fetched
+  }
+
+  @Test
   void handlesNvdUnreachableWithoutThrowing() {
     FakeHttpClient client = new FakeHttpClient();
     CvePocService service = new CvePocService(null, json, "", "", client);
