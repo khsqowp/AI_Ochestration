@@ -10,6 +10,7 @@ import { JsParserModal } from '../panels/JsParserModal'
 import { ErrorPageFingerprintModal } from '../panels/ErrorPageFingerprintModal'
 import { XssScoutConsoleModal } from '../panels/XssScoutConsoleModal'
 import { NetworkDiagnosticsModal } from '../panels/NetworkDiagnosticsModal'
+import { CvePocModal } from '../panels/CvePocModal'
 import { RouteTreeToolPage } from './RouteTreeToolPage'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
 import { Soft404AnalyzerModal } from '../panels/Soft404AnalyzerModal'
@@ -25,6 +26,7 @@ const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'error-page-fingerprint': ErrorPageFingerprintModal,
   'xss-scout-console': XssScoutConsoleModal,
   'network-diagnose': NetworkDiagnosticsModal,
+  'cve-poc': CvePocModal,
   'soft-404-analyzer': Soft404AnalyzerModal,
   'scope-redirect-linter': ScopeRedirectLinterModal,
 }

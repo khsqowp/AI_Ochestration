@@ -48,6 +48,9 @@ export function DiagnosticsPage() {
           <Link className="diag-tile" to="/dashboard/diag/network-diagnose">
             <Wifi size={20}/><span>네트워크 진단</span>
           </Link>
+          <Link className="diag-tile" to="/dashboard/diag/cve-poc">
+            <Bug size={20}/><span>CVE/PoC 조회</span>
+          </Link>
           {ROUTE_TREE_TOOLS.map(({ id, name, icon: Icon }) => <Link className="diag-tile" key={id} to={`/dashboard/diag/${id}`}>
             <Icon size={20}/><span>{name}</span>
           </Link>)}

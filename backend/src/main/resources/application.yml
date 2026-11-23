@@ -39,6 +39,10 @@ management:
       exposure:
         include: health,info
 app:
+  nvd:
+    api-key: ${NVD_API_KEY:}
+  vulners:
+    api-key: ${VULNERS_API_KEY:}
   auth:
     enabled: ${AUTH_ENABLED:false}
     cookie-secure: ${AUTH_COOKIE_SECURE:false}
