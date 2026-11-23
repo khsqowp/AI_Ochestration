@@ -10,6 +10,8 @@ scripts/md-sync.local
 **/target/
 **/__pycache__/
 *.tsbuildinfo
+# Generated from public-facing main-branch commits during auto-deploy; never maintained by hand.
+/frontend/public/product-updates.generated.json
 .DS_Store
 inbox/archive_ochestration/**
 !inbox/archive_ochestration/.gitkeep

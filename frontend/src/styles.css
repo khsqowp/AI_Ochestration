@@ -516,6 +516,45 @@
 .feedback-card h3 { margin:0 0 5px; color:#302d39; font-size:15px; }
 .feedback-card small { color:#6f6977; font-size:11px; }
 .feedback-card p { margin:13px 0 0; color:#514d5a; font-size:13px; line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
+.feedback-notification-root { position:relative; display:flex; }
+.feedback-notification-button { position:relative; }
+.feedback-notification-badge { position:absolute; top:0; right:0; min-width:17px; height:17px; display:grid; place-items:center; padding:0 4px; border:2px solid #fff; border-radius:999px; background:#d94d68; color:#fff; font-size:9px; font-weight:800; line-height:1; transform:translate(25%,-20%); }
+.feedback-notification-popover { position:absolute; z-index:100; top:calc(100% + 9px); right:0; width:min(360px, calc(100vw - 24px)); max-height:min(520px, calc(100dvh - 90px)); overflow:auto; border:1px solid #e4e0eb; border-radius:14px; background:#fff; box-shadow:0 14px 42px #25203324; }
+.feedback-notification-popover > header { position:sticky; top:0; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 15px; border-bottom:1px solid #eeecf2; background:#fff; }
+.feedback-notification-popover > header > div { display:flex; align-items:center; gap:8px; color:#4f4770; font-size:13px; }
+.feedback-notification-popover > header > span { color:#817a8d; font-size:10px; }
+.feedback-notification-list { display:grid; }
+.feedback-notification-item { display:grid; gap:5px; padding:12px 15px; border-bottom:1px solid #f0eef3; background:#fff; text-align:left; }
+.feedback-notification-item:hover { background:#f8f7fb; }
+.feedback-notification-item.unread { background:#f7f5ff; }
+.feedback-notification-item-title { color:#3c3748; font-size:12px; font-weight:800; }
+.feedback-notification-item-preview { color:#625d6c; font-size:11px; line-height:1.45; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.feedback-notification-item time { color:#898392; font-size:10px; }
+.feedback-notification-empty, .feedback-notification-error { margin:0; padding:20px 15px; color:#777281; font-size:12px; }
+.feedback-notification-error { color:#a33c4b; }
+.feedback-card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.feedback-card-header > div { min-width:0; }
+.feedback-card-header h3 { overflow-wrap:anywhere; }
+.feedback-status { flex:none; padding:4px 8px; border-radius:999px; background:#f2efff; color:#5b4fa8; font-size:10px; font-weight:800; }
+.feedback-status.resolved { background:#eaf6ef; color:#36724d; }
+.feedback-thread-toggle { margin-top:12px; padding:6px 9px; border-radius:8px; background:#f4f2fa; color:#5c50ad; font-size:11px; font-weight:750; }
+.feedback-thread { display:grid; gap:12px; margin-top:14px; padding-top:14px; border-top:1px solid #eeecf2; }
+.feedback-thread-empty { margin:0; color:#817a89; font-size:12px; }
+.feedback-comments { display:grid; gap:9px; }
+.feedback-comment { padding:11px 12px; border:1px solid #eae7ef; border-radius:11px; background:#faf9fc; }
+.feedback-comment.mine { border-color:#ded9f3; background:#f6f4ff; }
+.feedback-comment header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.feedback-comment header b { color:#4c4658; font-size:11px; }
+.feedback-comment header time { color:#898392; font-size:10px; }
+.feedback-comment p { margin:7px 0 0; color:#514d5a; font-size:12px; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
+.feedback-comment-form { display:grid; gap:7px; padding:12px; border:1px solid #e8e5ed; border-radius:12px; background:#fff; }
+.feedback-comment-form > label { color:#514d5a; font-size:11px; font-weight:750; }
+.feedback-comment-form textarea { width:100%; border:1px solid #dcd8e5; border-radius:9px; padding:9px 10px; color:#302d39; font:inherit; font-size:12px; resize:vertical; }
+.feedback-comment-form textarea:focus { outline:2px solid #8d80df55; border-color:#8d80df; }
+.feedback-comment-form .feedback-form-footer { align-items:center; }
+.feedback-comment-actions { display:flex; justify-content:flex-end; gap:7px; flex-wrap:wrap; }
+.feedback-card.selected { border-color:#d5cffa; }
+@media (max-width:600px) { .feedback-notification-popover { position:fixed; top:64px; right:10px; } }
 
 /* ── 구역(zone) 리사이즈 레이아웃 — 대시보드 / 노트 생성 ──────── */
 .dashboard-page, .notes-page { display:flex; flex-direction:column; }

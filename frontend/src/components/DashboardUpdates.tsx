@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 type UpdateGroup = {
   date: string
   items: string[]
@@ -269,7 +271,26 @@ const updates: UpdateGroup[] = [
 ]
 
 export function DashboardUpdates() {
-  const orderedUpdates = [...updates].sort((a, b) => b.date.localeCompare(a.date))
+  const [generatedUpdates, setGeneratedUpdates] = useState<UpdateGroup[]>([])
+
+  useEffect(() => {
+    let active = true
+    fetch('/product-updates.generated.json', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() as Promise<{ groups?: UpdateGroup[] }> : null)
+      .then(data => { if (active && Array.isArray(data?.groups)) setGeneratedUpdates(data.groups) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
+
+  const merged = new Map<string, string[]>()
+  for (const group of [...generatedUpdates, ...updates]) {
+    const items = merged.get(group.date) ?? []
+    for (const item of group.items) if (!items.includes(item)) items.push(item)
+    merged.set(group.date, items)
+  }
+  const orderedUpdates = [...merged.entries()]
+    .map(([date, items]) => ({ date, items }))
+    .sort((a, b) => b.date.localeCompare(a.date))
 
   return <section id="dash-updates" className="dashboard-updates" aria-labelledby="dashboard-updates-title">
     <header className="dashboard-updates-header">

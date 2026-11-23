@@ -84,6 +84,10 @@ main() {
         return 1
     fi
 
+    if ! python3 "$root/scripts/generate_product_updates.py" "$root"; then
+        log "Product update generation failed for ${remote_sha:0:7}; continuing with existing public update data"
+    fi
+
     old_short=${local_sha:0:7}
     new_short=${remote_sha:0:7}
 

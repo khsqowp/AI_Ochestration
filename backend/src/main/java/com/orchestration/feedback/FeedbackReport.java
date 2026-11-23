@@ -22,6 +22,7 @@ public class FeedbackReport {
   @Column(name = "author_display_name", nullable = false, length = 120) private String authorDisplayName;
   @Column(nullable = false, length = 160) private String title;
   @Column(nullable = false, columnDefinition = "TEXT") private String body;
+  @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING) @Column(nullable = false, length = 20) private FeedbackStatus status = FeedbackStatus.OPEN;
   @Column(name = "created_at", nullable = false) private Instant createdAt = Instant.now();
 
   protected FeedbackReport() {}
@@ -40,5 +41,7 @@ public class FeedbackReport {
   public String getAuthorDisplayName() { return authorDisplayName; }
   public String getTitle() { return title; }
   public String getBody() { return body; }
+  public FeedbackStatus getStatus() { return status; }
   public Instant getCreatedAt() { return createdAt; }
+  void resolve() { status = FeedbackStatus.RESOLVED; }
 }
