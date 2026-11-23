@@ -45,13 +45,26 @@ public class AuthController {
   @PostMapping("/logout")
   public ResponseEntity<Void> logout(@CookieValue(value = COOKIE, required = false) String token) {
     service.revoke(token);
-    return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookie("", 0).toString()).build();
+    var response = ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookie("", 0).toString());
+    // The clear cookie above carries app.auth.cookie-domain (e.g. .khsqowp1.my) when it's configured, so
+    // it only clears that domain-wide cookie slot. A browser can still be holding an older host-only
+    // cookie issued before cookie-domain was set (or from any other mismatch) -- clear that slot too,
+    // explicitly with no Domain attribute, so logout actually logs the user out regardless of which
+    // cookie their browser currently has.
+    if (properties.cookieDomain() != null && !properties.cookieDomain().isBlank()) {
+      response = response.header(HttpHeaders.SET_COOKIE, hostOnlyCookie("", 0).toString());
+    }
+    return response.build();
   }
 
   private ResponseCookie cookie(String value, long maxAge) {
     var builder = ResponseCookie.from(COOKIE, value).httpOnly(true).secure(properties.cookieSecure()).sameSite("Lax").path("/").maxAge(maxAge);
     if (properties.cookieDomain() != null && !properties.cookieDomain().isBlank()) builder.domain(properties.cookieDomain());
     return builder.build();
+  }
+
+  private ResponseCookie hostOnlyCookie(String value, long maxAge) {
+    return ResponseCookie.from(COOKIE, value).httpOnly(true).secure(properties.cookieSecure()).sameSite("Lax").path("/").maxAge(maxAge).build();
   }
   record AuthStatus(boolean authenticationEnabled, AuthService.UserProfile user) {}
   record LoginRequest(@NotBlank @Size(max = 320) String id, @NotBlank @Size(max = 200) String password) {}
