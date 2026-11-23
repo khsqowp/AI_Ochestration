@@ -25,6 +25,12 @@ describe('common path checklist presets', () => {
     }
   })
 
+  it('keeps the standalone browser script syntactically valid', () => {
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+    expect(script).toBeTruthy()
+    expect(() => new Function(script ?? '')).not.toThrow()
+  })
+
   it('deduplicates selected paths while retaining category order', () => {
     expect(collectSelectedPaths).not.toBeNull()
     expect(collectSelectedPaths?.([{ paths: ['api/', 'health'] }, { paths: ['health', 'metrics'] }], [true, true]))
