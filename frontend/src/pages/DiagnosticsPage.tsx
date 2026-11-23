@@ -8,6 +8,7 @@ import {
 import { Link } from 'react-router-dom'
 import { CHEATSHEET_CATEGORIES } from '../cheatsheet-data'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
+import { useAppState } from '../context/AppState'
 
 /* 진단 탭의 타일은 항목별 모달로 연결되며, 카테고리별 색상은 섹션에서 상속한다. */
 const CATEGORY_META: Record<string, { icon: ComponentType<{ size?: number }>; color: string }> = {
@@ -35,6 +36,7 @@ const GROUP_LABELS: Record<string, string> = {
 }
 
 export function DiagnosticsPage() {
+  const { isAdmin } = useAppState()
   return <div className="page diag-page">
     <div className="diag-grid">
       <section className="diag-section" style={{ '--diag-accent': '#6b7280' } as CSSProperties}>
@@ -55,9 +57,9 @@ export function DiagnosticsPage() {
           <Link className="diag-tile" to="/dashboard/diag/burp-comparer">
             <GitCompare size={20}/><span>Burp Comparer</span>
           </Link>
-          <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
+          {isAdmin && <Link className="diag-tile" to="/dashboard/diag/burp-history-viewer">
             <History size={20}/><span>Burp History 뷰어</span>
-          </Link>
+          </Link>}
           <Link className="diag-tile" to="/dashboard/diag/error-page-fingerprint">
             <ServerCrash size={20}/><span>기본 에러 페이지 탐지</span>
           </Link>
