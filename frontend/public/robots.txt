@@ -4,5 +4,7 @@ Disallow: /dashboard
 Disallow: /order
 Disallow: /lunch
 Disallow: /webhook
+Disallow: /login
+Disallow: /api/
 
 Sitemap: https://lab.khsqowp1.my/sitemap.xml
