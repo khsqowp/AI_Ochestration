@@ -10,6 +10,13 @@ import { fileURLToPath } from 'node:url'
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const topics = JSON.parse(readFileSync(new URL('../src/omakase-topics.json', import.meta.url), 'utf8'))
 
+try {
+  execSync('git rev-parse --git-dir', { cwd: REPO_ROOT, stdio: 'ignore' })
+} catch {
+  console.warn('git unavailable, skipping omakase-dates.json refresh — using existing committed snapshot')
+  process.exit(0)
+}
+
 const snapshot = {}
 for (const topic of topics) {
   for (const file of topic.files) {

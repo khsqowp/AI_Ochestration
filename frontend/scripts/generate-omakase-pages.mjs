@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
+import { BASE_URL } from './seo-config.mjs'
 
-const BASE_URL = 'https://lab.khsqowp1.my'
 const OUT_DIR = process.env.OMAKASE_OUT_DIR || 'dist'
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const topics = JSON.parse(readFileSync(new URL('../src/omakase-topics.json', import.meta.url), 'utf8'))
@@ -104,13 +104,57 @@ function htmlDocument({ title, description, path, header, content, structuredDat
 `
 }
 
-const urls = ['/', '/omakase']
+const urls = [{ path: '/', lastmod: null }, { path: '/omakase/', lastmod: null }]
 let filePageCount = 0
+
+const allFileDates = []
+
+const hubItems = topics.map(topic => {
+  const shortTitle = TOPIC_LABELS[topic.id]
+  if (!shortTitle) throw new Error(`Missing short title for ${topic.id}`)
+  const topicDates = topic.files.map(file => datesSnapshot[`${topic.id}/${file.id}`]?.dateModified).filter(Boolean).sort()
+  const lastmod = topicDates.at(-1) ?? null
+  if (lastmod) allFileDates.push(lastmod)
+  return { topic, shortTitle, lastmod }
+})
+const hubLastmod = allFileDates.sort().at(-1) ?? null
+const hubPath = '/omakase/'
+const hubContent = `<h1>오마카세 콘텐츠</h1><p>주제별 보안 진단·침투 테스트 콘텐츠 모음입니다.</p><ul>${hubItems.map(({ topic, shortTitle }) => `<li><a href="/omakase/${topic.id}/">${escapeHtml(shortTitle)}</a> — ${escapeHtml(topic.subtitle)}</li>`).join('')}</ul>`
+const hubStructuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: '오마카세 콘텐츠',
+  description: '주제별 보안 진단·침투 테스트 콘텐츠 모음입니다.',
+  url: `${BASE_URL}${hubPath}`,
+  mainEntity: {
+    '@type': 'ItemList',
+    itemListElement: hubItems.map(({ topic, shortTitle }, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: shortTitle,
+      url: `${BASE_URL}/omakase/${topic.id}/`,
+    })),
+  },
+  ...(hubLastmod ? { dateModified: hubLastmod } : {}),
+}
+const hubHtml = htmlDocument({
+  title: '오마카세 콘텐츠',
+  description: '주제별 보안 진단·침투 테스트 콘텐츠 모음입니다.',
+  path: hubPath,
+  header: '<a href="/">Orchestration Lab</a>',
+  content: hubContent,
+  structuredData: hubStructuredData,
+})
+const hubDir = join(OUT_DIR, 'omakase')
+await mkdir(hubDir, { recursive: true })
+await writeFile(join(hubDir, 'index.html'), hubHtml)
+urls[1].lastmod = hubLastmod
 
 for (const topic of topics) {
   const shortTitle = TOPIC_LABELS[topic.id]
   if (!shortTitle) throw new Error(`Missing short title for ${topic.id}`)
   const topicPath = `/omakase/${topic.id}/`
+  const topicLastmod = topic.files.map(file => datesSnapshot[`${topic.id}/${file.id}`]?.dateModified).filter(Boolean).sort().at(-1) ?? null
   const filesById = new Map(topic.files.map(file => [file.id, file]))
   const sections = topic.sections.map(section => `
     <section>
@@ -132,7 +176,7 @@ for (const topic of topics) {
   const topicDir = join(OUT_DIR, 'omakase', topic.id)
   await mkdir(topicDir, { recursive: true })
   await writeFile(join(topicDir, 'index.html'), topicHtml)
-  urls.push(topicPath)
+  urls.push({ path: topicPath, lastmod: topicLastmod })
 
   for (const [index, file] of topic.files.entries()) {
     const markdown = readFileSync(new URL(`../public/omakase-content/${topic.id}/${file.id}.md`, import.meta.url), 'utf8')
@@ -170,17 +214,17 @@ for (const topic of topics) {
     const fileDir = join(topicDir, file.id)
     await mkdir(fileDir, { recursive: true })
     await writeFile(join(fileDir, 'index.html'), fileHtml)
-    urls.push(filePath)
+    urls.push({ path: filePath, lastmod: dates.dateModified ?? null })
     filePageCount += 1
   }
 }
 
 const toolSlugs = ['snake', 'minesweeper', 'roulette', 'ladder', 'gomoku', 'reflex-test', 'typing-race', 'order-picker', 'random-draw', 'date-calculator', 'unit-converter', 'image-ocr']
-urls.push('/tools', ...toolSlugs.map(slug => `/tools/${slug}`))
+urls.push({ path: '/tools', lastmod: null }, ...toolSlugs.map(slug => ({ path: `/tools/${slug}`, lastmod: null })))
 
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(path => `  <url><loc>${escapeHtml(`${BASE_URL}${path}`)}</loc></url>`).join('\n')}
+${urls.map(({ path, lastmod }) => `  <url><loc>${escapeHtml(`${BASE_URL}${path}`)}</loc>${lastmod ? `<lastmod>${escapeHtml(lastmod)}</lastmod>` : ''}</url>`).join('\n')}
 </urlset>
 `
 await mkdir(OUT_DIR, { recursive: true })
