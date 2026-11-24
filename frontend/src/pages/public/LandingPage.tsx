@@ -29,7 +29,7 @@ export function LandingPage() {
     <div className="landing-veil" aria-hidden="true"/>
     <div className="landing-ui">
       <div className="landing-mark">
-        <Bot size={18}/> <span>Orchestration Lab</span>
+        <Bot size={18}/> <h1>Orchestration Lab</h1>
         <Link to="/order" className="landing-order-link">ORDER</Link>
         <Link to="/lunch" className="landing-order-link">LUNCH</Link>
         <Link to="/webhook" className="landing-order-link">WEBHOOK</Link>

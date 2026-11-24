@@ -42,6 +42,7 @@ export function App() {
             <Route path="/webhook" element={<WebhookPage/>}/>
             <Route path="/webhook/:token" element={<WebhookPage/>}/>
             <Route path="/omakase" element={<OmakasePage/>}/>
+            <Route path="/omakase/*" element={<OmakasePage/>}/>
             <Route path="/tools" element={<ToolsDirectoryPage/>}/>
             <Route path="/tools/:slug" element={<FeaturePage/>}/>
           </Route>

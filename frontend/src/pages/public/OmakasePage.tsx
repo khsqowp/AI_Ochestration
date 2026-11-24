@@ -1,9 +1,10 @@
 import { Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bot, Home, FileText, LayoutGrid, X } from 'lucide-react'
 import { MarkdownBody } from '../../components/shared'
 import { useAppState } from '../../context/AppState'
-import { OMAKASE_TOPICS, type OmakaseFile, type OmakaseTopic } from '../../omakase-data'
+import { OMAKASE_TOPICS, type OmakaseFile } from '../../omakase-data'
+import { useSeoMeta } from '../../lib/useSeoMeta'
 
 type Tab = { fileId: string; title: string }
 // 토픽 하나에 파일이 여러 개 있을 수 있어서, 파일별로 각자 스크롤 위치를 기억한다.
@@ -34,8 +35,15 @@ function lastActiveFileId(entries: TopicProgressMap | undefined): string | undef
 }
 
 export function OmakasePage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const { session } = useAppState()
   const loggedIn = session?.user != null
+  useSeoMeta({
+    title: '오마카세 보안 학습 콘텐츠 | Orchestration Lab',
+    description: '모의해킹과 보안 진단 실무를 주제별 문서로 학습하는 공개 콘텐츠 허브입니다.',
+    canonical: `https://lab.khsqowp1.my${location.pathname}`,
+  })
 
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null)
   const [tabs, setTabs] = useState<Tab[]>([])
@@ -115,22 +123,8 @@ export function OmakasePage() {
     })
   }, [activeFile, content])
 
-  function openTopic(next: OmakaseTopic) {
-    setActiveTopicId(next.id)
-    setTabs([])
-    setActiveTabId(null)
-    setLoadError(null)
-
-    const lastId = lastActiveFileId(progressByTopic[next.id])
-    const lastFile = lastId ? next.files.find(f => f.id === lastId) : undefined
-    if (lastFile) openFile(next.id, lastFile)
-  }
-
   function backToGrid() {
-    setActiveTopicId(null)
-    setTabs([])
-    setActiveTabId(null)
-    setLoadError(null)
+    navigate('/omakase')
   }
 
   // 파일별로 각자 스크롤 위치를 기억하므로, 실제로 "다른 파일로 전환"할 때마다 그 파일의
@@ -143,8 +137,7 @@ export function OmakasePage() {
 
   function switchTab(fileId: string) {
     if (!topic || activeTabId === fileId) return
-    setActiveTabId(fileId)
-    restoreOrResetScroll(topic.id, fileId)
+    navigate(`/omakase/${topic.id}/${fileId}/`)
   }
 
   function openFile(topicId: string, file: OmakaseFile) {
@@ -166,21 +159,67 @@ export function OmakasePage() {
   }
 
   function closeTab(fileId: string) {
-    setTabs(prev => {
-      const idx = prev.findIndex(t => t.fileId === fileId)
-      const next = prev.filter(t => t.fileId !== fileId)
-      if (next.length === 0) {
-        // 마지막 탭을 닫으면 처음 화면(주제 선택 바둑판)으로 돌아간다.
-        setActiveTopicId(null)
-        setActiveTabId(null)
-      } else if (activeTabId === fileId) {
-        const nextFileId = next[Math.min(idx, next.length - 1)].fileId
-        setActiveTabId(nextFileId)
-        if (topic) restoreOrResetScroll(topic.id, nextFileId)
-      }
-      return next
-    })
+    const idx = tabs.findIndex(t => t.fileId === fileId)
+    if (idx === -1) return
+    const next = tabs.filter(t => t.fileId !== fileId)
+    setTabs(next)
+    if (next.length === 0) {
+      // 마지막 탭을 닫으면 처음 화면(주제 선택 바둑판)으로 돌아간다.
+      setActiveTopicId(null)
+      setActiveTabId(null)
+      setLoadError(null)
+      navigate('/omakase')
+      return
+    }
+    if (activeTabId !== fileId) return
+    const nextFileId = next[Math.min(idx, next.length - 1)].fileId
+    setActiveTabId(nextFileId)
+    if (topic) {
+      restoreOrResetScroll(topic.id, nextFileId)
+      navigate(`/omakase/${topic.id}/${nextFileId}/`)
+    }
   }
+
+  // 주소창의 경로가 실제 화면 상태(선택된 토픽/파일)의 단일 진실 공급원이다. 토픽이 바뀌면 탭을
+  // 비우고(이전 토픽에서 열어둔 탭이 새 토픽에 남아있으면 안 되므로), 같은 토픽 안에서 파일만
+  // 바뀌는 경우에는 openFile이 기존 탭 목록에 "추가"하도록 그대로 둔다 — 그래야 사이드바에서 여러
+  // 문서를 눌러도 탭이 누적되는 멀티탭 동작이 유지된다.
+  useEffect(() => {
+    const [, topicId, fileId] = location.pathname.split('/').filter(Boolean)
+    if (!topicId) {
+      setActiveTopicId(null)
+      setTabs([])
+      setActiveTabId(null)
+      setLoadError(null)
+      return
+    }
+
+    const nextTopic = OMAKASE_TOPICS.find(item => item.id === topicId)
+    if (!nextTopic) { navigate('/omakase', { replace: true }); return }
+
+    const topicChanged = activeTopicId !== nextTopic.id
+    if (topicChanged) {
+      setActiveTopicId(nextTopic.id)
+      setTabs([])
+      setActiveTabId(null)
+      setLoadError(null)
+    }
+
+    if (!fileId) {
+      // 토픽만 선택되고 파일이 없는 URL — 새로 들어온 토픽이면 마지막으로 보던 문서가 있는지
+      // 찾아 그 문서의 실제 URL로 보낸다(이전 openTopic의 "이어보기" 동작).
+      if (topicChanged) {
+        const lastId = lastActiveFileId(progressByTopic[nextTopic.id])
+        const lastFile = lastId ? nextTopic.files.find(f => f.id === lastId) : undefined
+        if (lastFile) navigate(`/omakase/${nextTopic.id}/${lastFile.id}/`, { replace: true })
+      }
+      return
+    }
+
+    const nextFile = nextTopic.files.find(item => item.id === fileId)
+    if (!nextFile) { navigate(`/omakase/${nextTopic.id}/`, { replace: true }); return }
+    openFile(nextTopic.id, nextFile)
+  }, [location.pathname])
 
   return <div className="omakase-page">
    <Link to="/" className="omakase-brand-mark" title="랜딩 페이지로"><Bot size={16}/> <span>Orchestration Lab</span></Link>
@@ -206,7 +245,6 @@ export function OmakasePage() {
                   key={file.id}
                   to={`/omakase/${topic.id}/${file.id}/`}
                   className={`omakase-file-row ${isOpen ? 'active' : ''}`}
-                  onClick={e => { e.preventDefault(); openFile(topic.id, file) }}
                 ><FileText size={14}/> <span>{file.title}</span></Link>
               })}
             </div>)}
@@ -242,7 +280,6 @@ export function OmakasePage() {
               to={`/omakase/${t.id}/`}
               className="omakase-card"
               style={{ '--omakase-accent': t.accent } as CSSProperties}
-              onClick={e => { e.preventDefault(); openTopic(t) }}
             >
               <div className="omakase-card-title">{t.title}</div>
               <div className="omakase-card-subtitle">{t.subtitle}</div>
