@@ -46,14 +46,19 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
+import datetime
+import hashlib
 import gzip
 import json
 import logging
+import os
 import re
 import ssl
 import sys
 import threading
 import time
+import select
 import urllib.error
 import urllib.request
 import urllib.robotparser
@@ -64,6 +69,15 @@ from html.parser import HTMLParser
 from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 logger = logging.getLogger("recon_toolkit")
+HARD_MIN_INTERVAL_SECONDS = 0.1
+MIN_RPM = 6
+MAX_RPM = 600
+_ACTIVE_LIMITERS: list["HostRateLimiter"] = []
+_PROGRESS_LOCK = threading.Lock()
+_PROGRESS_DONE = 0
+_PROGRESS_TOTAL = 0
+_RESULT_LOCK = threading.Lock()
+_RESULT_STATES: dict[str, dict[str, set[str]]] = {}
 
 
 def normalize_cookie_line(raw: str) -> str:
@@ -88,9 +102,9 @@ MAX_BODY_BYTES = 512 * 1024
 MAX_CRAWL_BODY_BYTES = 2 * 1024 * 1024
 DEFAULT_TECH_CAP = 400
 PROFILE_DEFAULTS = {
-    "quiet": dict(workers=2, min_interval=1.5, max_requests=400, tech_cap=150),
-    "normal": dict(workers=3, min_interval=0.5, max_requests=1000, tech_cap=DEFAULT_TECH_CAP),
-    "fast": dict(workers=10, min_interval=0.1, max_requests=2000, tech_cap=2000),
+    "quiet": dict(workers=2, rpm=30, tech_cap=150),
+    "normal": dict(workers=3, rpm=60, tech_cap=DEFAULT_TECH_CAP),
+    "fast": dict(workers=10, rpm=300, tech_cap=2000),
 }
 
 MAX_TOTAL_REQUESTS = 3000  # 전체(대상 1개 기준) 하드 상한, --force로만 초과 허용
@@ -269,30 +283,140 @@ def make_ssl_context(insecure: bool) -> ssl.SSLContext | None:
 
 
 class HostRateLimiter:
-    def __init__(self, min_interval_seconds: float) -> None:
-        self._min_interval = max(0.0, min_interval_seconds)
+    def __init__(self, rpm: float) -> None:
+        self._rpm = max(MIN_RPM, min(MAX_RPM, rpm))
         self._lock = threading.Lock()
         self._last_slot: dict[str, float] = {}
 
-    def wait(self, host_key: str) -> None:
-        if self._min_interval <= 0:
-            return
+    @property
+    def rpm(self) -> float:
         with self._lock:
+            return self._rpm
+
+    def adjust(self, delta: float) -> float:
+        with self._lock:
+            self._rpm = max(MIN_RPM, min(MAX_RPM, self._rpm + delta))
+            return self._rpm
+
+    def wait(self, host_key: str) -> None:
+        with self._lock:
+            interval = max(HARD_MIN_INTERVAL_SECONDS, 60.0 / self._rpm)
             now = time.monotonic()
             last = self._last_slot.get(host_key, 0.0)
-            next_slot = max(now, last + self._min_interval)
+            next_slot = max(now, last + interval)
             self._last_slot[host_key] = next_slot
             remaining = next_slot - now
         if remaining > 0:
             time.sleep(remaining)
 
 
+class ResultWriter:
+    def __init__(self, target: str, enabled: bool = True) -> None:
+        self.enabled = enabled
+        host = (urlparse(target).hostname or "target").lower()
+        self.base = os.path.join("recon-results", re.sub(r"[^A-Za-z0-9._-]", "_", host))
+        self.lock = _RESULT_LOCK
+        self.seen = _RESULT_STATES.setdefault(self.base, {})
+
+    def record(self, category: str, url: str, request_headers: dict[str, str], status: int | None,
+               response_headers: dict[str, str] | None, body: bytes, error: str | None) -> None:
+        stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        global _PROGRESS_DONE
+        with _PROGRESS_LOCK:
+            _PROGRESS_DONE += 1
+            done = _PROGRESS_DONE
+            total = _PROGRESS_TOTAL
+        if sys.stdin.isatty() and _ACTIVE_LIMITERS:
+            rpm = _ACTIVE_LIMITERS[0].rpm
+            left = max(0, int(max(total - done, 0) * 60 / rpm))
+            h, rem = divmod(left, 3600); m, s = divmod(rem, 60)
+            print(f"\r[RPM={rpm:g}] {done}/{total} 전송, 예상잔여 {h:02d}:{m:02d}:{s:02d} (+/- 로 RPM ±10 조절)", end="", flush=True)
+        if not self.enabled:
+            return
+        detail = None
+        with self.lock:
+            os.makedirs(self.base, exist_ok=True)
+            if status != 404:
+                parsed = urlparse(url)
+                original = (parsed.path or "/") + (("?" + parsed.query) if parsed.query else "")
+                name = re.sub(r"[^A-Za-z0-9._-]", "_", original).lstrip("_") or "_root_"
+                if len(name) > 150:
+                    name = name[:141] + "-" + hashlib.sha1(original.encode()).hexdigest()[:8]
+                key = category + "/" + name
+                seen = self.seen.setdefault(key, set())
+                candidate, n = name, 2
+                while candidate in seen:
+                    candidate = f"{name}-{n}"; n += 1
+                seen.add(candidate)
+                folder = os.path.join(self.base, re.sub(r"[^A-Za-z0-9._-]", "_", category))
+                os.makedirs(folder, exist_ok=True)
+                detail = os.path.join(folder, candidate + ".json")
+                snippet = body[:4096].decode("utf-8", errors="replace")
+                with open(detail, "w", encoding="utf-8") as fh:
+                    json.dump({"timestamp": stamp, "request": {"method": "GET", "url": url, "headers": request_headers},
+                               "response": {"status_code": status, "headers": response_headers or {}, "body_snippet": snippet,
+                                            "body_truncated": len(body) > 4096, "body_total_bytes": len(body)}, "error": error}, fh, ensure_ascii=False, indent=2)
+            with open(os.path.join(self.base, "manifest.jsonl"), "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"timestamp": stamp, "category": category, "url": url, "status_code": status,
+                                     "detail_file_written": detail is not None, "detail_file_path": detail}, ensure_ascii=False) + "\n")
+
+
+@contextlib.contextmanager
+def _keypress_controller():
+    if not sys.stdin.isatty():
+        print("[실시간 RPM 조절] 비활성화됨 (TTY 아님 또는 미지원 플랫폼)")
+        yield
+        return
+    original = None
+    termios = tty = None
+    try:
+        import termios as _termios
+        import tty as _tty
+        termios, tty = _termios, _tty
+        original = termios.tcgetattr(sys.stdin.fileno())
+        tty.setcbreak(sys.stdin.fileno())
+    except (ImportError, OSError, AttributeError, ValueError):
+        if original is not None and termios is not None:
+            try: termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, original)
+            except (OSError, AttributeError, ValueError): pass
+        print("[실시간 RPM 조절] 비활성화됨 (TTY 아님 또는 미지원 플랫폼)")
+        yield
+        return
+    stop = threading.Event()
+    def listen() -> None:
+        while not stop.is_set():
+            try:
+                ready, _, _ = select.select([sys.stdin], [], [], 0.2)
+                if not ready: continue
+                key = sys.stdin.read(1)
+                if key in ("+", "="): delta = 10
+                elif key == "-": delta = -10
+                else: continue
+                for limiter in tuple(_ACTIVE_LIMITERS): limiter.adjust(delta)
+                print(f"\r[RPM={_ACTIVE_LIMITERS[0].rpm if _ACTIVE_LIMITERS else 0:g}] (+/- 로 RPM ±10 조절)", end="", flush=True)
+            except (OSError, ValueError):
+                break
+    thread = threading.Thread(target=listen, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join(timeout=1)
+        try:
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, original)
+        except (OSError, AttributeError, ValueError):
+            pass
+
+
 class RobotsCache:
-    def __init__(self, user_agent: str, timeout: int, respect: bool, ssl_context: ssl.SSLContext | None) -> None:
+    def __init__(self, user_agent: str, timeout: int, respect: bool, ssl_context: ssl.SSLContext | None,
+                 result_writer: ResultWriter | None = None) -> None:
         self.user_agent = user_agent
         self.timeout = timeout
         self.respect = respect
         self.ssl_context = ssl_context
+        self.result_writer = result_writer
         self._parsers: dict[str, urllib.robotparser.RobotFileParser] = {}
         self._lock = threading.Lock()
 
@@ -310,8 +434,18 @@ class RobotsCache:
                     req = urllib.request.Request(rp.url, headers={"User-Agent": self.user_agent})
                     with urllib.request.urlopen(req, timeout=self.timeout, context=self.ssl_context) as resp:  # noqa: S310
                         raw = resp.read(65536).decode("utf-8", errors="replace")
+                        if self.result_writer:
+                            self.result_writer.record("robots-policy", rp.url, {"User-Agent": self.user_agent}, resp.getcode(), dict(resp.headers.items()), raw.encode("utf-8"), None)
                     rp.parse(raw.splitlines())
+                except urllib.error.HTTPError as exc:
+                    body = exc.read(65536)
+                    if self.result_writer:
+                        self.result_writer.record("robots-policy", rp.url, {"User-Agent": self.user_agent}, exc.code,
+                                                  dict(exc.headers.items()) if exc.headers else {}, body, None)
+                    rp.parse([])
                 except Exception:  # noqa: BLE001
+                    if self.result_writer:
+                        self.result_writer.record("robots-policy", rp.url, {"User-Agent": self.user_agent}, None, None, b"", "robots.txt request failed")
                     rp.parse([])
                 self._parsers[origin] = rp
         try:
@@ -324,6 +458,7 @@ def fetch(
     url: str, timeout: int, user_agent: str, max_retries: int, want_body: bool,
     ssl_context: ssl.SSLContext | None = None, extra_headers: dict[str, str] | None = None,
     max_body_bytes: int = MAX_BODY_BYTES,
+    result_writer: ResultWriter | None = None, category: str = "probe",
 ) -> tuple[int | None, int | None, float, bytes, str | None, dict[str, str] | None]:
     """(status, content_length, elapsed_ms, body, error, response_headers)."""
     # 임베디드 서드파티 워드리스트(traversal 등) 일부 줄에 비-ASCII 바이트가
@@ -343,14 +478,17 @@ def fetch(
                 elapsed_ms = (time.monotonic() - start) * 1000
                 length = len(body) if want_body else int(resp.headers.get("Content-Length", 0) or 0)
                 logger.info("[요청] GET %s -> %d (%dB, %.0fms)", url, status, length, elapsed_ms)
-                return status, length, elapsed_ms, body, None, {**{k.lower(): v for k, v in resp.headers.items()},
+                response_headers = {**{k.lower(): v for k, v in resp.headers.items()},
                     "set-cookie": ", ".join(resp.headers.get_all("Set-Cookie", []))}
+                if result_writer: result_writer.record(category, url, headers, status, response_headers, body, None)
+                return status, length, elapsed_ms, body, None, response_headers
         except urllib.error.HTTPError as exc:
             elapsed_ms = (time.monotonic() - start) * 1000
             body = exc.read(max_body_bytes) if want_body else b""
             headers = {**{k.lower(): v for k, v in exc.headers.items()},
                        "set-cookie": ", ".join(exc.headers.get_all("Set-Cookie", []))} if exc.headers else None
             logger.info("[요청] GET %s -> %d (%dB, %.0fms)", url, exc.code, len(body), elapsed_ms)
+            if result_writer: result_writer.record(category, url, {"User-Agent": user_agent, **(extra_headers or {})}, exc.code, headers, body, None)
             return exc.code, len(body), elapsed_ms, body, None, headers
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
             last_error = str(exc)
@@ -360,7 +498,9 @@ def fetch(
                 break
             logger.info("[요청] GET %s -> 재시도 %d/%d (%s)", url, attempt, max_retries, last_error)
             time.sleep(0.5 * attempt)
-    return None, None, 0.0, b"", f"Request failed after {max_retries + 1} attempt(s): {last_error}", None
+    error = f"Request failed after {max_retries + 1} attempt(s): {last_error}"
+    if result_writer: result_writer.record(category, url, {"User-Agent": user_agent, **(extra_headers or {})}, None, None, b"", error)
+    return None, None, 0.0, b"", error, None
 
 
 def passive_tech_signals(headers: dict[str, str] | None, body: bytes | None) -> dict[str, float]:
@@ -392,12 +532,13 @@ def detect_fallback_baseline(
     base_url: str, timeout: int, user_agent: str, max_retries: int, ssl_context: ssl.SSLContext | None,
     extra_headers: dict[str, str] | None = None,
     signals: dict[str, float] | None = None,
+    result_writer: ResultWriter | None = None,
 ) -> tuple[int, int] | None:
     """SPA 캐치올(존재하지 않는 경로에도 200 응답) 감지용 베이스라인 -- 없으면
     프로브 자체가 실패한 경우(None)."""
     probe_path = f"__nx_{uuid.uuid4().hex[:16]}__"
     url = urljoin(base_url.rstrip("/") + "/", probe_path)
-    status, length, _elapsed, body, error, headers = fetch(url, timeout, user_agent, max_retries, True, ssl_context, extra_headers)
+    status, length, _elapsed, body, error, headers = fetch(url, timeout, user_agent, max_retries, True, ssl_context, extra_headers, result_writer=result_writer, category="default-baseline")
     if signals is not None:
         _merge_tech_signals(signals, headers, body)
     if error or status is None:
@@ -458,6 +599,7 @@ def discover_root(
     start_url: str, *, timeout: int, user_agent: str, max_retries: int, ssl_context: ssl.SSLContext | None,
     rate_limiter: HostRateLimiter, robots: RobotsCache, extra_headers: dict[str, str] | None, budget: int,
     signals: dict[str, float] | None = None,
+    result_writer: ResultWriter | None = None,
 ) -> RootDiscoveryResult:
     candidates = _build_root_candidates(start_url)
     probes: list[RootProbe] = []
@@ -472,7 +614,7 @@ def discover_root(
                 continue
             host_key = urlparse(url).hostname or url
             rate_limiter.wait(host_key)
-            status, _len, _el, body, error, headers = fetch(url, timeout, user_agent, max_retries, True, ssl_context, extra_headers)
+            status, _len, _el, body, error, headers = fetch(url, timeout, user_agent, max_retries, True, ssl_context, extra_headers, result_writer=result_writer, category="root-discovery")
             if signals is not None:
                 _merge_tech_signals(signals, headers, body)
             spent += 1
@@ -501,6 +643,7 @@ MAX_SITEMAP_BYTES = 2 * 1024 * 1024
 def discover_sitemaps(
     root_url: str, *, timeout: int, user_agent: str, max_retries: int, ssl_context: ssl.SSLContext | None,
     rate_limiter: HostRateLimiter, robots: RobotsCache, extra_headers: dict[str, str] | None,
+    result_writer: ResultWriter | None = None,
 ) -> list[str]:
     """robots.txt의 Sitemap: 지시자 + 루트 직하 sitemap.xml/sitemap_index.xml을
     확인해(sitemap 인덱스면 재귀로 하위 sitemap까지, 최대 깊이 2·최대 파일 수
@@ -509,7 +652,7 @@ def discover_sitemaps(
     candidate_sitemap_urls: list[str] = []
     origin = urljoin(root_url, "/")
     try:
-        status, _len, _el, body, error, _h = fetch(urljoin(origin, "robots.txt"), timeout, user_agent, max_retries, True, ssl_context, extra_headers)
+        status, _len, _el, body, error, _h = fetch(urljoin(origin, "robots.txt"), timeout, user_agent, max_retries, True, ssl_context, extra_headers, result_writer=result_writer, category="sitemap-discovery")
         if status == 200 and not error:
             text = body.decode("utf-8", errors="replace")
             for line in text.splitlines():
@@ -536,7 +679,7 @@ def discover_sitemaps(
                 continue
             host_key = urlparse(sm_url).hostname or sm_url
             rate_limiter.wait(host_key)
-            status, _len, _el, body, error, _h = fetch(sm_url, timeout, user_agent, max_retries, True, ssl_context, extra_headers, MAX_SITEMAP_BYTES)
+            status, _len, _el, body, error, _h = fetch(sm_url, timeout, user_agent, max_retries, True, ssl_context, extra_headers, MAX_SITEMAP_BYTES, result_writer, "sitemap-discovery")
             fetched += 1
             if status != 200 or error or not body:
                 continue
@@ -680,11 +823,12 @@ class PageResult:
 
 def fetch_page(
     url: str, depth: int, timeout: int, user_agent: str, max_retries: int, ssl_context: ssl.SSLContext | None,
-    extra_headers: dict[str, str] | None = None,
+    extra_headers: dict[str, str] | None = None, result_writer: ResultWriter | None = None,
+    category: str = "crawl",
 ) -> PageResult:
     url = ensure_ascii_safe_url(url)
     status, length, elapsed_ms, body, error, headers = fetch(
-        url, timeout, user_agent, max_retries, True, ssl_context, {"Accept": "text/html,*/*", **(extra_headers or {})}, MAX_CRAWL_BODY_BYTES,
+        url, timeout, user_agent, max_retries, True, ssl_context, {"Accept": "text/html,*/*", **(extra_headers or {})}, MAX_CRAWL_BODY_BYTES, result_writer, category,
     )
     if error or status is None:
         return PageResult(url=url, depth=depth, error=error)
@@ -711,7 +855,7 @@ def _fetch_probe_batch(
     jobs: list[tuple[str, str, str | None]],
     rate_limiter: HostRateLimiter, robots: RobotsCache, max_workers: int, timeout: int, max_retries: int,
     user_agent: str, want_body: bool, signature_check: bool, ssl_context: ssl.SSLContext | None,
-    extra_headers: dict[str, str] | None = None,
+    extra_headers: dict[str, str] | None = None, result_writer: ResultWriter | None = None,
 ) -> list[ProbeResult]:
     def _one(job: tuple[str, str, str | None]) -> ProbeResult:
         category, url, payload = job
@@ -719,7 +863,7 @@ def _fetch_probe_batch(
             return ProbeResult(category=category, url=url, error="Disallowed by robots.txt", payload=payload)
         host_key = urlparse(url).hostname or url
         rate_limiter.wait(host_key)
-        status, length, elapsed_ms, body, error, _headers = fetch(url, timeout, user_agent, max_retries, want_body, ssl_context, extra_headers)
+        status, length, elapsed_ms, body, error, _headers = fetch(url, timeout, user_agent, max_retries, want_body, ssl_context, extra_headers, result_writer=result_writer, category=category)
         matched = None
         if signature_check and body:
             text = body.decode("utf-8", errors="replace")
@@ -740,14 +884,15 @@ def _fetch_probe_batch(
 def _fetch_page_batch(
     urls: list[str], depth: int, rate_limiter: HostRateLimiter, robots: RobotsCache, max_workers: int,
     timeout: int, max_retries: int, user_agent: str, ssl_context: ssl.SSLContext | None,
-    extra_headers: dict[str, str] | None = None,
+    extra_headers: dict[str, str] | None = None, result_writer: ResultWriter | None = None,
+    category: str = "crawl",
 ) -> list[PageResult]:
     def _one(url: str) -> PageResult:
         if not robots.allowed(url):
             return PageResult(url=url, depth=depth, error="Disallowed by robots.txt")
         host_key = urlparse(url).hostname or url
         rate_limiter.wait(host_key)
-        return fetch_page(url, depth, timeout, user_agent, max_retries, ssl_context, extra_headers)
+        return fetch_page(url, depth, timeout, user_agent, max_retries, ssl_context, extra_headers, result_writer, category)
 
     results: list[PageResult] = []
     with ThreadPoolExecutor(max_workers=max(1, min(max_workers, 10))) as pool:
@@ -825,10 +970,11 @@ def run_default_scan_phase(
     root_url: str, args: argparse.Namespace, rate_limiter: HostRateLimiter, robots: RobotsCache,
     ssl_context: ssl.SSLContext | None, extra_headers: dict[str, str], budget: int,
     signals: dict[str, float] | None = None,
+    result_writer: ResultWriter | None = None,
 ) -> tuple[list[ProbeResult], tuple[int, int] | None, int]:
     """반환: (결과, SPA 캐치올 베이스라인, 사용한 요청 수)."""
     signals = dict(signals or {})
-    baseline = detect_fallback_baseline(root_url, args.timeout, args.user_agent, args.retries, ssl_context, extra_headers, signals)
+    baseline = detect_fallback_baseline(root_url, args.timeout, args.user_agent, args.retries, ssl_context, extra_headers, signals, result_writer)
     logger.info("[패시브 탐지] 추정 기술: %s", ", ".join(
         f"{tech}({confidence:.1f})" for tech, confidence in sorted(signals.items(), key=lambda item: -item[1])
     ) or "신호 없음")
@@ -845,7 +991,7 @@ def run_default_scan_phase(
         targets = targets[:remaining]
     jobs = [(cat, urljoin(root_url, path), None) for cat, path in targets]
     logger.info("[기본 파일] %d개 경로 확인 (기술: %s)", len(jobs), ", ".join(techs) + (", generic" if not args.no_generic else ""))
-    results = _fetch_probe_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, False, False, ssl_context, extra_headers)
+    results = _fetch_probe_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, False, False, ssl_context, extra_headers, result_writer)
     spent += len(results)
 
     if args.mutate and spent < budget:
@@ -854,7 +1000,7 @@ def run_default_scan_phase(
         mutate_jobs = [("backup-mutation", r.url + suf, None) for r in hits for suf in BACKUP_SUFFIXES][:remaining]
         if mutate_jobs:
             logger.info("[백업 변형] 발견된 %d개 경로의 백업 확장자 변형 %d개 확인", len(hits), len(mutate_jobs))
-            mut_results = _fetch_probe_batch(mutate_jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, False, False, ssl_context, extra_headers)
+            mut_results = _fetch_probe_batch(mutate_jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, False, False, ssl_context, extra_headers, result_writer)
             results.extend(mut_results)
             spent += len(mut_results)
     return results, baseline, spent, category_totals, {cat: sum(1 for c, _ in targets if c == cat) for cat in category_totals}
@@ -908,6 +1054,7 @@ def load_traversal_payloads(target_os: str, limit: int, bypass_encodings: bool) 
 def run_traversal_phase(
     root_url: str, args: argparse.Namespace, rate_limiter: HostRateLimiter, robots: RobotsCache,
     ssl_context: ssl.SSLContext | None, extra_headers: dict[str, str], budget: int,
+    result_writer: ResultWriter | None = None,
 ) -> list[ProbeResult]:
     payload_pairs = load_traversal_payloads(args.target_os, min(args.traversal_limit, budget), not args.no_bypass_encodings)
     if args.traversal_url_template:
@@ -916,7 +1063,7 @@ def run_traversal_phase(
         base = root_url.rstrip("/")
         jobs = [("traversal", f"{base}?{args.traversal_param}={payload}", payload) for _, payload in payload_pairs]
     logger.info("[경로순회] %d개 페이로드 확인 (대상 OS: %s)", len(jobs), args.target_os)
-    return _fetch_probe_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, True, True, ssl_context, extra_headers)
+    return _fetch_probe_batch(jobs, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, True, True, ssl_context, extra_headers, result_writer)
 
 
 # ---------------------------------------------------------------------------
@@ -949,6 +1096,7 @@ class CrawlStats:
 def run_crawl_phase(
     seed_urls: list[str], args: argparse.Namespace, rate_limiter: HostRateLimiter, robots: RobotsCache,
     ssl_context: ssl.SSLContext | None, extra_headers: dict[str, str], budget: int,
+    result_writer: ResultWriter | None = None,
 ) -> tuple[list[PageResult], CrawlStats]:
     seeds = [normalize_url(u) for u in seed_urls]
     visited: set[str] = set(seeds)
@@ -961,7 +1109,7 @@ def run_crawl_phase(
     while current_level and depth <= args.crawl_depth and len(results) < max_pages:
         remaining = max_pages - len(results)
         batch = current_level[:remaining]
-        batch_results = _fetch_page_batch(batch, depth, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, ssl_context, extra_headers)
+        batch_results = _fetch_page_batch(batch, depth, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, ssl_context, extra_headers, result_writer, "crawl")
         robots_disallowed = other_errors = 0
         next_candidates: list[str] = []
         for result in batch_results:
@@ -1030,7 +1178,7 @@ def run_crawl_phase(
             wl_paths = wl_paths[: args.crawl_wordlist_limit]
         urls = [urljoin(seeds[0], p.lstrip("/")) for p in wl_paths]
         logger.info("[워드리스트] %d개 경로 확인", len(urls))
-        wl_results = _fetch_page_batch(urls, 0, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, ssl_context, extra_headers)
+        wl_results = _fetch_page_batch(urls, 0, rate_limiter, robots, args.workers, args.timeout, args.retries, args.user_agent, ssl_context, extra_headers, result_writer, "crawl-wordlist")
         for r in wl_results:
             r.source = "wordlist"
         results.extend(wl_results)
@@ -1058,8 +1206,10 @@ class TargetReport:
 
 def run_target(target: str, args: argparse.Namespace, cookie: str | None = None) -> TargetReport:
     ssl_context = make_ssl_context(args.insecure)
-    rate_limiter = HostRateLimiter(args.min_interval)
-    robots = RobotsCache(args.user_agent, args.timeout, not args.ignore_robots, ssl_context)
+    rate_limiter = HostRateLimiter(args.rpm)
+    _ACTIVE_LIMITERS.append(rate_limiter)
+    result_writer = ResultWriter(target, not args.no_save)
+    robots = RobotsCache(args.user_agent, args.timeout, not args.ignore_robots, ssl_context, result_writer)
     extra_headers: dict[str, str] = {}
     if cookie:
         extra_headers["Cookie"] = normalize_cookie_line(cookie)
@@ -1079,7 +1229,7 @@ def run_target(target: str, args: argparse.Namespace, cookie: str | None = None)
         root_budget = min(budget, 100)
         root = discover_root(
             target, timeout=args.timeout, user_agent=args.user_agent, max_retries=args.retries,
-            ssl_context=ssl_context, rate_limiter=rate_limiter, robots=robots, extra_headers=extra_headers, budget=root_budget, signals=signals,
+            ssl_context=ssl_context, rate_limiter=rate_limiter, robots=robots, extra_headers=extra_headers, budget=root_budget, signals=signals, result_writer=result_writer,
         )
         budget -= len(root.probes)
         logger.info(
@@ -1091,7 +1241,7 @@ def run_target(target: str, args: argparse.Namespace, cookie: str | None = None)
     if not args.no_sitemap:
         sitemap_seeds = discover_sitemaps(
             root.root_url, timeout=args.timeout, user_agent=args.user_agent, max_retries=args.retries,
-            ssl_context=ssl_context, rate_limiter=rate_limiter, robots=robots, extra_headers=extra_headers,
+            ssl_context=ssl_context, rate_limiter=rate_limiter, robots=robots, extra_headers=extra_headers, result_writer=result_writer,
         )
         if sitemap_seeds:
             logger.info("[sitemap] %d개 URL을 크롤링 시드로 추가", len(sitemap_seeds))
@@ -1103,11 +1253,11 @@ def run_target(target: str, args: argparse.Namespace, cookie: str | None = None)
 
     def _run_phase(phase: str, phase_budget: int) -> None:
         if phase == "default":
-            report.default_results, report.default_baseline, _, report.default_category_totals, report.default_category_attempted = run_default_scan_phase(root.root_url, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget, signals)
+            report.default_results, report.default_baseline, _, report.default_category_totals, report.default_category_attempted = run_default_scan_phase(root.root_url, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget, signals, result_writer)
         elif phase == "traversal":
-            report.traversal_results = run_traversal_phase(root.root_url, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget)
+            report.traversal_results = run_traversal_phase(root.root_url, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget, result_writer)
         elif phase == "crawl":
-            report.crawl_results, report.crawl_stats = run_crawl_phase(seed_urls, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget)
+            report.crawl_results, report.crawl_stats = run_crawl_phase(seed_urls, args, rate_limiter, robots, ssl_context, extra_headers, phase_budget, result_writer)
         else:
             logger.warning("알 수 없는 --phases 값: %s (가능: default,traversal,crawl)", phase)
 
@@ -1241,14 +1391,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-external", action="store_true", help="(crawl 단계) 다른 도메인으로 나가는 링크도 추적 (기본은 같은 호스트만)")
 
     parser.add_argument("--profile", choices=("quiet", "normal", "fast"), default="normal",
-                        help="속도 프리셋 (기본 normal). quiet=2/1.5초/400/150, normal=3/0.5초/1000/400, fast=10/0.1초/2000/2000 (workers/간격/요청/tech-cap). 명시 옵션 우선")
+                        help="속도 프리셋 (기본 normal): quiet=2/30/150, normal=3/60/400, fast=10/300/2000 (workers/RPM/tech-cap). 명시 옵션 우선")
     parser.add_argument("--tech-cap", type=int, default=None,
                         help="기술별 경로 상한 (normal 400), 명시 --tech 여부와 무관하게 적용. generic과 선택한 기술 카테고리는 예산을 순환 배분(round-robin)하므로 특정 카테고리가 예산을 독점하지 않음")
     parser.add_argument("--workers", type=int, default=None, help="동시 요청 수 (기본 3, 최대 10)")
-    parser.add_argument("--min-interval", type=float, default=None, help="같은 호스트에 대한 요청 사이 최소 간격, 초 단위 (기본 0.5)")
+    parser.add_argument("--rpm", type=float, default=None, help="기본 요청 속도(RPM), 주 제어. 최소 6, 유효 최대 600 (기본: profile별 30/60/300)")
     parser.add_argument("--timeout", type=int, default=10, help="요청 1건당 타임아웃, 초 단위 (기본 10)")
     parser.add_argument("--retries", type=int, default=1, help="네트워크 오류 시 재시도 횟수 (기본 1)")
-    parser.add_argument("--max-requests", type=int, default=None, help="대상 1개당 전체 요청 수 상한 (기본 1000, 0=제한 없음)")
+    parser.add_argument("--max-requests", type=int, default=None, help="선택적 보조 요청 상한(기본 꺼짐, 명시 시 적용; --rpm이 주 속도 제어, 0=제한 없음)")
+    parser.add_argument("--no-save", action="store_true", help="개별 요청/응답 파일 저장을 끔 (기본 저장, 404 상세 파일 제외)")
     parser.add_argument("--ignore-robots", action="store_true", help="robots.txt 무시 (기본은 준수)")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT, help="커스텀 User-Agent 문자열")
     parser.add_argument("--cookies", action="append", default=[], help="모든 요청에 실어 보낼 Cookie 헤더, 'k=v; k2=v2' 형식(콜론 'k:v'도 허용). 반복 가능 -- 2번 이상 주면 세션/계정별로 전체 스캔을 각각 따로 돌려서 끝에 세션별로 구분된 결과를 출력함(예: --cookies \"JSESSIONID=aaa\" --cookies \"JSESSIONID=bbb\")")
@@ -1280,6 +1431,38 @@ def _ask_int_range(prompt: str, lo: int, hi: int, default: int) -> int:
             print(f"  {lo}~{hi} 범위 안에서 입력하세요.")
             continue
         return n
+
+
+def _eta_line(args: argparse.Namespace, pair_count: int) -> str:
+    phases = [p.strip() for p in args.phases.split(",") if p.strip()]
+    total = 0
+    if "default" in phases:
+        techs = [t.strip().lower() for t in args.tech.split(",") if t.strip()]
+        total += 1 + len(build_fingerprint_targets(techs, not args.no_generic, None, args.tech_cap, args.tech_explicit))
+    if "traversal" in phases:
+        total += len(load_traversal_payloads(args.target_os, args.traversal_limit, not args.no_bypass_encodings))
+    crawl_approx = False
+    if "crawl" in phases:
+        total += args.crawl_max_pages if args.crawl_max_pages else 100
+        if args.crawl_wordlist:
+            seen: set[str] = set()
+            for name in args.crawl_wordlist:
+                key = CRAWL_WORDLIST_KEYS.get(name)
+                lines = _load_embedded(key) if key else []
+                if not lines:
+                    try:
+                        with open(name, encoding="utf-8", errors="replace") as fh:
+                            lines = [ln.strip() for ln in fh if ln.strip() and not ln.startswith("#")]
+                    except OSError:
+                        pass
+                seen.update(lines)
+            total += min(len(seen), args.crawl_wordlist_limit)
+        crawl_approx = True
+    total += (0 if args.no_root_discovery else 12) + (0 if args.no_sitemap else 3)
+    total *= pair_count
+    seconds = int(total * 60.0 / args.rpm)
+    h, rem = divmod(seconds, 3600); m, s = divmod(rem, 60)
+    return f"예상 소요시간: {'~' if crawl_approx else ''}{h:02d}:{m:02d}:{s:02d} (총 {total}건, RPM={args.rpm:g}) -- pacing 기준"
 
 
 def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
@@ -1327,9 +1510,9 @@ def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
         pc = _ask_int_range(f"선택한 {len(picked)}개 단계 중 몇 개를 동시에 돌릴까요?", 1, len(picked), 1)
         argv += ["--phase-concurrency", str(pc)]
 
-    interval = input("요청 간격(초, 같은 호스트 기준, 빈 줄=기본 0.5): ").strip()
-    if interval:
-        argv += ["--min-interval", interval]
+    rpm = input("요청 속도(RPM, 기본 60, 유효 범위 6~600): ").strip()
+    if rpm:
+        argv += ["--rpm", rpm]
 
     if _ask_yes_no("고급 옵션(--tech, --traversal-limit, --crawl-depth 등)을 추가로 지정할까요?"):
         print(f"  --help 로 전체 옵션을 확인하거나, 지금 바로 추가 인자를 입력하세요 (예: --tech tomcat,nginx --mutate).")
@@ -1337,6 +1520,17 @@ def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
         if extra:
             import shlex
             argv += shlex.split(extra)
+
+    preview_parser = build_arg_parser()
+    try:
+        preview = preview_parser.parse_args(argv)
+        preview.tech_explicit = preview.tech is not None
+        if preview.tech is None: preview.tech = "tomcat,apache,nginx"
+        for name, value in PROFILE_DEFAULTS[preview.profile].items():
+            if getattr(preview, name) is None: setattr(preview, name, value)
+        print(_eta_line(preview, len(targets) * max(1, len(preview.cookies))))
+    except (SystemExit, ValueError):
+        pass
 
     return argv
 
@@ -1351,11 +1545,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     args.tech_explicit = args.tech is not None
+    args.max_requests_explicit = args.max_requests is not None
+    if not args.max_requests_explicit: args.max_requests = 0
     if args.tech is None:
         args.tech = "tomcat,apache,nginx"
     for name, value in PROFILE_DEFAULTS[args.profile].items():
         if getattr(args, name) is None:
             setattr(args, name, value)
+    requested_rpm = args.rpm
+    args.rpm = max(MIN_RPM, min(MAX_RPM, args.rpm))
+    if args.rpm != requested_rpm:
+        logger.warning("--rpm %.3g을 유효 범위 %d~%d으로 조정함", requested_rpm, MIN_RPM, MAX_RPM)
     if args.tech_cap < 1:
         parser.error("--tech-cap는 1 이상이어야 함")
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S", stream=sys.stderr)
@@ -1371,22 +1571,31 @@ def main(argv: list[str] | None = None) -> int:
     if args.target_concurrency < 1:
         logger.error("--target-concurrency는 1 이상이어야 함")
         return 2
-    if args.max_requests > MAX_TOTAL_REQUESTS and not args.force:
+    if args.max_requests_explicit and args.max_requests > MAX_TOTAL_REQUESTS and not args.force:
         logger.error("--max-requests %d가 안전상한 %d를 넘음 (--force로 허용)", args.max_requests, MAX_TOTAL_REQUESTS)
         return 2
 
     sessions: list[str | None] = list(args.cookies) if args.cookies else [None]
     pairs = [(t, s) for t in args.targets for s in sessions]
+    global _PROGRESS_DONE, _PROGRESS_TOTAL
+    _PROGRESS_DONE = 0
+    eta_preview = _eta_line(args, len(pairs))
+    _PROGRESS_TOTAL = int(re.search(r"총 (\d+)건", eta_preview).group(1))
+    print(eta_preview)
     target_concurrency = min(args.target_concurrency, len(pairs), 10)
     reports: list[TargetReport] = []
-    if target_concurrency <= 1:
-        for t, s in pairs:
-            reports.append(run_target(t, args, s))
-    else:
-        with ThreadPoolExecutor(max_workers=target_concurrency) as pool:
-            futures = {pool.submit(run_target, t, args, s): (t, s) for t, s in pairs}
-            for fut in as_completed(futures):
-                reports.append(fut.result())
+    try:
+        with _keypress_controller():
+            if target_concurrency <= 1:
+                for t, s in pairs:
+                    reports.append(run_target(t, args, s))
+            else:
+                with ThreadPoolExecutor(max_workers=target_concurrency) as pool:
+                    futures = {pool.submit(run_target, t, args, s): (t, s) for t, s in pairs}
+                    for fut in as_completed(futures):
+                        reports.append(fut.result())
+    finally:
+        if sys.stdin.isatty(): print()
 
     if args.output == "json":
         text = write_json_report(reports, args.output_file)
