@@ -36,7 +36,15 @@ SAFE_CHECKS = {
     "directory_listing": "directory-listing",
     "server_header": "server-header-disclosure",
     "security_headers": "security-headers",
+    "cookie_security": "cookie-security",
+    "cors_misconfiguration": "cors-misconfiguration",
 }
+# Placeholder substituted into request header *values* at run time (never stored
+# literally in a rule file -- safe_rule_bundle's FORBIDDEN_TEXT filter rejects
+# literal "https://" inside bundle files). This keeps the CORS-reflection probe
+# a plain header value sent to the target only; it never causes an outbound
+# connection to the placeholder "domain" itself.
+ORIGIN_PLACEHOLDER_TOKEN = "{origin_placeholder}"
 DEFAULT_SUBDOMAIN_LABELS = (
     "admin", "administrator", "manage", "management", "console", "portal",
     "internal", "intranet", "dev", "development", "stage", "staging",
@@ -59,9 +67,28 @@ class ResponseEvidence:
     headers: dict[str, str]
     body: str
     error: str
+    request_headers: dict[str, str] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.request_headers is None:
+            self.request_headers = {}
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _headers_to_dict(items) -> dict[str, str]:  # noqa: ANN001
+    """Merge response header items into a dict, preserving repeated headers
+    (e.g. multiple Set-Cookie lines) by joining their values with newlines
+    instead of silently keeping only the last one."""
+    merged: dict[str, str] = {}
+    for key, value in items:
+        existing_key = next((k for k in merged if k.lower() == key.lower()), None)
+        if existing_key is not None:
+            merged[existing_key] = merged[existing_key] + "\n" + value
+        else:
+            merged[key] = value
+    return merged
 
 
 def _contains_all(text: str, values: list[str]) -> bool:
@@ -126,6 +153,69 @@ def analyze_rule(rule: dict, response: ResponseEvidence) -> list[dict]:
                 name: headers[name.lower()] for name in detection["inspect_headers_ci"]
                 if name.lower() in headers
             }
+        if detection.get("header_present_missing_token_ci"):
+            spec = detection["header_present_missing_token_ci"]
+            value = headers.get(spec["header_ci"].lower())
+            if value is None or re.search(re.escape(spec["token_ci"]), value, re.I):
+                continue
+            matched_headers = {spec["header_ci"]: value}
+        if detection.get("header_value_regex_below_ci"):
+            spec = detection["header_value_regex_below_ci"]
+            value = headers.get(spec["header_ci"].lower())
+            if value is None:
+                continue
+            match = re.search(spec["capture_regex_ci"], value, re.I)
+            if not match:
+                continue
+            try:
+                captured = int(match.group(1))
+            except (ValueError, IndexError):
+                continue
+            if captured >= spec["below"]:
+                continue
+            matched_headers = {spec["header_ci"]: value}
+        if detection.get("cookie_missing_flags_ci"):
+            spec = detection["cookie_missing_flags_ci"]
+            cookie_blob = headers.get("set-cookie", "")
+            if not cookie_blob:
+                continue
+            offending: list[str] = []
+            for line in cookie_blob.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                cookie_name = line.split("=", 1)[0].strip()
+                if not any(re.search(pattern, cookie_name, re.I) for pattern in spec["name_matches_any_ci"]):
+                    continue
+                missing = [flag for flag in spec["required_flags_ci"] if not re.search(rf"\b{re.escape(flag)}\b", line, re.I)]
+                if missing:
+                    offending.append(f"{line} (missing: {', '.join(missing)})")
+            if not offending:
+                continue
+            matched_headers = {"set-cookie": "\n".join(offending)}
+        if detection.get("headers_all_equal_ci"):
+            specs = detection["headers_all_equal_ci"]
+            matched: dict[str, str] = {}
+            all_equal = True
+            for spec in specs:
+                value = headers.get(spec["header_ci"].lower())
+                if value is None or value.strip().lower() != spec["equals_ci"].lower():
+                    all_equal = False
+                    break
+                matched[spec["header_ci"]] = value
+            if not all_equal:
+                continue
+            matched_headers = matched
+        if detection.get("reflects_request_header_ci"):
+            spec = detection["reflects_request_header_ci"]
+            sent_value = next(
+                (value for key, value in response.request_headers.items() if key.lower() == spec["request_header_ci"].lower()),
+                "",
+            )
+            response_value = headers.get(spec["response_header_ci"].lower())
+            if not sent_value or response_value is None or response_value.strip() != sent_value.strip():
+                continue
+            matched_headers = {spec["response_header_ci"]: response_value}
         evidence = response.body[:500] if response.body else header_blob[:500]
         if matched_headers:
             evidence = "\n".join(f"{name}: {value}" for name, value in matched_headers.items())[:500]
@@ -147,13 +237,12 @@ def _target_url(raw: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", "", ""))
 
 
-def _fetch(method: str, url: str, timeout: int) -> ResponseEvidence:
+def _fetch(method: str, url: str, timeout: int, extra_headers: dict[str, str] | None = None) -> ResponseEvidence:
     if method not in {"GET", "HEAD", "OPTIONS"}:
         raise ValueError("state-changing HTTP method rejected")
-    request = urllib.request.Request(
-        url, method=method,
-        headers={"User-Agent": "security-toolkit-safe-audit/1.0", "Accept": "text/html,*/*;q=0.1"},
-    )
+    sent_headers = {"User-Agent": "security-toolkit-safe-audit/1.0", "Accept": "text/html,*/*;q=0.1"}
+    sent_headers.update(extra_headers or {})
+    request = urllib.request.Request(url, method=method, headers=sent_headers)
     # Ignore HTTP(S)_PROXY environment variables.  A diagnostic request must
     # go only to the explicitly selected target, never through an unrelated
     # corporate/developer proxy that could receive the URL or response.
@@ -161,12 +250,12 @@ def _fetch(method: str, url: str, timeout: int) -> ResponseEvidence:
     try:
         with opener.open(request, timeout=timeout) as response:
             body = response.read(MAX_BODY_BYTES).decode("utf-8", errors="replace") if method == "GET" else ""
-            return ResponseEvidence(method, url, response.status, dict(response.headers.items()), body, "")
+            return ResponseEvidence(method, url, response.status, _headers_to_dict(response.headers.items()), body, "", dict(extra_headers or {}))
     except urllib.error.HTTPError as exc:
         body = exc.read(MAX_BODY_BYTES).decode("utf-8", errors="replace") if method == "GET" else ""
-        return ResponseEvidence(method, url, exc.code, dict(exc.headers.items()), body, "")
+        return ResponseEvidence(method, url, exc.code, _headers_to_dict(exc.headers.items()), body, "", dict(extra_headers or {}))
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        return ResponseEvidence(method, url, None, {}, "", str(exc))
+        return ResponseEvidence(method, url, None, {}, "", str(exc), dict(extra_headers or {}))
 
 
 def discover_subdomains(
@@ -254,7 +343,11 @@ def run_check(target: str, check: str, max_candidates: int = 20) -> dict:
             if index:
                 time.sleep(1.0 / rule["limits"]["requests_per_second"])
             path = request["path"].replace("{random_token}", token)
-            response = _fetch(request["method"], origin + path, rule["limits"]["timeout_seconds"])
+            request_headers = {
+                name: value.replace("{random_token}", token).replace(ORIGIN_PLACEHOLDER_TOKEN, f"https://cors-probe-{token}.invalid")
+                for name, value in (request.get("headers") or {}).items()
+            }
+            response = _fetch(request["method"], origin + path, rule["limits"]["timeout_seconds"], request_headers)
             raw.append(response.to_dict())
             findings.extend(analyze_rule(rule, response))
             if response.error:
@@ -347,6 +440,8 @@ def _guided_wizard(parser: argparse.ArgumentParser) -> list[str] | None:
         "directory_listing": "디렉터리 리스팅 노출",
         "server_header": "Server 헤더로 버전 노출",
         "security_headers": "보안 헤더 누락",
+        "cookie_security": "쿠키 보안 속성(Secure/HttpOnly/SameSite) 점검",
+        "cors_misconfiguration": "CORS 설정 오류(와일드카드+자격증명, Origin 반사) 점검",
         "subdomain_discovery": "서브도메인 탐색 (도메인 대상만)",
         "virtual_host_isolation": "가상 호스트 격리 점검 (도메인 대상만, http만)",
     }

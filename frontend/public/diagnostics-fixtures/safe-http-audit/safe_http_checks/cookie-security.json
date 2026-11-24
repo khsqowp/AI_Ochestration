@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "cookie-security",
+  "name_ko": "쿠키 보안 속성 점검",
+  "description_ko": "기본 문서 응답의 Set-Cookie 헤더에서 세션으로 추정되는 쿠키에 Secure/HttpOnly/SameSite 속성이 빠졌는지 확인합니다.",
+  "origin": ["OWASP WSTG-SESS-02", "OWASP Secure Cookie guidance"],
+  "external_network": false,
+  "limits": {"max_requests": 1, "requests_per_second": 1.0, "max_concurrency": 1, "timeout_seconds": 10, "max_redirects": 0},
+  "requests": [
+    {"method": "GET", "path": "/", "send_credentials": false}
+  ],
+  "detections": [
+    {
+      "id": "session-cookie-missing-flags",
+      "severity": "medium",
+      "cookie_missing_flags_ci": {
+        "name_matches_any_ci": ["session", "sess", "sid", "auth", "token", "jsessionid", "phpsessid", "connect\\.sid"],
+        "required_flags_ci": ["secure", "httponly", "samesite"]
+      },
+      "message_ko": "세션으로 추정되는 쿠키에 Secure/HttpOnly/SameSite 속성이 모두 설정되어 있지 않아 쿠키 탈취나 CSRF에 취약할 수 있습니다."
+    }
+  ],
+  "negative_controls": {"only_get_method": true, "no_cookie_sent_or_stored": true, "heuristic_name_match_may_miss_or_overmatch": true}
+}

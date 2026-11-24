@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "cors-misconfiguration",
+  "name_ko": "CORS 설정 오류",
+  "description_ko": "기본 문서 응답의 CORS 헤더에서 자격증명 허용과 결합된 와일드카드 Origin, 그리고 임의 Origin 반사 여부를 확인합니다.",
+  "origin": ["OWASP CORS misconfiguration guidance", "PortSwigger CORS testing concepts"],
+  "external_network": false,
+  "limits": {"max_requests": 2, "requests_per_second": 1.0, "max_concurrency": 1, "timeout_seconds": 10, "max_redirects": 0},
+  "requests": [
+    {"method": "GET", "path": "/", "send_credentials": false},
+    {"method": "GET", "path": "/", "headers": {"Origin": "{origin_placeholder}"}, "send_credentials": false}
+  ],
+  "detections": [
+    {
+      "id": "cors-wildcard-with-credentials",
+      "severity": "high",
+      "headers_all_equal_ci": [
+        {"header_ci": "access-control-allow-origin", "equals_ci": "*"},
+        {"header_ci": "access-control-allow-credentials", "equals_ci": "true"}
+      ],
+      "message_ko": "Access-Control-Allow-Origin이 와일드카드(*)이면서 Access-Control-Allow-Credentials도 true로 설정되어 있어 브라우저가 자격증명을 포함한 임의 출처 요청을 허용할 위험이 있습니다."
+    },
+    {
+      "id": "cors-reflects-arbitrary-origin",
+      "severity": "medium",
+      "reflects_request_header_ci": {"request_header_ci": "Origin", "response_header_ci": "access-control-allow-origin"},
+      "message_ko": "요청에 포함된 임의의 Origin 값이 검증 없이 Access-Control-Allow-Origin에 그대로 반사되어 출처 검증이 미흡할 수 있습니다."
+    }
+  ],
+  "negative_controls": {"origin_header_is_placeholder_token_not_external_network": true, "never_send_credentials": true}
+}

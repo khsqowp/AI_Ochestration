@@ -15,7 +15,13 @@
     {"id": "missing-nosniff", "severity": "low", "missing_header_ci": "x-content-type-options", "message_ko": "X-Content-Type-Options가 없어 브라우저 MIME 추론으로 의도하지 않은 콘텐츠가 실행될 가능성이 있습니다."},
     {"id": "missing-referrer-policy", "severity": "info", "missing_header_ci": "referrer-policy", "message_ko": "Referrer-Policy가 없어 외부 요청에 불필요한 경로 정보가 전달될 수 있습니다."},
     {"id": "missing-hsts-on-https", "severity": "low", "when_scheme": "https", "missing_header_ci": "strict-transport-security", "message_ko": "HTTPS 응답에 HSTS가 없어 사용자가 HTTP로 재접속할 때 다운그레이드 공격에 노출될 수 있습니다."},
-    {"id": "weak-csp-script", "severity": "info", "header_ci": "content-security-policy", "value_contains_any_ci": ["'unsafe-inline'", "'unsafe-eval'"], "message_ko": "CSP가 unsafe-inline 또는 unsafe-eval을 허용하여 스크립트 실행 제한 효과가 약해질 수 있습니다."}
+    {"id": "weak-csp-script", "severity": "info", "header_ci": "content-security-policy", "value_contains_any_ci": ["'unsafe-inline'", "'unsafe-eval'"], "message_ko": "CSP가 unsafe-inline 또는 unsafe-eval을 허용하여 스크립트 실행 제한 효과가 약해질 수 있습니다."},
+    {"id": "missing-permissions-policy", "severity": "info", "missing_header_ci": "permissions-policy", "message_ko": "Permissions-Policy가 없어 카메라/마이크/위치 등 브라우저 기능 사용 범위를 제한하지 못할 수 있습니다."},
+    {"id": "missing-cross-origin-opener-policy", "severity": "info", "missing_header_ci": "cross-origin-opener-policy", "message_ko": "Cross-Origin-Opener-Policy가 없어 다른 출처 창과의 브라우징 컨텍스트 분리가 적용되지 않을 수 있습니다."},
+    {"id": "missing-cross-origin-resource-policy", "severity": "info", "missing_header_ci": "cross-origin-resource-policy", "message_ko": "Cross-Origin-Resource-Policy가 없어 다른 출처에서 리소스를 임의로 불러갈 수 있습니다."},
+    {"id": "missing-cross-origin-embedder-policy", "severity": "info", "missing_header_ci": "cross-origin-embedder-policy", "message_ko": "Cross-Origin-Embedder-Policy가 없어 교차 출처 격리(COEP)가 적용되지 않을 수 있습니다."},
+    {"id": "weak-hsts-max-age", "severity": "medium", "when_scheme": "https", "header_value_regex_below_ci": {"header_ci": "strict-transport-security", "capture_regex_ci": "max-age=(\\d+)", "below": 2592000}, "message_ko": "Strict-Transport-Security의 max-age가 너무 짧거나(0 포함) 30일(2592000초) 미만이라 HSTS 보호 효과가 약할 수 있습니다."},
+    {"id": "hsts-missing-includesubdomains", "severity": "info", "when_scheme": "https", "header_present_missing_token_ci": {"header_ci": "strict-transport-security", "token_ci": "includesubdomains"}, "message_ko": "Strict-Transport-Security에 includeSubDomains가 없어 서브도메인은 다운그레이드 공격 보호를 받지 못할 수 있습니다."}
   ],
   "negative_controls": {"hsts_only_applies_to_https": true, "missing_header_is_configuration_finding_not_exploit_proof": true}
 }

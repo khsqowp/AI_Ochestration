@@ -16,7 +16,15 @@ ALLOWED_RULE_IDS = {
     "error-page-signatures",
     "security-headers",
     "server-header-disclosure",
+    "cookie-security",
+    "cors-misconfiguration",
 }
+# The only extra request header a rule file may ever inject, and the only
+# value it may carry. It is a placeholder substituted at run time (see
+# safe_http_audit.ORIGIN_PLACEHOLDER_TOKEN) into a synthetic, non-resolving
+# test value -- never a credential, and never a literal external URL stored
+# on disk (which FORBIDDEN_TEXT below would reject anyway).
+ALLOWED_REQUEST_HEADERS = {"Origin": "{origin_placeholder}"}
 FORBIDDEN_TEXT = re.compile(
     r"(?i)(?:https?://|interactsh|(?:^|[^a-z])oast\.(?:fun|pro|me|online)|"
     r"burp\s*collaborator|callback|webhook|telemetry|(?:^|[^a-z])(?:put|delete|patch|connect)\s+/|"
@@ -67,6 +75,12 @@ def _validate_rule(rule: dict[str, Any], source: Path) -> None:
             raise BundleValidationError(f"{source.name}: request path must be target-relative")
         if request.get("send_credentials") is not False:
             raise BundleValidationError(f"{source.name}: credentials must never be sent")
+        extra_headers = request.get("headers")
+        if extra_headers is not None:
+            if not isinstance(extra_headers, dict) or extra_headers != ALLOWED_REQUEST_HEADERS:
+                raise BundleValidationError(
+                    f"{source.name}: request headers may only be exactly {ALLOWED_REQUEST_HEADERS!r}"
+                )
 
     serialized = json.dumps(rule, ensure_ascii=False, sort_keys=True)
     if FORBIDDEN_TEXT.search(serialized):
