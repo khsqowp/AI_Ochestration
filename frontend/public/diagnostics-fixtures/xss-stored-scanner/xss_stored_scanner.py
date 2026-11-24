@@ -410,6 +410,16 @@ def parse_kv_string(s: str, sep_pairs: str = "&", sep_kv: str = "=") -> dict[str
     return result
 
 
+def positive_int(value: str) -> int:
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value!r}")
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {ivalue}")
+    return ivalue
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="xss_stored_scanner", description="Marker-based Stored-XSS scanner (one inject page + one check page).")
     parser.add_argument("url", help="Injection URL (where the value gets submitted/stored)")
@@ -423,9 +433,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cookies", default=None, help="Baseline Cookie header sent with every request (injection AND check), 'k=v; k2=v2' style (e.g. session auth)")
     parser.add_argument("--headers", action="append", default=[], help="Baseline header 'Name: value' for the injection request, repeatable")
     parser.add_argument("--bypass-variants", nargs="?", const="all", default=None, help=f"Comma list of encoding variants to also try (or 'all'): {', '.join(ALL_VARIANTS)}. Default: raw only.")
-    parser.add_argument("--batch-size", type=int, default=10, help="Params combined per injection request (default 10; >20 needs --force)")
+    parser.add_argument("--batch-size", type=positive_int, default=10, help="Params combined per injection request (default 10; >20 needs --force)")
     parser.add_argument("--min-interval", type=float, default=0.5, help="Minimum seconds between requests to the same host (default 0.5)")
-    parser.add_argument("--timeout", type=int, default=10, help="Per-request timeout in seconds (default 10)")
+    parser.add_argument("--timeout", type=positive_int, default=10, help="Per-request timeout in seconds (default 10)")
     parser.add_argument("--output", choices=["console", "json"], default="console", help="Report format")
     parser.add_argument("--output-file", default=None, help="Write JSON report to this path")
     parser.add_argument("--force", action="store_true", help="Override safety ceilings (batch-size > 20, total slots > 2000)")
