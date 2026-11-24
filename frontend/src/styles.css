@@ -1117,6 +1117,27 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .diag-scanner-chevron { flex:none; transition:transform .15s ease; color:#6f6977; }
 .diag-scanner-chevron.open { transform:rotate(180deg); }
 .diag-scanner-body { padding:14px 16px 16px; border-top:1px solid #eceaf0; }
+.diag-session-card { flex:none; margin:0 0 12px; border:1px solid #ded9f1; border-radius:12px; padding:0; overflow:hidden; }
+.diag-session-body { padding:12px; border-top:1px solid #eceaf0; display:grid; gap:10px; }
+.diag-session-notice { margin:0; padding:7px 9px; border-radius:8px; background:#fff2e0; color:#8a5a10; font-size:11.5px; }
+.diag-session-target-add, .diag-session-target-row { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.diag-session-target-add label, .diag-session-target-row label { color:#514a61; font-size:11.5px; font-weight:700; }
+.diag-session-target-add input, .diag-session-target-row select { min-width:150px; flex:1; border:1px solid #dcd7e4; border-radius:8px; padding:7px 9px; font-size:11.5px; background:#fff; }
+.diag-session-target-add .diag-guided-primary { padding:7px 11px; border-radius:8px; font-size:11.5px; }
+.diag-session-empty { margin:0; color:#6f6977; font-size:11.5px; }
+.diag-session-export { display:flex; gap:6px; flex-wrap:wrap; }
+.diag-session-export .diag-guided-reset { margin:0; }
+.diag-session-tools { display:grid; gap:6px; }
+.diag-session-tool { min-width:0; padding:8px; border:1px solid #eceaf0; border-radius:10px; background:#faf9fc; display:grid; gap:7px; }
+.diag-session-tool-head { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.diag-session-run { display:flex; align-items:center; gap:6px; color:#3f3b47; font-size:11.8px; }
+.diag-session-run input { margin:0; }
+.diag-session-time { color:#6f6977; font-size:10.8px; }
+.diag-session-time-action, .diag-session-output-toggle { border:0; background:none; color:#5d50ba; padding:2px; font-size:10.8px; font-weight:700; }
+.diag-session-output-toggle { margin-left:auto; }
+.diag-session-field { display:grid; gap:4px; color:#6f6977; font-size:10.8px; font-weight:700; }
+.diag-session-field input, .diag-session-field textarea { width:100%; box-sizing:border-box; border:1px solid #dcd7e4; border-radius:7px; padding:7px 8px; background:#fff; color:#3f3b47; font:inherit; font-size:11.5px; font-weight:400; }
+.diag-session-field textarea { min-height:85px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .diag-scanner-body .diag-bullet-list { margin-bottom:12px; }
 .diag-route-tree-frame { width:100%; height:min(70vh, 720px); margin-top:12px; border:1px solid #eceaf0; border-radius:12px; background:#fff; }
 .diag-route-tool-title { display:flex; align-items:center; gap:7px; }

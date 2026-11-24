@@ -3,6 +3,7 @@ import { ChevronDown, Clipboard, Download, FolderSearch, X } from 'lucide-react'
 import { SCANNER_TOOLS } from '../scanner-tools-data'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
+import { ScannerSessionTracker } from './ScannerSessionTracker'
 
 export function ScannerToolsModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
@@ -25,6 +26,7 @@ export function ScannerToolsModal({ onClose, embedded }: { onClose?: () => void;
     <a className="diag-file-download diag-offline-bundle" href="/diagnostics-fixtures/offline-toolkit-bundle.zip" download="offline-toolkit-bundle.zip">
       <Download size={14}/><span><b>오프라인 올인원 패키지</b><small>이 사이트 자체도 못 여는 내부망용 -- 아래 모든 도구(.py+설명서, client-route-scout 콘솔 스크립트 포함)를 한 zip에 포함. recon-toolkit에는 SecLists·PayloadsAllTheThings 서브셋 워드리스트(MIT)가 파일 안에 이미 압축 내장돼 있어 별도 폴더 없이도 그대로 동작. 풀면 바로 실행, 개별 다운로드 필요 없음 (~950KB). 설명서는 zip 특성상 영문 파일명(MANUAL_KR.txt)으로 들어있지만 내용은 그대로 한글.</small></span>
     </a>
+    <ScannerSessionTracker />
     <div className="explorer-preview tool-modal-body">
       <div className="explorer-preview-body cheatsheet-options-body diag-scanner-list">
         {SCANNER_TOOLS.map(tool => {
