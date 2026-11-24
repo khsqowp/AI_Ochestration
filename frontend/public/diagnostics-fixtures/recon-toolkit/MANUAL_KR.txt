@@ -69,7 +69,7 @@ TLS 검증 여부·쿠키·실행할 단계만 순서대로 묻는 대화형 간
 
 직접 옵션을 쓰려면:
     python recon_toolkit.py https://target.example
-    python recon_toolkit.py https://target.example --insecure --tech tomcat,nginx --mutate
+    python recon_toolkit.py https://target.example --insecure --tech tomcat,nginx,springboot --mutate
     python recon_toolkit.py https://target.example --phases traversal --traversal-param file
     python recon_toolkit.py https://target.example --phases crawl --crawl-depth 2 --crawl-wordlist common.txt
 
@@ -84,10 +84,11 @@ TLS 검증 여부·쿠키·실행할 단계만 순서대로 묻는 대화형 간
   fast: workers=10, min-interval=0.1초, max-requests=2000, tech-cap=2000
   fast는 --force를 자동 활성화하지 않음.
   관제 있는 대상/프로덕션에선 --profile quiet 권장.
-- --tech-cap: tech 미지정 시 기술별 경로 상한. generic 36개와 quickhits 전체가
-  먼저 예산을 사용하고 남은 예산에 기술별 캡 적용. 예산이 작으면 generic 앞부분만 실행.
-  패시브 추정은 기존 응답에서 수집하며 기술 목록을 제외하지 않고 순서만 변경.
-  명시적 --tech 지정은 기존 기술 순서와 generic 후순위, 예산 처리를 유지.
+- --tech-cap: 선택한 기술별 경로 상한. 명시적 --tech 지정 여부와 관계없이 적용.
+  generic과 각 기술 경로는 순환 배분되어 요청 예산이 작아도 한 카테고리가 전체를
+  독점하지 않는다. 패시브 추정은 기술 목록을 제외하지 않고 카테고리 순서만 변경.
+  Spring Boot 액추에이터 경로는 --tech springboot로 선택할 수 있다.
+  기본/백업 파일 보고서는 카테고리별 시도 수/후보 수를 표시하며, 잘린 경우 예산 제한을 표기.
 - 호스트별 최소 요청 간격 (--min-interval, 기본 0.5초)
 - 동시 요청 수 상한 (--workers, 최대 10)
 - 대상 1개당 전체 요청 수 상한 (--max-requests, 기본 1000, 안전상한 3000은 --force로만 초과)
