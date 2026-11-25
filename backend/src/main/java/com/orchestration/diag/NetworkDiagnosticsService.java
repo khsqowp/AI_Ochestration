@@ -159,6 +159,10 @@ class NetworkDiagnosticsService {
     return diagnoseAndPersist(new Request(run.getTarget(), run.getPorts(), run.getTimeoutMs(), run.getProxy()), userId);
   }
 
+  void delete(UUID id, UUID userId) {
+    runs.delete(owned(id, userId));
+  }
+
   private NetworkDiagnosticRunRecord owned(UUID id, UUID userId) {
     return runs.findById(id)
         .filter(run -> run.getRequestedByUserId().equals(userId))

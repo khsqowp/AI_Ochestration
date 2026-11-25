@@ -45,6 +45,13 @@ class NetworkDiagnosticsController {
     return service.rerun(id, requireUser(currentUser(principal, token)));
   }
 
+  @DeleteMapping("/history/{id}")
+  void delete(@PathVariable UUID id,
+      @AuthenticationPrincipal AuthService.UserProfile principal,
+      @CookieValue(value = SESSION_COOKIE, required = false) String token) {
+    service.delete(id, requireUser(currentUser(principal, token)));
+  }
+
   private UUID currentUserId(AuthService.UserProfile principal, String token) {
     AuthService.UserProfile user = currentUser(principal, token);
     return user == null ? null : UUID.fromString(user.id());

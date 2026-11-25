@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Activity, X } from 'lucide-react'
+import { useCallback, useState, type FormEvent } from 'react'
+import { Activity, ChevronDown, ChevronUp, Trash2, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
 import { Note, TextInput } from '../payloads/shared'
@@ -32,6 +32,8 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [historyError, setHistoryError] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyLoaded, setHistoryLoaded] = useState(false)
 
   const loadHistory = useCallback(async () => {
     try {
@@ -40,10 +42,23 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
       if (!response.ok) throw new Error(errorMessage(data, '기록을 불러오지 못했습니다.'))
       setHistory(Array.isArray(data) ? data : [])
       setHistoryError('')
+      setHistoryLoaded(true)
     } catch (reason) { setHistoryError(reason instanceof Error ? reason.message : '기록을 불러오지 못했습니다.') }
   }, [])
 
-  useEffect(() => { void loadHistory() }, [loadHistory])
+  const toggleHistory = () => {
+    const next = !historyOpen
+    setHistoryOpen(next)
+    if (next && !historyLoaded) void loadHistory()
+  }
+
+  const deleteHistory = async (item: HistoryItem) => {
+    try {
+      const response = await fetch(`${HISTORY_URL}/${item.id}`, { method: 'DELETE' })
+      if (!response.ok) { const data = await response.json().catch(() => null); throw new Error(errorMessage(data, '기록 삭제에 실패했습니다.')) }
+      setHistory(current => current.filter(entry => entry.id !== item.id))
+    } catch (reason) { setHistoryError(reason instanceof Error ? reason.message : '기록 삭제에 실패했습니다.') }
+  }
 
   /** Shared runner for fresh, history-detail and rerun requests: fetch → show results or error. */
   const run = async (request: () => Promise<Response>, label: string, refreshHistory: boolean) => {
@@ -54,7 +69,7 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
       if (!response.ok) throw new Error(errorMessage(data, '진단 요청에 실패했습니다.'))
       setResult({ steps: data.steps, verdict: data.verdict })
       setResultLabel(label)
-      if (refreshHistory) await loadHistory()
+      if (refreshHistory) { if (historyOpen) await loadHistory(); else setHistoryLoaded(false) }
     } catch (reason) { setError(reason instanceof Error ? reason.message : '진단 요청에 실패했습니다.') }
     finally { setLoading(false) }
   }
@@ -87,20 +102,6 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
         <button className="btn btn-primary" type="submit" disabled={loading || !target.trim()}>{loading ? '진단 중…' : '진단 시작'}</button>
       </form>
 
-      <section className="network-diagnostics-history" aria-label="진단 기록">
-        <h3>기록</h3>
-        {historyError && <p role="alert" className="network-diagnostics-error">{historyError}</p>}
-        {!historyError && history.length === 0 && <p className="diag-result-empty">저장된 진단 기록이 없습니다.</p>}
-        <ul className="network-diagnostics-history-list">{history.map(item => <li className="network-diagnostics-history-item" key={item.id}>
-          <button className="network-diagnostics-history-open" type="button" onClick={() => openHistory(item)} disabled={loading}>
-            <strong>{item.target}</strong>
-            <span className="network-diagnostics-history-time">{formatTime(item.createdAt)} · 포트 {item.ports}</span>
-            <span className="network-diagnostics-history-snippet">{item.verdictSnippet}</span>
-          </button>
-          <button className="btn" type="button" onClick={() => rerun(item)} disabled={loading}>다시 진단</button>
-        </li>)}</ul>
-      </section>
-
       {error && <p role="alert" className="network-diagnostics-error">{error}</p>}
       {loading && <p className="diag-result-empty">DNS, TCP, HTTP 연결을 순서대로 확인하고 있습니다.</p>}
       {result && <div className="network-diagnostics-results" aria-live="polite">
@@ -111,6 +112,26 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
         </div>)}</div>
         <section className="network-diagnostics-verdict"><h3>진단 결과 / 원인</h3><p>{result.verdict}</p></section>
       </div>}
+
+      <section className="network-diagnostics-history" aria-label="진단 기록">
+        <button type="button" className="network-diagnostics-history-toggle" onClick={toggleHistory} aria-expanded={historyOpen}>
+          {historyOpen ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} 기록
+        </button>
+        {historyOpen && <>
+          {historyError && <p role="alert" className="network-diagnostics-error">{historyError}</p>}
+          {!historyError && historyLoaded && history.length === 0 && <p className="diag-result-empty">저장된 진단 기록이 없습니다.</p>}
+          {!historyError && !historyLoaded && <p className="diag-result-empty">기록을 불러오는 중…</p>}
+          <ul className="network-diagnostics-history-list">{history.map(item => <li className="network-diagnostics-history-item" key={item.id}>
+            <button className="network-diagnostics-history-open" type="button" onClick={() => openHistory(item)} disabled={loading}>
+              <strong>{item.target}</strong>
+              <span className="network-diagnostics-history-time">{formatTime(item.createdAt)} · 포트 {item.ports}</span>
+              <span className="network-diagnostics-history-snippet">{item.verdictSnippet}</span>
+            </button>
+            <button className="btn" type="button" onClick={() => rerun(item)} disabled={loading}>다시 진단</button>
+            <button className="diag-icon-button" type="button" aria-label="기록 삭제" onClick={() => void deleteHistory(item)} disabled={loading}><Trash2 size={14}/></button>
+          </li>)}</ul>
+        </>}
+      </section>
     </div></div>
   </PanelShell>
 }
