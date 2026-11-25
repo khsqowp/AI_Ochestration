@@ -180,7 +180,24 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
   // 방금 보낸 명령이 봇에 실제로 반영됐는지 nonce 로 추적한다 — POST 가 성공해도 그건 "control.json 에
   // 써졌다"는 뜻일 뿐, 봇이 그 다음 폴링 틱에 실제로 처리했는지는 별개다. consumedControlNonce 가 이
   // nonce 와 같아질 때까지 "처리 중"으로 표시하고, 같아지는 순간 잠깐 "처리 완료"를 보여준다.
-  const [pending, setPending] = useState<{ nonce: string; cmd: 'flatten' | 'enter' | 'rebalance'; since: number } | null>(null)
+  type Pending = { nonce: string; cmd: 'flatten' | 'enter' | 'rebalance'; since: number }
+  const storageKey = `trading-control-pending:${bot}`
+  const readStoredPending = (): Pending | null => {
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      return raw ? (JSON.parse(raw) as Pending) : null
+    } catch { return null }
+  }
+  const writeStoredPending = (value: Pending | null) => {
+    try {
+      if (value) window.localStorage.setItem(storageKey, JSON.stringify(value))
+      else window.localStorage.removeItem(storageKey)
+    } catch { /* storage unavailable — in-memory state still works for this tab */ }
+  }
+
+  // 명령 처리 대기 상태를 localStorage 에도 보관한다 — 새로고침하면 React state 는 사라지지만,
+  // 아직 처리 전인 명령에 "즉시 리밸런스" 버튼이 다시 떠서 중복으로 누르게 되면 안 된다.
+  const [pending, setPending] = useState<Pending | null>(readStoredPending)
   const [justDone, setJustDone] = useState<'flatten' | 'enter' | 'rebalance' | null>(null)
 
   const send = async (cmd: 'flatten' | 'enter' | 'rebalance') => {
@@ -191,7 +208,11 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
       const body = await res.json().catch(() => null) as { command?: { nonce?: string } } | null
       const nonce = body?.command?.nonce
       setConfirming(false)
-      if (nonce) setPending({ nonce, cmd, since: Date.now() })
+      if (nonce) {
+        const next = { nonce, cmd, since: Date.now() }
+        setPending(next)
+        writeStoredPending(next)
+      }
       onDone()
     } catch {
       setError('네트워크 오류')
@@ -203,11 +224,11 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
   useEffect(() => {
     if (!pending) return
     if (consumedControlNonce === pending.nonce) {
-      setPending(null); setJustDone(pending.cmd)
+      setPending(null); writeStoredPending(null); setJustDone(pending.cmd)
       const clear = window.setTimeout(() => setJustDone(null), 6000)
       return () => window.clearTimeout(clear)
     }
-    if (Date.now() - pending.since > CONTROL_CONFIRM_TIMEOUT_MS) { setPending(null); return }
+    if (Date.now() - pending.since > CONTROL_CONFIRM_TIMEOUT_MS) { setPending(null); writeStoredPending(null); return }
     const timer = window.setTimeout(onDone, CONTROL_POLL_MS)
     return () => window.clearTimeout(timer)
   }, [pending, consumedControlNonce, onDone])
