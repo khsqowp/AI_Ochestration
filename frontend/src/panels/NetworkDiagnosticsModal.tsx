@@ -1,11 +1,24 @@
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Activity, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
 import { useModalA11y } from '../hooks/useModalA11y'
 import { Note, TextInput } from '../payloads/shared'
 
-type DiagnosticStep = { id: string; success: boolean; detail: string }
+type DiagnosticStep = { id: string; success: boolean; detail: string; elapsedMs: number }
 type DiagnosticResult = { steps: DiagnosticStep[]; verdict: string }
+type HistoryItem = { id: string; target: string; ports: string; verdictSnippet: string; createdAt: string }
+
+const HISTORY_URL = '/api/diag/network-diagnose/history'
+
+function errorMessage(data: unknown, fallback: string) {
+  const record = (data ?? {}) as { message?: string; detail?: string }
+  return record.message ?? record.detail ?? fallback
+}
+
+function formatTime(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
 
 export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
@@ -14,22 +27,52 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
   const [proxy, setProxy] = useState('')
   const [timeoutSeconds, setTimeoutSeconds] = useState('10')
   const [result, setResult] = useState<DiagnosticResult | null>(null)
+  const [resultLabel, setResultLabel] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [history, setHistory] = useState<HistoryItem[]>([])
+  const [historyError, setHistoryError] = useState('')
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const loadHistory = useCallback(async () => {
+    try {
+      const response = await fetch(HISTORY_URL)
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(errorMessage(data, '기록을 불러오지 못했습니다.'))
+      setHistory(Array.isArray(data) ? data : [])
+      setHistoryError('')
+    } catch (reason) { setHistoryError(reason instanceof Error ? reason.message : '기록을 불러오지 못했습니다.') }
+  }, [])
+
+  useEffect(() => { void loadHistory() }, [loadHistory])
+
+  /** Shared runner for fresh, history-detail and rerun requests: fetch → show results or error. */
+  const run = async (request: () => Promise<Response>, label: string, refreshHistory: boolean) => {
     setLoading(true); setError(''); setResult(null)
     try {
-      const response = await fetch('/api/diag/network-diagnose', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target, ports, proxy: proxy.trim() || null, timeoutMs: Math.round(Number(timeoutSeconds) * 1000) }),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.message ?? data.detail ?? '진단 요청에 실패했습니다.')
-      setResult(data)
+      const response = await request()
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(errorMessage(data, '진단 요청에 실패했습니다.'))
+      setResult({ steps: data.steps, verdict: data.verdict })
+      setResultLabel(label)
+      if (refreshHistory) await loadHistory()
     } catch (reason) { setError(reason instanceof Error ? reason.message : '진단 요청에 실패했습니다.') }
     finally { setLoading(false) }
+  }
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    void run(() => fetch('/api/diag/network-diagnose', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target, ports, proxy: proxy.trim() || null, timeoutMs: Math.round(Number(timeoutSeconds) * 1000) }),
+    }), `${target.trim()} · ${ports || '80,443'}`, true)
+  }
+
+  const openHistory = (item: HistoryItem) => {
+    void run(() => fetch(`${HISTORY_URL}/${item.id}`), `${item.target} · ${item.ports} · 저장된 결과`, false)
+  }
+
+  const rerun = (item: HistoryItem) => {
+    void run(() => fetch(`${HISTORY_URL}/${item.id}/rerun`, { method: 'POST' }), `${item.target} · ${item.ports} · 재진단`, true)
   }
 
   return <PanelShell embedded={embedded} className="file-explorer tool-modal diag-modal" modalRef={modalRef}>
@@ -43,13 +86,28 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
         <TextInput label="시간 제한 (초)" value={timeoutSeconds} onChange={setTimeoutSeconds} placeholder="10"/>
         <button className="btn btn-primary" type="submit" disabled={loading || !target.trim()}>{loading ? '진단 중…' : '진단 시작'}</button>
       </form>
+
+      <section className="network-diagnostics-history" aria-label="진단 기록">
+        <h3>기록</h3>
+        {historyError && <p role="alert" className="network-diagnostics-error">{historyError}</p>}
+        {!historyError && history.length === 0 && <p className="diag-result-empty">저장된 진단 기록이 없습니다.</p>}
+        <ul className="network-diagnostics-history-list">{history.map(item => <li className="network-diagnostics-history-item" key={item.id}>
+          <button className="network-diagnostics-history-open" type="button" onClick={() => openHistory(item)} disabled={loading}>
+            <strong>{item.target}</strong>
+            <span className="network-diagnostics-history-time">{formatTime(item.createdAt)} · 포트 {item.ports}</span>
+            <span className="network-diagnostics-history-snippet">{item.verdictSnippet}</span>
+          </button>
+          <button className="btn" type="button" onClick={() => rerun(item)} disabled={loading}>다시 진단</button>
+        </li>)}</ul>
+      </section>
+
       {error && <p role="alert" className="network-diagnostics-error">{error}</p>}
       {loading && <p className="diag-result-empty">DNS, TCP, HTTP 연결을 순서대로 확인하고 있습니다.</p>}
       {result && <div className="network-diagnostics-results" aria-live="polite">
-        <h3>검사 단계</h3>
+        <h3>검사 단계{resultLabel && <span className="network-diagnostics-result-label"> · {resultLabel}</span>}</h3>
         <div className="network-diagnostics-list">{result.steps.map(step => <div className="network-diagnostics-step" key={step.id}>
           <span className={step.success ? 'network-diagnostics-status is-ok' : 'network-diagnostics-status is-fail'} aria-label={step.success ? '성공' : '실패'}>{step.success ? '성공' : '실패'}</span>
-          <div><strong>{step.id}</strong><p>{step.detail}</p></div>
+          <div><strong>{step.id}</strong> <span className="network-diagnostics-elapsed">{step.elapsedMs} ms</span><p>{step.detail}</p></div>
         </div>)}</div>
         <section className="network-diagnostics-verdict"><h3>진단 결과 / 원인</h3><p>{result.verdict}</p></section>
       </div>}
