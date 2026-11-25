@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Activity, ExternalLink, X } from 'lucide-react'
 import { PanelShell } from '../components/shared'
+import { useAppState } from '../context/AppState'
 import { useModalA11y } from '../hooks/useModalA11y'
 import { Note, TextInput } from '../payloads/shared'
 
@@ -16,6 +17,7 @@ type CvePocResult = {
 
 export function CvePocModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const modalRef = useModalA11y(!embedded, onClose ?? (() => {}))
+  const { isAdmin } = useAppState()
   const [query, setQuery] = useState('')
   const [includeAiSummary, setIncludeAiSummary] = useState(false)
   const [result, setResult] = useState<CvePocResult | null>(null)
@@ -28,7 +30,7 @@ export function CvePocModal({ onClose, embedded }: { onClose?: () => void; embed
     try {
       const response = await fetch('/api/diag/cve-poc', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cveId: query, includeAiSummary }),
+        body: JSON.stringify({ cveId: query, includeAiSummary: isAdmin && includeAiSummary }),
       })
       const data = await response.json() as CvePocResult
       if (!response.ok) throw new Error(data.error ?? 'CVE 조회에 실패했습니다.')
@@ -43,7 +45,7 @@ export function CvePocModal({ onClose, embedded }: { onClose?: () => void; embed
       <Note>NVD에서 CVE 존재 여부와 CVSS를 조회하고 공개 Exploit 참조를 표시합니다. PoC가 확인되지 않으면 찾지 못했다고 표시합니다.</Note>
       <form className="network-diagnostics-form" onSubmit={submit}>
         <TextInput label="CVE ID 또는 검색어" value={query} onChange={setQuery} placeholder="CVE-2021-44228"/>
-        <label className="diag-checkbox"><input type="checkbox" checked={includeAiSummary} onChange={event => setIncludeAiSummary(event.target.checked)}/> 참조 내용 기반 AI 요약</label>
+        {isAdmin && <label className="diag-checkbox"><input type="checkbox" checked={includeAiSummary} onChange={event => setIncludeAiSummary(event.target.checked)}/> 참조 내용 기반 AI 요약 (ADMIN 전용, API 비용 발생)</label>}
         <button className="btn btn-primary" type="submit" disabled={loading || !query.trim()}>{loading ? '조회 중…' : 'CVE 조회'}</button>
       </form>
       {error && <p role="alert" className="network-diagnostics-error">{error}</p>}
