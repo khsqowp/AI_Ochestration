@@ -2,7 +2,7 @@ import { type ComponentType, type CSSProperties } from 'react'
 import {
   AppWindow, Binary, Bomb, Bug, CloudCog, Compass, Crosshair, Database,
   FileCode2, FlaskConical, FolderSearch, GitBranch, GitCompare, History,
-  KeyRound, Layers, Network, Radar, SearchCheck, ServerCog, ServerCrash, ShieldAlert, SquareTerminal,
+  KeyRound, Layers, Network, Radar, SearchCheck, ServerCog, ServerCrash, SquareTerminal,
   Terminal, Wifi,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -68,9 +68,6 @@ export function DiagnosticsPage() {
           </Link>
           <Link className="diag-tile" to="/dashboard/diag/soft-404-analyzer">
             <SearchCheck size={20}/><span>Soft-404 응답 기준 분석</span>
-          </Link>
-          <Link className="diag-tile" to="/dashboard/diag/scope-redirect-linter">
-            <ShieldAlert size={20}/><span>범위·리다이렉트 사전 점검</span>
           </Link>
           <Link className="diag-tile" to="/dashboard/diag/xss-scout-console">
             <Bug size={20}/><span>XSS 콘솔 스캐너</span>

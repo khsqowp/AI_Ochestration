@@ -15,7 +15,6 @@ import { RouteTreeToolPage } from './RouteTreeToolPage'
 import { ROUTE_TREE_TOOLS } from '../route-tree-tools'
 import { CurlCommandModeToggle } from '../context/CurlCommandMode'
 import { Soft404AnalyzerModal } from '../panels/Soft404AnalyzerModal'
-import { ScopeRedirectLinterModal } from '../panels/ScopeRedirectLinterModal'
 import { useAppState } from '../context/AppState'
 
 const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
@@ -29,7 +28,6 @@ const SPECIAL: Record<string, ComponentType<{ embedded?: boolean }>> = {
   'network-diagnose': NetworkDiagnosticsModal,
   'cve-poc': CvePocModal,
   'soft-404-analyzer': Soft404AnalyzerModal,
-  'scope-redirect-linter': ScopeRedirectLinterModal,
 }
 
 export function DiagToolPage() {
