@@ -160,8 +160,10 @@ function RebalanceCountdown({ target }: { target: string | null | undefined }) {
 const CONTROL_CONFIRM_TIMEOUT_MS = 150000
 const CONTROL_POLL_MS = 3000
 
-/** 즉시 매도 / 즉시 진입 — 로테이션 봇 수동 제어. flat 이면 진입 버튼, 아니면 청산 버튼(2단계 확인). */
-function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatTs, nextRebalanceTs, consumedControlNonce, onDone }: {
+const CONTROL_CMD_LABEL: Record<'flatten' | 'enter' | 'rebalance', string> = { flatten: '청산', enter: '진입', rebalance: '리밸런스' }
+
+/** 즉시 매도 / 즉시 진입 / 즉시 리밸런스 — 로테이션 봇 수동 제어. flat 이면 진입 버튼, 아니면 청산 버튼(2단계 확인)과 리밸런스 버튼. */
+function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatTs, nextRebalanceTs, consumedControlNonce, allowRebalance, onDone }: {
   bot: 'momentum-rotation' | 'kr-rotation' | 'us-rotation'
   live?: boolean
   manualFlat?: boolean
@@ -169,6 +171,7 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
   manualFlatTs?: string | null
   nextRebalanceTs?: string | null
   consumedControlNonce?: string | null
+  allowRebalance?: boolean
   onDone: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
@@ -177,14 +180,14 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
   // 방금 보낸 명령이 봇에 실제로 반영됐는지 nonce 로 추적한다 — POST 가 성공해도 그건 "control.json 에
   // 써졌다"는 뜻일 뿐, 봇이 그 다음 폴링 틱에 실제로 처리했는지는 별개다. consumedControlNonce 가 이
   // nonce 와 같아질 때까지 "처리 중"으로 표시하고, 같아지는 순간 잠깐 "처리 완료"를 보여준다.
-  const [pending, setPending] = useState<{ nonce: string; cmd: 'flatten' | 'enter'; since: number } | null>(null)
-  const [justDone, setJustDone] = useState<'flatten' | 'enter' | null>(null)
+  const [pending, setPending] = useState<{ nonce: string; cmd: 'flatten' | 'enter' | 'rebalance'; since: number } | null>(null)
+  const [justDone, setJustDone] = useState<'flatten' | 'enter' | 'rebalance' | null>(null)
 
-  const send = async (cmd: 'flatten' | 'enter') => {
+  const send = async (cmd: 'flatten' | 'enter' | 'rebalance') => {
     setBusy(true); setError(''); setJustDone(null)
     try {
       const res = await fetch(`/api/trading/${bot}/${cmd}`, { method: 'POST', credentials: 'include' })
-      if (!res.ok) { setError(cmd === 'flatten' ? '청산 명령 전송 실패' : '진입 명령 전송 실패'); return }
+      if (!res.ok) { setError(`${CONTROL_CMD_LABEL[cmd]} 명령 전송 실패`); return }
       const body = await res.json().catch(() => null) as { command?: { nonce?: string } } | null
       const nonce = body?.command?.nonce
       setConfirming(false)
@@ -212,9 +215,9 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
   const fmt = (v: string) => new Date(v).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const locked = busy || !!pending
   const statusLine = pending
-    ? <p className="bot-control-status pending">⏳ {pending.cmd === 'flatten' ? '청산' : '진입'} 명령 처리 대기 중… 봇이 다음 폴링에 반영합니다(최대 2~3분 소요될 수 있음). 화면을 벗어나도 계속 진행됩니다.</p>
+    ? <p className="bot-control-status pending">⏳ {CONTROL_CMD_LABEL[pending.cmd]} 명령 처리 대기 중… 봇이 다음 폴링에 반영합니다(최대 2~3분 소요될 수 있음). 화면을 벗어나도 계속 진행됩니다.</p>
     : justDone
-      ? <p className="bot-control-status done">✓ {justDone === 'flatten' ? '청산' : '진입'} 처리 완료 — 아래 최근 로그와 포지션에 반영됐습니다.</p>
+      ? <p className="bot-control-status done">✓ {CONTROL_CMD_LABEL[justDone]} 처리 완료 — 아래 최근 로그와 포지션에 반영됐습니다.</p>
       : null
 
   if (manualFlat) {
@@ -244,8 +247,11 @@ function BotControlPanel({ bot, live, manualFlat, manualFlatPending, manualFlatT
         <button className="source-add danger" disabled={locked} onClick={() => send('flatten')}>{busy ? '전송 중…' : pending ? '처리 대기 중…' : '청산 확인'}</button>
       </div>
     </> : <>
-      <div><small>고점이라 판단되면 즉시 전량 청산하고 정지할 수 있습니다. 재진입은 진입 버튼 또는 다음 정기 리밸런스.</small></div>
-      <button className="source-cancel" disabled={locked} onClick={() => setConfirming(true)}>{pending ? '처리 대기 중…' : '즉시 매도'}</button>
+      <div><small>고점이라 판단되면 즉시 전량 청산하고 정지할 수 있습니다. 재진입은 진입 버튼 또는 다음 정기 리밸런스.{allowRebalance ? ' 리밸런스 시각까지 기다리지 않고 지금 랭킹으로 즉시 재구성할 수도 있습니다.' : ''}</small></div>
+      <div className="bot-control-actions">
+        {allowRebalance && <button className="source-add" disabled={locked} onClick={() => send('rebalance')}>{busy ? '전송 중…' : pending ? '처리 대기 중…' : '즉시 리밸런스'}</button>}
+        <button className="source-cancel" disabled={locked} onClick={() => setConfirming(true)}>{pending ? '처리 대기 중…' : '즉시 매도'}</button>
+      </div>
     </>}
     {statusLine}
     {error && <p className="form-error">{error}</p>}
@@ -590,7 +596,7 @@ export function MomentumRotationDashboard({ onClose, embedded }: { onClose?: () 
       <p>마지막 리밸런스: {data?.lastRebalanceTs ? fmt(data.lastRebalanceTs) : '아직 없음'}{data?.broker?.queriedTs ? ` · 잔고조회 ${fmt(data.broker.queriedTs)}` : ''}</p>
       {live && <p className="usage-note">고점(HWM) ${hwm.toFixed(2)} · 현재 낙폭 {(drawdown * 100).toFixed(1)}% (킬 35%, 디레버 없음)</p>}
     </div>
-    {data && !data.halted && <BotControlPanel bot="momentum-rotation" live={live}
+    {data && !data.halted && <BotControlPanel bot="momentum-rotation" live={live} allowRebalance
       manualFlat={data.broker?.manualFlat} manualFlatTs={data.broker?.manualFlatTs}
       nextRebalanceTs={data.nextRebalanceTs} consumedControlNonce={data.consumedControlNonce} onDone={load}/>}
     {data ? <>

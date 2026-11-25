@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 로테이션 봇 수동 제어 — 즉시 매도(flatten) / 즉시 진입(enter).
+ * 로테이션 봇 수동 제어 — 즉시 매도(flatten) / 즉시 진입(enter) / 즉시 리밸런스(rebalance).
  * {@code /api/trading/**} 는 SecurityConfig 에서 ADMIN 전용으로 고정돼 있다.
  * 명령은 공유 볼륨 control.json 에 적히고, 봇이 다음 폴링 틱(코인 5초 / 주식 10초)에 실행한다.
  */
@@ -36,6 +36,11 @@ public class TradingControlController {
   @PostMapping("/enter")
   public Map<String, Object> enter(@PathVariable String bot, @RequestBody(required = false) ControlRequest body) {
     return issue(bot, "enter", body);
+  }
+
+  @PostMapping("/rebalance")
+  public Map<String, Object> rebalance(@PathVariable String bot, @RequestBody(required = false) ControlRequest body) {
+    return issue(bot, "rebalance", body);
   }
 
   private Map<String, Object> issue(String bot, String cmd, ControlRequest body) {

@@ -9,6 +9,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * 로테이션 봇 수동 제어(즉시 매도/진입) 명령을 공유 볼륨의 control.json 에 쓴다.
+ * 로테이션 봇 수동 제어(즉시 매도/진입/리밸런스) 명령을 공유 볼륨의 control.json 에 쓴다.
  * 봇은 매 루프 틱마다 자기 슬롯을 읽고, 처리한 nonce 를 자기 상태파일에 기록해 재실행을 막는다.
  * 파일 한 개에 봇별 슬롯을 두므로, 쓸 때 기존 내용을 읽어 해당 슬롯만 교체한다.
  */
@@ -40,12 +41,14 @@ public class TradingControlWriter {
     this.objectMapper = objectMapper;
   }
 
-  /** cmd: "flatten" | "enter". 반환: 봇에 전달된 명령 슬롯. */
+  private static final Set<String> VALID_CMDS = Set.of("flatten", "enter", "rebalance");
+
+  /** cmd: "flatten" | "enter" | "rebalance". 반환: 봇에 전달된 명령 슬롯. */
   public synchronized Map<String, Object> issue(String bot, String cmd, String reason) throws IOException {
     if (!BOTS.containsKey(bot)) {
       throw new IllegalArgumentException("알 수 없는 봇: " + bot);
     }
-    if (!"flatten".equals(cmd) && !"enter".equals(cmd)) {
+    if (!VALID_CMDS.contains(cmd)) {
       throw new IllegalArgumentException("알 수 없는 명령: " + cmd);
     }
 
