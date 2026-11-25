@@ -22,14 +22,21 @@ import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -37,6 +44,12 @@ import javax.security.auth.x500.X500Principal;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.xbill.DNS.ARecord;
+import org.xbill.DNS.Lookup;
+import org.xbill.DNS.Name;
+import org.xbill.DNS.Record;
+import org.xbill.DNS.SimpleResolver;
+import org.xbill.DNS.Type;
 
 @Service
 class NetworkDiagnosticsService {
@@ -47,6 +60,17 @@ class NetworkDiagnosticsService {
   private static final String USER_AGENT = "Ochestration-NetworkDiagnostics/1.0 (+server-side connectivity check)";
   private static final Pattern ERROR_LINES = Pattern.compile("(?im)^.*(?:error|reason|timeout|failed|gateway|denied|failure|state).*$");
   private static final Pattern CN = Pattern.compile("(?:^|,)CN=((?:\\\\.|[^,])+)");
+  private static final Pattern IPV4_LITERAL = Pattern.compile("^\\d{1,3}(\\.\\d{1,3}){3}$");
+  /** 다른 통신사/퍼블릭 DNS에서만 생존 여부가 다르게 나오는 경우(특정 통신사 DNS 차단·스푸핑 등)를 잡기 위해
+   * 시스템 기본 리졸버와 별개로 직접 질의하는 공개·국내 통신사 리졸버 목록. */
+  private static final List<DnsResolverSpec> PUBLIC_DNS_RESOLVERS = List.of(
+      new DnsResolverSpec("google", "8.8.8.8"),
+      new DnsResolverSpec("cloudflare", "1.1.1.1"),
+      new DnsResolverSpec("quad9", "9.9.9.9"),
+      new DnsResolverSpec("opendns", "208.67.222.222"),
+      new DnsResolverSpec("kt", "168.126.63.1"),
+      new DnsResolverSpec("sk-broadband", "210.220.163.82"),
+      new DnsResolverSpec("lg-uplus", "164.124.101.2"));
 
   private final ObjectMapper json;
   private final NetworkDiagnosticRunRepository runs;
@@ -68,14 +92,18 @@ class NetworkDiagnosticsService {
     List<Step> steps = new ArrayList<>();
 
     long dnsStarted = System.nanoTime();
+    boolean dnsOk;
     try {
       List<String> addresses = resolveAndValidate(target.uri());
       steps.add(new Step("dns", true, "성공: " + String.join(" ", addresses), elapsedSince(dnsStarted)));
+      dnsOk = true;
     } catch (Exception exception) {
       if (exception instanceof SecurityException) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "대상이 사설·로컬 주소로 해석되어 차단했습니다.");
       steps.add(new Step("dns", false, "실패: 주소를 찾지 못함", elapsedSince(dnsStarted)));
-      return new Response(steps, verdictDns(target.host()));
+      dnsOk = false;
     }
+    steps.addAll(multiResolverDnsSteps(target.host(), timeout));
+    if (!dnsOk) return new Response(steps, verdictDns(target.host()));
 
     List<Boolean> tcpOk = new ArrayList<>();
     for (int port : ports) {
@@ -247,6 +275,75 @@ class NetworkDiagnosticsService {
     return matcher.find() ? matcher.group(1) : principal.getName();
   }
 
+  /** Resolves the host independently against several public/국내 통신사 DNS 리졸버 in parallel, plus a
+   * final 비교 단계 that flags when resolvers disagree (per-resolver DNS 차단/스푸핑 정황). Skipped for
+   * literal IP targets since there is nothing to resolve. */
+  private List<Step> multiResolverDnsSteps(String host, int timeoutMs) {
+    if (IPV4_LITERAL.matcher(host).matches() || host.contains(":")) return List.of();
+    int perResolverTimeoutMs = Math.min(timeoutMs, 4000);
+    List<CompletableFuture<ResolverOutcome>> futures = new ArrayList<>();
+    try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      for (DnsResolverSpec spec : PUBLIC_DNS_RESOLVERS) {
+        futures.add(CompletableFuture.supplyAsync(() -> resolveViaResolver(host, spec, perResolverTimeoutMs), executor));
+      }
+      List<ResolverOutcome> outcomes = futures.stream().map(CompletableFuture::join).toList();
+      List<Step> steps = new ArrayList<>();
+      for (ResolverOutcome outcome : outcomes) steps.add(new Step("dns-" + outcome.spec().name(), outcome.success(), outcome.detail(), outcome.elapsedMs()));
+      steps.add(dnsDivergenceStep(outcomes));
+      return steps;
+    }
+  }
+
+  private ResolverOutcome resolveViaResolver(String host, DnsResolverSpec spec, int timeoutMs) {
+    long started = System.nanoTime();
+    try {
+      SimpleResolver resolver = new SimpleResolver(spec.ip());
+      resolver.setTimeout(Duration.ofMillis(timeoutMs));
+      Lookup lookup = new Lookup(Name.fromString(host, Name.root), Type.A);
+      lookup.setResolver(resolver);
+      lookup.setCache(null);
+      Record[] answers = lookup.run();
+      if (lookup.getResult() == Lookup.SUCCESSFUL && answers != null) {
+        List<String> addresses = Arrays.stream(answers)
+            .filter(record -> record instanceof ARecord)
+            .map(record -> ((ARecord) record).getAddress().getHostAddress())
+            .distinct().toList();
+        String detail = spec.ip() + " · " + (addresses.isEmpty() ? "응답은 받았지만 A 레코드 없음" : "성공: " + String.join(" ", addresses));
+        return new ResolverOutcome(spec, !addresses.isEmpty(), addresses, detail, elapsedSince(started));
+      }
+      String reason = switch (lookup.getResult()) {
+        case Lookup.HOST_NOT_FOUND -> "NXDOMAIN (해당 DNS는 존재하지 않는 도메인으로 응답)";
+        case Lookup.TYPE_NOT_FOUND -> "A 레코드 없음";
+        case Lookup.TRY_AGAIN -> "서버 응답 지연/일시 오류";
+        case Lookup.UNRECOVERABLE -> "조회 불가(설정 오류)";
+        default -> lookup.getErrorString();
+      };
+      return new ResolverOutcome(spec, false, List.of(), spec.ip() + " · 실패: " + reason, elapsedSince(started));
+    } catch (Exception exception) {
+      return new ResolverOutcome(spec, false, List.of(), spec.ip() + " · 실패/시간초과: " + shortError(exception), elapsedSince(started));
+    }
+  }
+
+  private Step dnsDivergenceStep(List<ResolverOutcome> outcomes) {
+    long started = System.nanoTime();
+    List<ResolverOutcome> succeeded = outcomes.stream().filter(ResolverOutcome::success).toList();
+    if (succeeded.size() < 2) {
+      return new Step("dns-compare", !succeeded.isEmpty(),
+          "비교할 성공 응답이 2개 미만입니다(" + succeeded.size() + "/" + outcomes.size() + " 개 리졸버 성공).", elapsedSince(started));
+    }
+    Map<TreeSet<String>, List<String>> byAddresses = new LinkedHashMap<>();
+    for (ResolverOutcome outcome : succeeded) byAddresses.computeIfAbsent(new TreeSet<>(outcome.addresses()), key -> new ArrayList<>()).add(outcome.spec().name());
+    if (byAddresses.size() <= 1) {
+      return new Step("dns-compare", true, succeeded.size() + "개 DNS 리졸버 전체가 동일한 주소로 응답했습니다. 리졸버별 DNS 차단/스푸핑 정황 없음.", elapsedSince(started));
+    }
+    String breakdown = byAddresses.entrySet().stream()
+        .map(entry -> String.join(",", entry.getValue()) + "=" + String.join(" ", entry.getKey()))
+        .collect(Collectors.joining(" / "));
+    return new Step("dns-compare", false,
+        "DNS 리졸버별 응답 주소가 다릅니다: " + breakdown + ". CDN/GeoDNS의 정상적인 리전별 분산일 수도 있으나, 특정 통신사·퍼블릭 DNS에서만 다른 주소(특히 사설 IP나 차단 안내 페이지 IP)로 응답한다면 해당 리졸버의 DNS 차단·스푸핑 가능성이 있습니다.",
+        elapsedSince(started));
+  }
+
   private List<String> resolveAndValidate(URI uri) throws Exception {
     List<String> result = new ArrayList<>();
     for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
@@ -377,6 +474,8 @@ class NetworkDiagnosticsService {
   record RunDetail(UUID id, String target, String ports, String proxy, int timeoutMs, List<Step> steps, String verdict, Instant createdAt) {}
   private record ProxySpec(String host, int port) {}
   private record HttpProbe(int status, String detail) {}
+  private record DnsResolverSpec(String name, String ip) {}
+  private record ResolverOutcome(DnsResolverSpec spec, boolean success, List<String> addresses, String detail, long elapsedMs) {}
   /** attempted=false means TCP failed so no handshake was tried; success is handshakeOk && !certWarning. */
   private record TlsCheck(int port, boolean attempted, boolean handshakeOk, boolean success, boolean certWarning, String detail, String certSummary) {
     static TlsCheck skipped(int port) { return new TlsCheck(port, false, false, false, false, "TCP 연결 실패로 TLS 점검 생략", ""); }
