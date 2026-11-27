@@ -44,3 +44,6 @@ backup-obsidian-migration/
 /trading/docs/research/rebal_loop/B/.nbc/
 trading/docs/research/aw1/
 trading/docs/research/aw2/raw/
+
+# graphify knowledge-graph output
+/graphify-out/
