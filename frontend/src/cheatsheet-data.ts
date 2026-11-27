@@ -159,6 +159,8 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
       },
       { id: 'json-xml-formatter', name: 'JSON/XML 포맷터', base: '', options: [],
         note: 'JSON 또는 XML을 붙여넣으면 형식을 자동 감지해 들여쓰기/줄바꿈합니다. 입력·결과 박스 안에서 Cmd/Ctrl+F로 박스 내부만 검색할 수 있습니다.' },
+      { id: 'request-to-curl', name: 'HTTP 요청 → curl 변환', base: '', options: [],
+        note: 'Burp 등의 raw HTTP 요청을 실행 가능한 curl 명령어로 변환합니다.' },
       {
         id: 'rainbow-crack', name: '레인보우 테이블 크랙', base: '', options: [],
         note: '해시값만 넣으면 내장 사전으로 크랙을 시도하고, 원본값을 넣으면 MD5/SHA1/SHA256/SHA384/SHA512 를 계산합니다(해시값을 같이 넣으면 일치 여부 검증). 전부 브라우저 안에서만 계산됩니다.',
