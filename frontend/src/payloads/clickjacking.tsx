@@ -34,7 +34,10 @@ export function ClickjackingPoCBuilder() {
             key={target}
             src={target}
             className="clickjacking-preview-frame"
-            sandbox=""
+            // allow-scripts만 허용 — allow-same-origin을 주지 않아 대상 페이지가 이 사이트의 top-level을
+            // 탐색하거나 쿠키/스토리지에 접근하지 못하게 격리한다. sandbox=""(전체 차단)였을 때는 SPA
+            // 대상이 JS 없이 렌더링을 못 해 "클릭재킹 방어됨"처럼 보이는 오탐을 유발했다.
+            sandbox="allow-scripts"
             referrerPolicy="no-referrer"
             title="Clickjacking PoC 미리보기"
           />
