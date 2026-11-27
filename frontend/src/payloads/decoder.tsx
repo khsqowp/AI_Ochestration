@@ -57,6 +57,18 @@ const unicodeEscape = (s: string) => Array.from(s).map(c => {
   return cp < 128 ? c : cp > 0xffff ? `\\u{${cp.toString(16)}}` : `\\u${cp.toString(16).padStart(4, '0')}`
 }).join('')
 
+export function legacyUnicodeEscapeDecode(s: string): string {
+  return s.replace(/%u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+}
+const legacyUnicodeEscapeEncode = (s: string) => {
+  let encoded = ''
+  for (let i = 0; i < s.length; i++) {
+    const codeUnit = s.charCodeAt(i)
+    encoded += codeUnit < 128 ? s[i] : `%u${codeUnit.toString(16).toUpperCase().padStart(4, '0')}`
+  }
+  return encoded
+}
+
 const rot13 = (s: string) => s.replace(/[a-zA-Z]/g, c => {
   const base = c <= 'Z' ? 65 : 97
   return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base)
@@ -105,6 +117,11 @@ function detectStep(input: string, overrideCharset?: Charset): Step | null {
   const s = input
   const jwt = jwtStep(s)
   if (jwt) return jwt
+
+  if (/%u[0-9a-fA-F]{4}/i.test(s)) {
+    const d = legacyUnicodeEscapeDecode(s)
+    if (d !== s) return { label: 'URL 인코딩 (%u, 레거시)', decoded: d, reencode: e => legacyUnicodeEscapeEncode(e) }
+  }
 
   if (/%[0-9a-fA-F]{2}/.test(s)) {
     const bytes = percentDecodeToBytes(s.replace(/\+/g, ' '))
@@ -247,6 +264,7 @@ export const ALL_DECODERS: [string, (s: string) => string][] = [
   ['Hex (EUC-KR)', s => decodeBytesWithCharset(hexDecodeToBytes(s), 'euc-kr')],
   ['EUC-KR', euckrDecode],
   ['Unicode escape', unicodeUnescape],
+  ['URL 디코딩 (%u, 레거시)', legacyUnicodeEscapeDecode],
   ['ROT13', rot13],
 ]
 const ALL_ENCODERS: [string, (s: string) => string][] = [
@@ -264,6 +282,7 @@ const ALL_ENCODERS: [string, (s: string) => string][] = [
   ['EUC-KR', euckrEncode],
   ['ROT13', rot13],
   ['Unicode escape', unicodeEscape],
+  ['URL 인코딩 (%u, 레거시)', legacyUnicodeEscapeEncode],
 ]
 
 function Row({ name, value }: { name: string; value: string }) {
