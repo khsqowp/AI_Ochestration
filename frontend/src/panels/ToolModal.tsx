@@ -11,6 +11,7 @@ import { SsrfPayloadBuilder } from '../payloads/ssrf'
 import { CsrfPayloadBuilder } from '../payloads/csrf'
 import { SmartDecoderBuilder } from '../payloads/decoder'
 import { SmartDecoderTreeBuilder } from '../payloads/decoderTree'
+import { JsonXmlFormatterBuilder } from '../payloads/jsonXmlFormatter'
 import { RainbowTableBuilder } from '../payloads/rainbow'
 import { ClickjackingPoCBuilder } from '../payloads/clickjacking'
 import { AdvancedPayloadBuilder } from '../payloads/advancedPayloads'
@@ -47,6 +48,7 @@ const PAYLOAD_BUILDERS: Record<string, ComponentType> = {
   'csrf-payloads': CsrfPayloadBuilder,
   'smart-decoder': SmartDecoderBuilder,
   'smart-decoder-tree': SmartDecoderTreeBuilder,
+  'json-xml-formatter': JsonXmlFormatterBuilder,
   'rainbow-crack': RainbowTableBuilder,
   'clickjacking-poc': ClickjackingPoCBuilder,
   'advanced-payloads': AdvancedPayloadBuilder,
@@ -98,7 +100,7 @@ export function ToolModal({ tool, onClose, embedded }: { tool: CheatSheetTool; o
   const relatedTools = relatedIds.includes(tool.id) ? CHEATSHEET_CATEGORIES.flatMap(category => category.tools).filter(item => relatedIds.includes(item.id) && item.id !== tool.id) : []
   const confirmNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
     const fields = builderRef.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-      '.decoder-input-pane textarea, .dectree-input-pane textarea, .jwt-layout textarea, .rainbow-mode-pane textarea, .payload-builder input.payload-builder-input:not([type=number])'
+      '.decoder-input-pane textarea, .dectree-input-pane textarea, .fmt-input-pane textarea, .jwt-layout textarea, .rainbow-mode-pane textarea, .payload-builder input.payload-builder-input:not([type=number])'
     )
     if (fields && Array.from(fields).some(field => field.value.trim()) && !window.confirm('입력한 내용이 사라집니다. 이동할까요?')) event.preventDefault()
   }

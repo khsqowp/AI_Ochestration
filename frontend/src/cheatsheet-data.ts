@@ -157,6 +157,8 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         id: 'smart-decoder-tree', name: '스마트 디코더 (트리)', base: '', options: [],
         note: '복합 인코딩(이중 인코딩, base64 안에 hex 등)을 한 가지로 단정하지 않고 가능한 모든 디코딩 경로를 트리로 펼쳐서 보여줍니다. 평문처럼 보이는 가지를 강조 표시합니다. 기존 "스마트 디코더"는 한 가지 최적 경로만 보여주는 단순한 버전으로 그대로 유지됩니다 — 용도에 따라 골라 쓰세요.',
       },
+      { id: 'json-xml-formatter', name: 'JSON/XML 포맷터', base: '', options: [],
+        note: 'JSON 또는 XML을 붙여넣으면 형식을 자동 감지해 들여쓰기/줄바꿈합니다. 입력·결과 박스 안에서 Cmd/Ctrl+F로 박스 내부만 검색할 수 있습니다.' },
       {
         id: 'rainbow-crack', name: '레인보우 테이블 크랙', base: '', options: [],
         note: '해시값만 넣으면 내장 사전으로 크랙을 시도하고, 원본값을 넣으면 MD5/SHA1/SHA256/SHA384/SHA512 를 계산합니다(해시값을 같이 넣으면 일치 여부 검증). 전부 브라우저 안에서만 계산됩니다.',
