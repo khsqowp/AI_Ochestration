@@ -103,7 +103,7 @@ class NetworkDiagnosticsService {
       dnsOk = false;
     }
     steps.addAll(multiResolverDnsSteps(target.host(), timeout));
-    if (!dnsOk) return new Response(steps, verdictDns(target.host()));
+    if (!dnsOk) return new Response(steps, verdictDns(target.host()), null, false, "Alt-Svc 미관측");
 
     List<Boolean> tcpOk = new ArrayList<>();
     for (int port : ports) {
@@ -156,7 +156,13 @@ class NetworkDiagnosticsService {
       sanityOk = sanity.status() != 0;
       steps.add(new Step("proxy-sanity", sanityOk, sanityOk ? "프록시 일반 인터넷 점검 성공: HTTP " + sanity.status() : "프록시 일반 인터넷 점검 실패/시간초과: " + sanity.detail(), elapsedSince(sanityStarted)));
     }
-    return new Response(steps, verdict(target, ports, direct, proxied, proxy != null, sanityOk, tunnel, tcpOk, tls));
+    boolean tlsSucceeded = tls.stream().anyMatch(TlsCheck::handshakeOk);
+    Boolean http2 = tlsSucceeded ? tls.stream().anyMatch(check -> "h2".equals(check.applicationProtocol())) : null;
+    boolean http3 = direct.stream().anyMatch(probe -> probe.altSvc().toLowerCase(Locale.ROOT).contains("h3"));
+    String http3Detail = http3 ? "HTTP/3 지원 가능성 있음(Alt-Svc 헤더 관측; 실제 QUIC 핸드셰이크로 검증된 것 아님)" : "Alt-Svc h3 미관측(HTTP/3 미지원의 증거는 아님)";
+    steps.add(new Step("http2-alpn", tlsSucceeded && Boolean.TRUE.equals(http2), tls.isEmpty() ? "HTTPS 포트 없음: ALPN 확인 불가" : !tlsSucceeded ? "TLS 핸드셰이크 실패: ALPN 확인 불가" : http2 ? "ALPN h2 협상 성공: HTTP/2 지원 확인" : "TLS 성공, h2 미협상: HTTP/2 미확인", 0));
+    steps.add(new Step("http3-alt-svc", true, http3Detail, 0));
+    return new Response(steps, verdict(target, ports, direct, proxied, proxy != null, sanityOk, tunnel, tcpOk, tls), http2, http3, http3Detail);
   }
 
   /** Runs a diagnosis and stores it in the caller's history. */
@@ -230,13 +236,14 @@ class NetworkDiagnosticsService {
         int status = response.statusCode();
         String snippet = status >= 400 ? matchingLines(new String(response.body(), StandardCharsets.UTF_8)) : "";
         String detail = "HTTP " + status + (snippet.isBlank() ? "" : " · 오류 본문 관련 부분: " + snippet);
-        if (status < 300 || status >= 400) return new HttpProbe(status, detail);
+        String altSvc = response.headers().firstValue("alt-svc").orElse("");
+        if (status < 300 || status >= 400) return new HttpProbe(status, detail, altSvc);
         URI location = response.headers().firstValue("location").map(current::resolve).orElseThrow(() -> new IOException("redirect response without a Location header"));
         current = location;
       }
-      return new HttpProbe(0, "실패: 리다이렉트 한도 초과(>" + MAX_REDIRECTS + ")");
+      return new HttpProbe(0, "실패: 리다이렉트 한도 초과(>" + MAX_REDIRECTS + ")", "");
     } catch (Exception exception) {
-      return new HttpProbe(0, "실패/시간초과: " + shortError(exception));
+      return new HttpProbe(0, "실패/시간초과: " + shortError(exception), "");
     }
   }
 
@@ -248,6 +255,9 @@ class NetworkDiagnosticsService {
       SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
       try (SSLSocket ssl = (SSLSocket) factory.createSocket(plain, host, port, true)) {
         ssl.setSoTimeout(timeoutMs);
+        javax.net.ssl.SSLParameters parameters = ssl.getSSLParameters();
+        parameters.setApplicationProtocols(new String[] {"h2", "http/1.1"});
+        ssl.setSSLParameters(parameters);
         ssl.startHandshake();
         SSLSession session = ssl.getSession();
         X509Certificate leaf = (X509Certificate) session.getPeerCertificates()[0];
@@ -260,13 +270,14 @@ class NetworkDiagnosticsService {
             + " · 발급자 CN=" + commonName(leaf.getIssuerX500Principal())
             + " · 만료 " + notAfter
             + (expired ? " (만료됨)" : " (" + daysLeft + "일 남음)");
-        String detail = "TLS 핸드셰이크 성공 · " + session.getProtocol() + " · " + session.getCipherSuite() + " · " + certText;
+        String applicationProtocol = ssl.getApplicationProtocol();
+        String detail = "TLS 핸드셰이크 성공 · ALPN " + (applicationProtocol.isBlank() ? "미협상" : applicationProtocol) + " · " + session.getProtocol() + " · " + session.getCipherSuite() + " · " + certText;
         if (expired) detail += " · 경고: 인증서가 만료되었습니다";
         else if (certWarning) detail += " · 경고: " + CERT_WARN_DAYS + "일 이내 만료 예정";
-        return new TlsCheck(port, true, true, !certWarning, certWarning, detail, expired ? "인증서 만료됨" : "인증서 " + daysLeft + "일 후 만료");
+        return new TlsCheck(port, true, true, !certWarning, certWarning, detail, expired ? "인증서 만료됨" : "인증서 " + daysLeft + "일 후 만료", applicationProtocol);
       }
     } catch (Exception exception) {
-      return new TlsCheck(port, true, false, false, false, "TLS 핸드셰이크 실패: " + shortError(exception), "");
+      return new TlsCheck(port, true, false, false, false, "TLS 핸드셰이크 실패: " + shortError(exception), "", "");
     }
   }
 
@@ -469,16 +480,16 @@ class NetworkDiagnosticsService {
 
   record Request(String target, String ports, Integer timeoutMs, String proxy) {}
   record Step(String id, boolean success, String detail, long elapsedMs) {}
-  record Response(List<Step> steps, String verdict) {}
+  record Response(List<Step> steps, String verdict, Boolean http2Supported, boolean http3Possible, String http3Detail) {}
   record RunSummary(UUID id, String target, String ports, String verdictSnippet, Instant createdAt) {}
   record RunDetail(UUID id, String target, String ports, String proxy, int timeoutMs, List<Step> steps, String verdict, Instant createdAt) {}
   private record ProxySpec(String host, int port) {}
-  private record HttpProbe(int status, String detail) {}
+  private record HttpProbe(int status, String detail, String altSvc) {}
   private record DnsResolverSpec(String name, String ip) {}
   private record ResolverOutcome(DnsResolverSpec spec, boolean success, List<String> addresses, String detail, long elapsedMs) {}
   /** attempted=false means TCP failed so no handshake was tried; success is handshakeOk && !certWarning. */
-  private record TlsCheck(int port, boolean attempted, boolean handshakeOk, boolean success, boolean certWarning, String detail, String certSummary) {
-    static TlsCheck skipped(int port) { return new TlsCheck(port, false, false, false, false, "TCP 연결 실패로 TLS 점검 생략", ""); }
+  private record TlsCheck(int port, boolean attempted, boolean handshakeOk, boolean success, boolean certWarning, String detail, String certSummary, String applicationProtocol) {
+    static TlsCheck skipped(int port) { return new TlsCheck(port, false, false, false, false, "TCP 연결 실패로 TLS 점검 생략", "", ""); }
   }
   private record Target(String host, int port, String scheme, boolean explicitScheme) {
     URI uri() { return requestUri(port > 0 ? port : scheme.equals("https") ? 443 : 80); }

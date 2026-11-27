@@ -161,6 +161,9 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         note: 'JSON 또는 XML을 붙여넣으면 형식을 자동 감지해 들여쓰기/줄바꿈합니다. 입력·결과 박스 안에서 Cmd/Ctrl+F로 박스 내부만 검색할 수 있습니다.' },
       { id: 'request-to-curl', name: 'HTTP 요청 → curl 변환', base: '', options: [],
         note: 'Burp 등의 raw HTTP 요청을 실행 가능한 curl 명령어로 변환합니다.' },
+      { id: 'graphql-introspection', name: 'GraphQL 쿼리 생성기', base: '', options: [], note: 'Introspection JSON 또는 SDL에서 Query/Mutation 템플릿을 생성합니다. 브라우저 내에서만 처리됩니다.' },
+      { id: 'saml-analyzer', name: 'SAML 디코더 / XSW 테스트', base: '', options: [], note: 'SAMLResponse를 디코딩하고 서명 검증 테스트용 XSW 변형을 만듭니다.' },
+      { id: 'wsdl-to-soap', name: 'WSDL → SOAP 생성기', base: '', options: [], note: 'WSDL operation에서 SOAP 1.1/1.2 요청 envelope를 생성합니다.' },
       {
         id: 'rainbow-crack', name: '레인보우 테이블 크랙', base: '', options: [],
         note: '해시값만 넣으면 내장 사전으로 크랙을 시도하고, 원본값을 넣으면 MD5/SHA1/SHA256/SHA384/SHA512 를 계산합니다(해시값을 같이 넣으면 일치 여부 검증). 전부 브라우저 안에서만 계산됩니다.',

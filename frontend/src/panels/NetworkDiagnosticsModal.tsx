@@ -5,7 +5,7 @@ import { useModalA11y } from '../hooks/useModalA11y'
 import { Note, TextInput } from '../payloads/shared'
 
 type DiagnosticStep = { id: string; success: boolean; detail: string; elapsedMs: number }
-type DiagnosticResult = { steps: DiagnosticStep[]; verdict: string }
+type DiagnosticResult = { steps: DiagnosticStep[]; verdict: string; http2Supported?: boolean | null; http3Possible?: boolean; http3Detail?: string }
 type HistoryItem = { id: string; target: string; ports: string; verdictSnippet: string; createdAt: string }
 
 const HISTORY_URL = '/api/diag/network-diagnose/history'
@@ -67,7 +67,10 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
       const response = await request()
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(errorMessage(data, '진단 요청에 실패했습니다.'))
-      setResult({ steps: data.steps, verdict: data.verdict })
+      const steps = Array.isArray(data.steps) ? data.steps : []
+      const http2Step = steps.find((step: DiagnosticStep) => step.id === 'http2-alpn')
+      const http3Step = steps.find((step: DiagnosticStep) => step.id === 'http3-alt-svc')
+      setResult({ steps, verdict: data.verdict, http2Supported: data.http2Supported ?? (http2Step ? http2Step.success : null), http3Possible: data.http3Possible, http3Detail: data.http3Detail ?? http3Step?.detail })
       setResultLabel(label)
       if (refreshHistory) { if (historyOpen) await loadHistory(); else setHistoryLoaded(false) }
     } catch (reason) { setError(reason instanceof Error ? reason.message : '진단 요청에 실패했습니다.') }
@@ -106,6 +109,7 @@ export function NetworkDiagnosticsModal({ onClose, embedded }: { onClose?: () =>
       {loading && <p className="diag-result-empty">DNS, TCP, HTTP 연결을 순서대로 확인하고 있습니다.</p>}
       {result && <div className="network-diagnostics-results" aria-live="polite">
         <h3>검사 단계{resultLabel && <span className="network-diagnostics-result-label"> · {resultLabel}</span>}</h3>
+        <section className="network-diagnostics-verdict"><h3>HTTP 프로토콜</h3><p>HTTP/2: {result.http2Supported == null ? '확인 불가' : result.http2Supported ? 'ALPN h2 협상 확인' : 'ALPN h2 미협상'}</p><p>HTTP/3: {result.http3Detail ?? 'Alt-Svc 미관측'}</p></section>
         <div className="network-diagnostics-list">{result.steps.map(step => <div className="network-diagnostics-step" key={step.id}>
           <span className={step.success ? 'network-diagnostics-status is-ok' : 'network-diagnostics-status is-fail'} aria-label={step.success ? '성공' : '실패'}>{step.success ? '성공' : '실패'}</span>
           <div><strong>{step.id}</strong> <span className="network-diagnostics-elapsed">{step.elapsedMs} ms</span><p>{step.detail}</p></div>
