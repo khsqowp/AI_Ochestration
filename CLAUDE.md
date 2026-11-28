@@ -4,11 +4,11 @@
 
 ## ⚠️ 거래·연구는 이 저장소의 일이 아니다 (사용자 절대 규칙, 2026-11-22)
 
-- **모든 코인/주식 거래 로직·전략 연구·백테스트·거래 봇 컨테이너 정의는 `/Users/user/CODE/Coin_Trade` 에서만** 만든다(서버에도 별도로 둔다). 이 저장소(Ochestration)는 사용자의 사이트(보안·사이트 목적) 전용이다.
+- **모든 코인/주식 거래 로직·전략 연구·백테스트·거래 봇 컨테이너 정의·시장 데이터는 리눅스 서버 `/home/noroot/CODE/Coin_Trade` 에서만** 만든다(2026-11-28부터 Mac 에는 Coin_Trade 가 없다. `ssh linuxserver`). 이 저장소(Ochestration)는 사용자의 사이트(보안·사이트 목적) 전용이다.
 - 사이트는 거래 상태를 조회하고 조작(매도·재진입 요청 등)을 보낼 수는 있지만, 거래 컨테이너는 Coin_Trade 의 별도 compose 프로젝트다. 사이트 재배포가 거래 봇에 영향을 주면 안 된다.
 - 아래 본문에 나오는 `trading/` 설명은 이전 구조의 기록이다. 이전 절차: `Coin_Trade/docs/SERVER_CUTOVER.md`(서버 이전 전까지 서버의 `trading/`·`docker-compose.trading.yml` 은 그대로 둔다).
 - 거래/연구 파일을 이 저장소에 새로 만들지 않는다.
-- **`/Users/user/CODE/` 루트에도 투자 관련 새 폴더를 만들지 않는다.** 모든 저장 규칙: `/Users/user/CODE/Coin_Trade/docs/STORAGE_RULES.md`.
+- **`/Users/user/CODE/` 루트에도 투자 관련 새 폴더를 만들지 않는다.** 모든 저장 규칙: 서버 `/home/noroot/CODE/Coin_Trade/docs/STORAGE_RULES.md`. Mac 의 `/Users/user/CODE/` 에 Coin_Trade·trading_data 를 만들지 않는다.
 
 ## 이 저장소는 무엇인가
 
