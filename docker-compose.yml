@@ -88,7 +88,7 @@ services:
       - trading_momentum_rotation_state:/workspace/trading-state-momentum-rotation:ro
       - trading_trx_swing_state:/workspace/trading-state-trx:ro
       - trading_coin_swing6_state:/workspace/trading-state-coin-swing6:ro
-      - ./trading-crypto-paper-state:/workspace/crypto-paper-state:ro
+      - ${TRADING_STATE_DIR:-.}/trading-crypto-paper-state:/workspace/crypto-paper-state:ro
       - trading_kr_rotation_state:/workspace/trading-state-kr-rotation:ro
       - trading_us_rotation_state:/workspace/trading-state-us-rotation:ro
       - trading_control:/workspace/trading-control
