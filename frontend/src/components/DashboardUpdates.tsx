@@ -8,6 +8,15 @@ type UpdateGroup = {
 // Public-facing product updates, kept separate from private task execution history.
 const updates: UpdateGroup[] = [
   {
+    date: '2026-11-28',
+    items: [
+      '진단 도구에 GraphQL 쿼리 생성기, SAML 디코더/XSW 테스트, WSDL→SOAP 생성기, HTTP/2·HTTP/3 지원 여부 점검 추가',
+      '취약 JavaScript 라이브러리 탐지 도구 추가 (내장 DB 최종 업데이트 2026-11-28 기준, 참고용)',
+      '스마트 디코더에 Base32/58, Ascii85, Quoted-Printable, UTF-7/16, Punycode, ROT47, 8진·10진 escape, Base36, 단일 바이트 XOR 자동 추정 등 인코딩 종류 대폭 확충',
+      '1920×1080 기준 페이지 여백이 과도하게 커지는 문제 수정 (주문/웹훅/피드백/토론/아카이브/오마카세 등)',
+    ],
+  },
+  {
     date: '2026-11-23',
     items: [
       '진단 도구에 CDN 캐시 비교, 응답 헤더 기술 단서, 배포 산출물 경로, DNS 위임·DNSSEC 점검, Metasploit 사전조건 검토 추가',

@@ -465,7 +465,7 @@
 .page { width:100%; margin-inline:auto; padding:18px clamp(14px, 2.2vw, 34px) 22px;
         display:flex; flex-direction:column; gap:16px; }
 /* 텍스트 위주 토론 패널은 읽기 좋은 폭으로 제한 */
-.page.debate-page { max-width:1180px; }
+.page.debate-page { max-width:min(1180px, 94vw); }
 .cheatsheet-quick-starts { display:flex; flex-direction:column; gap:10px; margin:2px 0 8px; padding:12px; border:1px solid #ded9f1; border-radius:12px; background:#faf9ff; }.cheatsheet-quick-starts > div { display:flex; flex-direction:column; gap:3px; }.cheatsheet-quick-starts > div > b { color:#403778; font-size:13px; }.cheatsheet-quick-starts > div > small { color:#716a85; font-size:11.5px; line-height:1.45; }.cheatsheet-quick-starts article { padding:11px; border:1px solid #e6e2f4; border-radius:12px; background:#fff; }.cheatsheet-quick-starts article header { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }.cheatsheet-quick-starts article strong { font-size:12.5px; color:#403b4a; }.cheatsheet-quick-starts article header p,.cheatsheet-quick-starts article > p { margin:3px 0 0; color:#6f6977; font-size:11.5px; line-height:1.5; }.cheatsheet-quick-starts article button { display:flex; align-items:center; gap:4px; border:0; border-radius:8px; padding:6px 8px; background:#eeecfc; color:#5d50ba; font-size:11px; font-weight:750; cursor:pointer; }.cheatsheet-quick-starts article pre { overflow-x:auto; margin:9px 0 7px; padding:9px; border-radius:8px; background:#27242d; color:#f7f4fb; font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }.cheatsheet-quick-starts .cheatsheet-caution { color:#8c5613; }.cheatsheet-options-title { margin:8px 0 2px; color:#514a61; font-size:13px; }
 
 /* ── 뷰포트 높이에 고정 — 스크롤은 각 구역 내부에서만 ─────────── */
@@ -511,7 +511,7 @@
 .invest-tabs a small { font-size:9.5px; color:#6f6977; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
 .invest-tabs a.active { background:#eeecfc; color:#4e43a5; }
 .invest-tabs a.active small { color:#8478c8; }
-.feedback-page { max-width:1100px; margin-inline:auto; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
+.feedback-page { max-width:min(1100px, 94vw); margin-inline:auto; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
 .feedback-header, .feedback-list-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .feedback-header h1 { margin:2px 0 5px; font-size:26px; }
 .feedback-header p:not(.eyebrow) { margin:0; color:#777281; font-size:13px; }
@@ -708,7 +708,7 @@
   font-weight:700; letter-spacing:.16em; text-decoration:none; transition:background .15s, border-color .15s; }
 .landing-order-link:hover { background:rgba(118,103,220,.18); border-color:rgba(157,141,255,.7); color:#fff; }
 
-.order-page { max-width:1100px; margin:0 auto; padding:32px 24px 64px; display:flex; flex-direction:column; gap:20px; }
+.order-page { max-width:min(1100px, 94vw); margin:0 auto; padding:32px clamp(16px, 2vw, 24px) 64px; display:flex; flex-direction:column; gap:20px; }
 .order-head h1 { margin:12px 0 6px; font-size:26px; }
 .order-back { display:inline-flex; align-items:center; gap:8px; color:#7667dc; font-weight:700; font-size:13px; text-decoration:none; }
 .order-intro { color:#6f6977; font-size:13px; max-width:60ch; }
@@ -719,7 +719,7 @@
 .order-btn { padding:9px 18px; border:0; border-radius:12px; background:#7667dc; color:#fff; font-weight:700; font-size:13px; cursor:pointer; }
 .order-btn:disabled { opacity:.45; cursor:not-allowed; }
 
-.webhook-page { max-width:900px; margin:0 auto; padding:32px 24px 64px; display:flex; flex-direction:column; gap:14px; }
+.webhook-page { max-width:min(900px, 94vw); margin:0 auto; padding:32px clamp(16px, 2vw, 24px) 64px; display:flex; flex-direction:column; gap:14px; }
 .webhook-head { display:flex; align-items:center; gap:10px; color:#3f3b47; }
 .webhook-head h1 { margin:0; font-size:24px; }
 .webhook-intro { color:#6f6977; font-size:13px; max-width:64ch; line-height:1.6; }
@@ -1213,7 +1213,7 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 
 .omakase-content { flex:1; min-height:0; overflow-y:auto; }
 
-.omakase-grid { max-width:980px; margin:0 auto; padding:56px 24px; }
+.omakase-grid { max-width:min(980px, 94vw); margin:0 auto; padding:56px clamp(16px, 2vw, 24px); }
 .omakase-grid-heading { margin:0 0 6px; font-size:26px; font-weight:600; color:#fff; }
 .omakase-grid-sub { margin:0 0 28px; color:#9d9d9d; font-size:13.5px; }
 .omakase-grid-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px; }
@@ -1224,7 +1224,7 @@ button.diag-reading-row-btn.selected { border-color:#7667dc; background:#eeecfc;
 .omakase-card-subtitle { font-size:12px; color:#a3a3a3; line-height:1.6; }
 .omakase-card-meta { margin-top:auto; font-size:11px; color:#767676; }
 
-.omakase-welcome { max-width:640px; margin:72px auto 0; padding:0 24px; text-align:center; }
+.omakase-welcome { max-width:min(640px, 94vw); margin:72px auto 0; padding:0 clamp(16px, 2vw, 24px); text-align:center; }
 .omakase-welcome-title { font-size:22px; font-weight:700; color:#fff; margin-bottom:8px; }
 .omakase-welcome-sub { color:#9d9d9d; font-size:13px; line-height:1.6; margin-bottom:20px; }
 .omakase-welcome-hint { color:#6b6b6b; font-size:12px; }
@@ -1479,7 +1479,7 @@ small { letter-spacing:.005em; line-height:1.55; }
   .diag-payload-body { overflow:auto; }
   .decoder-result-pane, .dectree-result-pane { min-height:260px; }
 }
-.archive-page { width:100%; max-width:1600px; margin:0 auto; padding:28px; color:#302c38; }
+.archive-page { width:100%; max-width:min(1600px, 94vw); margin:0 auto; padding:28px; color:#302c38; }
 .archive-page-header { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:28px; }
 .archive-page-header h1 { margin:4px 0; }.archive-page-header p:not(.eyebrow) { color:#777482; font-size:13px; }
 .archive-page-header button { padding:9px 14px; border-radius:9px; background:#7667dc; color:#fff; font-weight:700; }
@@ -1529,7 +1529,7 @@ small { letter-spacing:.005em; line-height:1.55; }
 .archive-source { padding:14px; border:1px solid #e7e4ed; border-radius:11px; background:#fbfaff; }
 .archive-source h3 { margin:8px 0; color:#302c38; font-size:14px; }
 .archive-source p { margin:7px 0; color:#514e59; font-size:13px; line-height:1.6; white-space:pre-wrap; }
-.archive-detail { max-width:1240px; margin-inline:auto; padding:26px 30px; }
+.archive-detail { max-width:min(1240px, 94vw); margin-inline:auto; padding:26px clamp(16px, 2vw, 30px); }
 .archive-detail-section { max-width:1000px; margin:24px 0 0; }
 .archive-detail-section > h3,.archive-section-title h3,.archive-section-title h4 { margin:0 0 10px; color:#302c38; font-size:16px; }
 .archive-source .archive-detail-section > h4 { margin:0 0 8px; color:#302c38; font-size:13px; }

@@ -3,6 +3,11 @@ import {
   binaryToBytes, b64DecodeToBytes, b64EncodeBytes, bytesToBinary, codecForLabel, decodeBytesWithCharset,
   encodeTextWithCharset, hexDecodeToBytes, hexEncodeBytes, labelCharset, percentDecodeToBytes, percentEncodeBytes,
   reinterpretWithCharset,
+  ascii85Decode, ascii85Encode, base32Decode, base32Encode, base36Decode, base36Encode,
+  base58Decode, base58Encode, decimalEscapeDecode, decimalEscapeEncode, octalEscapeDecode, octalEscapeEncode,
+  quotedPrintableDecode, quotedPrintableEncode, rot47, utf16Decode, utf16Encode, utf7Decode, utf7Encode,
+  punycodeDecode, punycodeEncode,
+  overlongUtf8Decode,
 } from './decoderCore'
 import { EucKrEncodeError } from './euckr'
 
@@ -70,6 +75,35 @@ describe('decode -> edit -> re-encode workflow stays byte-identical (실사용 �
     const text = 'hello world + unicode ☕'
     const bytes = encodeTextWithCharset(text, 'utf-8')
     expect(decodeBytesWithCharset(bytes, 'utf-8')).toBe(text)
+  })
+})
+
+describe('additional encoding codecs', () => {
+  const sample = 'Hello, café!'
+  it.each([
+    ['Base32', base32Encode, base32Decode],
+    ['Base58', base58Encode, base58Decode],
+    ['Ascii85', ascii85Encode, ascii85Decode],
+    ['Quoted-Printable', quotedPrintableEncode, quotedPrintableDecode],
+    ['UTF-7', utf7Encode, utf7Decode],
+    ['UTF-16 LE', (s: string) => utf16Encode(s, true), (s: string) => utf16Decode(s, true)],
+    ['UTF-16 BE', (s: string) => utf16Encode(s, false), (s: string) => utf16Decode(s, false)],
+    ['ROT47', rot47, rot47],
+    ['Octal escape', octalEscapeEncode, octalEscapeDecode],
+    ['Decimal escape', decimalEscapeEncode, decimalEscapeDecode],
+    ['Base36', base36Encode, base36Decode],
+  ])('%s round-trips text', (_label, encode, decode) => expect(decode(encode(sample))).toBe(sample))
+  it('round-trips an IDN hostname through Punycode', () => {
+    const hostname = 'café.example'
+    expect(punycodeDecode(punycodeEncode(hostname))).toBe(hostname)
+  })
+  it('decodes legacy overlong UTF-8 path bytes as a bypass indicator', () => {
+    expect(overlongUtf8Decode('%c0%ae%e0%80%ae')).toBe('..')
+  })
+  it('round-trips UTF-7 literal plus and UTF-16 BOM inputs', () => {
+    expect(utf7Decode(utf7Encode('a+b'))).toBe('a+b')
+    expect(utf16Decode('%FF%FEh%00i%00', true)).toBe('hi')
+    expect(utf16Decode('%FE%FF%00h%00i', false)).toBe('hi')
   })
 })
 

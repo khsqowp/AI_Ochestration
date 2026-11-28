@@ -6,6 +6,9 @@ import {
   binaryToBytes, bytesToBinary, codecForLabel, decodeBytesWithCharset, encodeTextWithCharset,
   hexDecodeToBytes, hexEncodeBytes, labelCharset, looksText, percentDecodeToBytes, percentEncodeBytes,
   strongText,
+  ascii85Decode, ascii85Encode, base32Decode, base32Encode, base36Decode, base36Encode, base58Decode, base58Encode,
+  decimalEscapeEncode, octalEscapeDecode, octalEscapeEncode, quotedPrintableDecode, quotedPrintableEncode,
+  decimalEscapeDecode, overlongUtf8Decode, punycodeDecode, punycodeEncode, rot47, utf16Decode, utf16Encode, utf7Decode, utf7Encode, xorBest,
 } from './decoderCore'
 import { eucKrDecodeBytes, eucKrEncodeBytes } from './euckr'
 
@@ -123,6 +126,12 @@ function detectStep(input: string, overrideCharset?: Charset): Step | null {
     if (d !== s) return { label: 'URL 인코딩 (%u, 레거시)', decoded: d, reencode: e => legacyUnicodeEscapeEncode(e) }
   }
 
+  if (/%(?:00|ff|fe)/i.test(s)) {
+    for (const [label, littleEndian] of [['UTF-16 LE', true], ['UTF-16 BE', false]] as const) {
+      try { const decoded = utf16Decode(s, littleEndian); if (decoded && decoded !== s && looksText(decoded)) return { label, decoded, reencode: value => utf16Encode(value, littleEndian) } } catch { /* not UTF-16 */ }
+    }
+  }
+
   if (/%[0-9a-fA-F]{2}/.test(s)) {
     const bytes = percentDecodeToBytes(s.replace(/\+/g, ' '))
     let charset: Charset = 'utf-8'
@@ -157,6 +166,23 @@ function detectStep(input: string, overrideCharset?: Charset): Step | null {
   if (/\\u\{?[0-9a-fA-F]{2,}\}?|\\x[0-9a-fA-F]{2}/.test(s)) {
     const d = unicodeUnescape(s)
     if (d !== s) return { label: 'Unicode escape', decoded: d, reencode: e => unicodeEscape(e) }
+  }
+
+  const extraCodecs: [string, (value: string) => string, (value: string) => string, RegExp][] = [
+    ['Base32', base32Decode, base32Encode, /^[A-Z2-7]+=*$/i],
+    ['Ascii85', ascii85Decode, ascii85Encode, /^(?:<~[\s\S]*~>|[!-u]{5,})$/],
+    ['Quoted-Printable', quotedPrintableDecode, quotedPrintableEncode, /=(?:[0-9a-f]{2}|\r?\n)/i],
+    ['UTF-7', utf7Decode, utf7Encode, /\+[A-Za-z0-9+/]+-?/],
+    ['UTF-16 LE', value => utf16Decode(value, true), value => utf16Encode(value, true), /(?:%[0-9a-f]{2}){4,}/i],
+    ['UTF-16 BE', value => utf16Decode(value, false), value => utf16Encode(value, false), /(?:%[0-9a-f]{2}){4,}/i],
+    ['Punycode (IDN)', punycodeDecode, punycodeEncode, /(?:^|\.)xn--[a-z0-9-]+/i],
+    ['Overlong UTF-8 (%XX) · 우회 가능성', overlongUtf8Decode, e => percentEncodeBytes(new TextEncoder().encode(e)), /%(?:c0|c1|e0%80)[0-9a-f]{2}/i],
+    ['Octal escape', octalEscapeDecode, octalEscapeEncode, /\\[0-7]{1,3}/],
+    ['Decimal escape', decimalEscapeDecode, decimalEscapeEncode, /\\[0-9]{1,3}/],
+  ]
+  for (const [label, decode, encode, pattern] of extraCodecs) {
+    if (!pattern.test(s)) continue
+    try { const decoded = decode(s); if (decoded && decoded !== s && looksText(decoded)) return { label, decoded, reencode: encode } } catch { /* malformed codec candidate */ }
   }
 
   const bt = s.trim().replace(/\s+/g, '')
@@ -254,6 +280,11 @@ function analyze(input: string, overrides: Record<number, Charset> = {}) {
 /* ── tab_encoder.py: 전체 디코더/인코더 동시 시도 ──────────────── */
 
 export const ALL_DECODERS: [string, (s: string) => string][] = [
+  ['Base32', base32Decode], ['Base58', base58Decode], ['Ascii85', ascii85Decode], ['Quoted-Printable', quotedPrintableDecode],
+  ['UTF-16 LE', s => utf16Decode(s, true)], ['UTF-16 BE', s => utf16Decode(s, false)], ['ROT47', rot47],
+  ['UTF-7', utf7Decode], ['Overlong UTF-8 (%XX) · 우회 가능성', overlongUtf8Decode],
+  ['Punycode (IDN)', punycodeDecode],
+  ['Octal escape', octalEscapeDecode], ['Decimal escape', decimalEscapeDecode], ['Base36', base36Decode], ['단일 바이트 XOR (최적 추정)', s => { const r = xorBest(s); return `키 0x${r.key.toString(16).padStart(2, '0')}\n${r.text}` }],
   ['Base64', b64Decode],
   ['URL 디코딩', s => decodeURIComponent(s.replace(/\+/g, ' '))],
   ['URL 디코딩 (2중)', s => decodeURIComponent(decodeURIComponent(s))],
@@ -266,8 +297,14 @@ export const ALL_DECODERS: [string, (s: string) => string][] = [
   ['Unicode escape', unicodeUnescape],
   ['URL 디코딩 (%u, 레거시)', legacyUnicodeEscapeDecode],
   ['ROT13', rot13],
+  ['UTF-7', utf7Decode],
 ]
 const ALL_ENCODERS: [string, (s: string) => string][] = [
+  ['Base32', base32Encode], ['Base58', base58Encode], ['Ascii85', ascii85Encode], ['Quoted-Printable', quotedPrintableEncode],
+  ['UTF-16 LE', s => utf16Encode(s, true)], ['UTF-16 BE', s => utf16Encode(s, false)], ['ROT47', rot47],
+  ['UTF-7', utf7Encode],
+  ['Punycode (IDN)', punycodeEncode],
+  ['Octal escape', octalEscapeEncode], ['Decimal escape', decimalEscapeEncode], ['Base36', base36Encode],
   ['Base64', s => b64Encode(s)],
   ['Base64 (URL-safe)', s => b64Encode(s, true)],
   ['Base64 (2중)', s => b64Encode(b64Encode(s))],
@@ -339,7 +376,7 @@ export function SmartDecoderBuilder() {
   }
 
   return <div className="payload-builder smart-decoder">
-    <Note>값을 붙여넣으면 인코딩/해시 포맷을 자동 판별합니다. 인코딩된 값은 연쇄로 디코딩하고, 디코딩 결과를
+    <Note>Base64, URL, Hex와 함께 Base32/58, Ascii85, UTF-7/16, Quoted-Printable, escape 및 ROT 변환을 시도합니다. Overlong UTF-8 결과는 필터 우회 가능성을 보여주는 참고 정보입니다. 값은 이 브라우저 안에서 처리합니다. 인코딩된 값은 연쇄로 디코딩하고, 디코딩 결과를
       수정하면 같은 포맷으로 즉시 재인코딩됩니다. 각 단계 옆 드롭다운으로 UTF-8/EUC-KR 해석을 수동으로
       바꿀 수 있습니다. 모든 처리는 이 브라우저 안에서만 일어납니다.</Note>
 

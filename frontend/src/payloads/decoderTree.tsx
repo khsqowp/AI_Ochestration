@@ -129,7 +129,7 @@ export function SmartDecoderTreeBuilder() {
   }
 
   return <div className="payload-builder dectree-builder">
-    <Note>가능한 디코딩 경로를 깊이 4, 최대 300개 노드까지 펼칩니다. 읽을 수 있는 리프는 초록색으로 강조합니다.
+    <Note>Base64, URL, Hex, Base32/58, Ascii85, UTF-7/16, Quoted-Printable, escape 및 ROT 변환의 가능한 디코딩 경로를 깊이 4, 최대 300개 노드까지 펼칩니다. Overlong UTF-8 결과는 필터 우회 가능성을 보여주는 참고 정보입니다. 읽을 수 있는 리프는 초록색으로 강조합니다.
       Base64/Hex/URL 인코딩/EUC-KR 처럼 바이트를 문자셋으로 해석하는 단계는 옆의 드롭다운으로 UTF-8/EUC-KR을
       직접 바꿔볼 수 있고, 바꾸면 그 아래 가지가 새 해석으로 다시 펼쳐집니다. 평문 판별과 해시 후보는
       휴리스틱이며, 모든 처리는 이 브라우저 안에서만 일어납니다.</Note>

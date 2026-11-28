@@ -163,6 +163,7 @@ export const CHEATSHEET_CATEGORIES: CheatSheetCategory[] = [
         note: 'Burp 등의 raw HTTP 요청을 실행 가능한 curl 명령어로 변환합니다.' },
       { id: 'graphql-introspection', name: 'GraphQL 쿼리 생성기', base: '', options: [], note: 'Introspection JSON 또는 SDL에서 Query/Mutation 템플릿을 생성합니다. 브라우저 내에서만 처리됩니다.' },
       { id: 'saml-analyzer', name: 'SAML 디코더 / XSW 테스트', base: '', options: [], note: 'SAMLResponse를 디코딩하고 서명 검증 테스트용 XSW 변형을 만듭니다.' },
+      { id: 'js-library-vuln-scanner', name: 'JS 라이브러리 취약점 탐지', base: '', options: [], note: 'HTML/스크립트 URL/버전 배너에서 JavaScript 라이브러리 버전을 추출해 내장 권고 DB와 비교합니다.' },
       { id: 'wsdl-to-soap', name: 'WSDL → SOAP 생성기', base: '', options: [], note: 'WSDL operation에서 SOAP 1.1/1.2 요청 envelope를 생성합니다.' },
       {
         id: 'rainbow-crack', name: '레인보우 테이블 크랙', base: '', options: [],
